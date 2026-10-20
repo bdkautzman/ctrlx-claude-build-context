@@ -3,6 +3,8 @@
 Python snaps for **ctrlX OS 4.6** (Bosch Rexroth ctrlX CORE / COREvirtual). Every app has a web
 UI behind the ctrlX reverse proxy, Data Layer nodes, and a settings JSON in ctrlX app data.
 
+First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open verification tasks).
+
 ## Pinned baseline (never change without the human)
 - base `core24`, snapcraft 8.x, ctrlX AUTOMATION SDK 4.6.0, `ctrlx-datalayer<=3.6` + `ctrlx-fbs`
 - package-manifest schema v1.7, Python 3.12 in the snap, stdlib-only web server

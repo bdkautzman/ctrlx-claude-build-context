@@ -20,12 +20,6 @@ and a settings JSON in ctrlX app data.
 
 ## Setup (once)
 
-0. **Folder `_claude` → `.claude`:** the remote file transfer may not write `.claude` folders, so the
-   Claude Code configuration was delivered as `_claude/`. Rename it to `.claude` (in the build VM:
-   `mv _claude .claude`). The archive `ctrlx-app-build-context.tar.gz` already contains `.claude`
-   with correct Linux permissions — extracting it in the build VM (`tar xzf … -C <dir>`) is the
-   easiest way to transfer the whole kit.
-
 1. **Where Claude Code runs:** inside the ctrlX **App Build Environment** VM (ctrlX WORKS) or another
    Ubuntu 24.04 machine, so it can run snapcraft, the tests and the checker itself. Windows-native
    Claude Code can edit files and run the tests, but cannot build snaps.

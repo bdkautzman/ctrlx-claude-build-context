@@ -1,0 +1,53 @@
+# Handoff from the claude.ai conversation that built this kit (Oct 2026)
+
+Read this once at the start of the first Claude Code session in this folder. It records what
+was decided and what is still open. Rules for daily work are in `CLAUDE.md`.
+
+## What the user wants
+- Python snaps for **ctrlX OS 4.6** (Bosch Rexroth ctrlX CORE). Testing on **ctrlX COREvirtual** first.
+- Almost every app has three parts:
+  1. a **web UI** integrated into the ctrlX UI (sidebar/overview/settings menu, reverse proxy, ctrlX permissions)
+  2. **Data Layer nodes** to interface with the rest of the system
+  3. a **settings JSON** stored in ctrlX **app data** (Solutions), so it's saved/loaded with configurations
+- The user prefers doing more work up front to get fewer problems later.
+- Agent: Claude Code. Existing work for inspiration: `reference/example-apps/` (one of them,
+  ctrlx-cam-builder, is the user's own repo).
+
+## Decisions made (and why)
+| Decision | Reason |
+|---|---|
+| base `core24`, SDK 4.6.0, snapcraft 8.x | matches ctrlX OS 4.x; all SDK 4.6 samples use core24 |
+| Web server = Python stdlib `http.server` on a Unix socket | no extra FOSS deps; socket-only is the App Guide recommendation |
+| API under `/<snap>/api` listed as `restricted`; JWT scopes read without signature check | the reverse proxy validates tokens on restricted paths |
+| Token passed via menu link `?token=${bearertoken}`, stored in sessionStorage | documented ctrlX pattern (SDK webserver sample) |
+| Settings: `defaults/settings.json` (structure/types) + `app/settings_rules.py` (limits) | one generic validator + auto-generated settings form for every app |
+| `copyOnLoad: true`, `writeProtected: false`, file watched by mtime | users can also edit settings.json in "Manage app data" |
+| Data Layer writes are runtime-only, never persisted | PLCs may write cyclically → flash wear |
+| Logging to stdout with `<N>` syslog prefixes | journald levels without bundling cysystemd |
+| Menu target `_blank` (not `embedded`) | Bosch recommends `_blank` for 3rd-party UIs |
+| Package-manifest schema v1.7 | released with ctrlX OS 4.4, superset of the v1.6 the samples use |
+| `boschrexroth/ctrlx-actions` not used | last updated 2022, not suitable for core24 |
+
+## Status
+Verified in a cloud sandbox (no snapcraft, no device available there):
+- template: 28 unit tests pass, incl. Data Layer glue against a fake `ctrlxdatalayer`
+- template runs locally (`./run-local.sh`); UI checked in a headless browser (edit value, save settings)
+- `tools/ctrlx_check.py`: 13 self-tests pass; the template is clean; it flags real issues in the SDK samples and example apps
+- `tools/ctrlx.py install/dl-read/packages` tested against a mock HTTPS device only
+
+**Not yet verified → first tasks in Claude Code** (also in `docs/ctrlx/gotchas.md`, "Unverified assumptions"):
+1. The one-time build environment setup (`docs/ctrlx/build-deploy-test.md` §0), then
+   `tools/check.sh templates/python-webapp --pre-build` → OK.
+2. First real snap build of the template (`./build-snap-amd64.sh`) – the python plugin with core24
+   + `ctrlx-datalayer` stage package has not been built yet.
+3. Install on the COREvirtual with `tools/ctrlx.py install` (multipart upload + task polling).
+4. Smoke test on the device (build-deploy-test.md §4): menu entry, token/scopes, Data Layer nodes,
+   app data save/load cycle, Logbook levels, restart behaviour.
+5. Then `tools/foss_from_prime.py --write` to replace the TODO versions in fossinfo.
+Record every finding in `docs/ctrlx/gotchas.md` and fix the template/tools/docs accordingly.
+
+## Delivery notes
+- The Claude Code config arrived as `_claude/` on Windows (the transfer tool can't write `.claude`).
+  Rename it to `.claude`, or use `ctrlx-app-build-context.tar.gz`, which already contains `.claude`
+  and keeps Linux permissions.
+- `.vscode/` folders of the example apps are only in the tar.gz (not important).
