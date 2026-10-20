@@ -1,0 +1,3 @@
+#!/bin/bash
+mkdir -p $SNAP_COMMON/solutions/activeConfiguration/SQLite/
+cp $SNAP/SQLite/config.json $SNAP_COMMON/solutions/activeConfiguration/SQLite/

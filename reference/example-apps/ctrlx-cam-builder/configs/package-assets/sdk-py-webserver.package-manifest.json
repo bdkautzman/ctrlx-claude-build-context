@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-core/apps/package-manifest/package-manifest.v1.4.schema.json",
+  "version": "2.2.0",
+  "id": "cam-builder",
+  "scopes-declaration": [
+    {
+      "identifier": "rexroth-python-webserver.web",
+      "name": "Cam Builder",
+      "description": "ctrlX Data Layer access permissions over webpage",
+      "scopes": [
+        {
+          "identifier": "rexroth-python-webserver.web.r",
+          "name": "Read",
+          "description": "Only read commands can be submitted over webpage"
+        },
+        {
+          "identifier": "rexroth-python-webserver.web.rw",
+          "name": "Read and write",
+          "description": "Read and write commands can be submitted over webpage"
+        }
+      ]
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "cam-builder",
+        "url": "/cam-builder",
+        "binding": "unix://{$SNAP_DATA}/package-run/cam-builder/web.sock",
+        "restricted": []
+      }
+    ]
+  },
+  "menus": {
+    "sidebar": [
+      {
+        "id": "cam-builder",
+        "target": "_blank",
+        "title": "Cam Builder",
+        "icon": "bosch-ic-worldwideweb",
+        "link": "/cam-builder"
+      }
+    ],
+    "settings": [],
+    "overview": [
+      {
+        "id": "cam-builder",
+        "title": "Cam Builder",
+        "icon": "bosch-ic-worldwideweb",
+        "link": "/cam-builder"
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/validation/unixsocket-description/unixsocket-description.v1.schema.json",
+  "$id": "https://boschrexroth.com/app-validation/unixsocket-description.v1.json",
+  "type": "object",
+  "title": "Unix Socket Description",
+  "description": "Unix server sockets of ctrlx-acme-template",
+  "sockets": [
+    {
+      "name": "/var/snap/ctrlx-acme-template/current/package-run/ctrlx-acme-template/web.sock",
+      "purpose": "Unix server socket of the app web server (web UI and REST API), reached only through the ctrlX reverse proxy.",
+      "routing": "external"
+    }
+  ]
+}

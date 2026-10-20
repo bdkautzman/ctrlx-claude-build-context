@@ -1,0 +1,12 @@
+{
+  "settingsVersion": 1,
+  "general": {
+    "logLevel": "INFO",
+    "heartbeatIntervalMs": 1000
+  },
+  "example": {
+    "enabled": true,
+    "label": "Hello ctrlX",
+    "setpoint": 0.0
+  }
+}

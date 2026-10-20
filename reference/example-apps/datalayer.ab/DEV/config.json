@@ -1,0 +1,40 @@
+{
+  "LOG LEVEL": "DEBUG",
+  "LOG PERSIST": false,
+  "ctrlX provider": {
+    "local": false,
+    "ip":"192.168.1.101",
+    "port":"443"
+  },    
+  "scan": false,
+  "standard tags":{
+    "controllers": [
+      {
+        "name": "Machine1",
+        "ip": "192.168.1.21",
+        "tags": ["udtTest"],
+        "programs": [
+          {
+            "name": "EIPDrives",
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  "priority tags":{
+    "controllers": [
+      {
+        "name": "Machine1",
+        "ip": "192.168.1.21",
+        "tags" : [],
+        "programs": [
+          {
+            "name": "EIPDrives",
+            "tags": []
+          }
+        ]
+      }
+    ]
+  }
+}

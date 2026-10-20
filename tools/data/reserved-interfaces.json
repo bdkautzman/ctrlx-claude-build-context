@@ -1,0 +1,621 @@
+{
+ "source": "docs/ctrlx/upstream-sdk-4.6.0/appdevguide_reserved-interfaces.md (ctrlX AUTOMATION SDK 4.6.0)",
+ "note": "Generated from the SDK doc. Fix typos of the source here: 'use-support' is listed in the doc, the snap interface is 'fuse-support'; 'udisk2' is 'udisks2'.",
+ "interfaces": [
+  {
+   "interface": "system-files",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": "\"'read=^(\\\\/dev\\\\/shm| \\\\/dev\\\\/shm\\\\/.+)', 'write=^(\\\\/dev\\\\/shm| \\\\/dev\\\\/shm\\\\/.+)$'\"",
+   "reason": "Prevent access to system files, except shared memory"
+  },
+  {
+   "interface": "account-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent uncontrolled access to user and group databases"
+  },
+  {
+   "interface": "snapd-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent uncontrolled access to system configuration"
+  },
+  {
+   "interface": "content",
+   "direction": "plug",
+   "parameters": "content=package-certificates",
+   "exceptions": null,
+   "reason": "Prevent apps to act as device admin"
+  },
+  {
+   "interface": "content",
+   "direction": "plug",
+   "parameters": "content=package-run",
+   "exceptions": null,
+   "reason": "Prevent apps to act as device admin"
+  },
+  {
+   "interface": "content",
+   "direction": "slot",
+   "parameters": "content=active-solution",
+   "exceptions": null,
+   "reason": "Prevent apps to act as solution snap"
+  },
+  {
+   "interface": "content",
+   "direction": "slot",
+   "parameters": "content=auth-service",
+   "exceptions": null,
+   "reason": "Prevent unauthorized access, service to service authentication"
+  },
+  {
+   "interface": "content",
+   "direction": "slot",
+   "parameters": "content=rda-proxy-service",
+   "exceptions": null,
+   "reason": "Prevent uncontrolled access to proxy service"
+  },
+  {
+   "interface": "content",
+   "direction": "plug",
+   "parameters": "content=rda-proxy-service",
+   "exceptions": null,
+   "reason": "Prevent unacontrolled access to proxy service"
+  },
+  {
+   "interface": "block-devices",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent mounting of partitions"
+  },
+  {
+   "interface": "raw-volumes",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent mounting of partitions"
+  },
+  {
+   "interface": "udisk2",
+   "direction": "slot",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent mounting of partitions"
+  },
+  {
+   "interface": "udisk2",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent mounting of partitions"
+  },
+  {
+   "interface": "docker",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent access to docker socket"
+  },
+  {
+   "interface": "docker-support",
+   "direction": "slot",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent operating as the docker daemon because of possibility of privileg escalation"
+  },
+  {
+   "interface": "docker-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent operating as the docker daemon because of possibility of privileg escalation"
+  },
+  {
+   "interface": "acrn-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Not being supported and potential dangerous"
+  },
+  {
+   "interface": "bool-file",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Bool files are normally located in /sys - no write access to this folder"
+  },
+  {
+   "interface": "browser-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Denylist"
+  },
+  {
+   "interface": "classic-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Classic support bypass all snapd security mechanism"
+  },
+  {
+   "interface": "core-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Deprecated"
+  },
+  {
+   "interface": "cpu-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows setting CPU tunables"
+  },
+  {
+   "interface": "daemon-notify",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows sending daemon status changes to the service manager."
+  },
+  {
+   "interface": "dm-crypt",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Storage support including encryption is part of the DeviceAdmin"
+  },
+  {
+   "interface": "firewall-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Firewall app handles firewall rules"
+  },
+  {
+   "interface": "fpga",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows access to fpga subsystem"
+  },
+  {
+   "interface": "use-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows access to fuse subsyten"
+  },
+  {
+   "interface": "fwupd",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Enabling privileged access to update UEFI firmware"
+  },
+  {
+   "interface": "gconf",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows configuration of Gconf, typically used by old GNOME libs"
+  },
+  {
+   "interface": "gpg-keys",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows reading GNU Privacy Guard (GPG) user configuration and keys as well as enabling GPG\u2019s random seed to be updated"
+  },
+  {
+   "interface": "gpio-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Super-privileged access to gpio pins"
+  },
+  {
+   "interface": "gpio-memory-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows write access to all GPIO memory"
+  },
+  {
+   "interface": "greengrass-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows operating as the Greengrass service to access resources and syscalls necessary to run Amazon Greengrass services and lambda functions"
+  },
+  {
+   "interface": "hardware-random-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Enables control over the hardware random number generator by allowing read/write access to /dev/hwrng"
+  },
+  {
+   "interface": "hidraw",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Enables raw access to USB and Bluetooth Human Interface (hidraw) devices. This interface is restricted because it provides privileged access to hardware devices"
+  },
+  {
+   "interface": "home",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": "\"read:all\"",
+   "reason": "Allows access to non-hidden files owned by the user in the user\u2019s home directory. There is no home folder for the users on ctrlX CORE"
+  },
+  {
+   "interface": "hugepages-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Handle memory is part of the DeviceAdmin"
+  },
+  {
+   "interface": "intel-mei",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Enables access to the Intel MEI management interface"
+  },
+  {
+   "interface": "io-ports-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows access to all I/O ports, including the ability to write to /dev/port to change the I/O port permissions, the privilege level of the calling process, and disabling interrupts"
+  },
+  {
+   "interface": "ion-memory-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows access to the Android ION memory allocator, a Linux kernel feature for managing one or more memory pools"
+  },
+  {
+   "interface": "kernel-module-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Provides the ability to insert, remove and query kernel modules. This interface gives privileged access to the device"
+  },
+  {
+   "interface": "kernel-module-load",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Provides the ability to load, or deny loading, specific kernel modules. This interface gives privileged access to the device"
+  },
+  {
+   "interface": "kubernetes-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows operating as the Kubernetes service and running application containers"
+  },
+  {
+   "interface": "kvm",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows access to the /dev/kvm device, providing privileged access and control of the KVM hypervisor"
+  },
+  {
+   "interface": "libvirt",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Enables access to the libvirt control socket, which gives privileged access to control libvirtd on the host"
+  },
+  {
+   "interface": "login-session-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows setup of login sessions and grants privileged access to user sessions."
+  },
+  {
+   "interface": "lxd",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows access to the LXD API via the socket provided by the lxd snap"
+  },
+  {
+   "interface": "lxd-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Enables operating as the LXD service"
+  },
+  {
+   "interface": "microstack-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Interface enables multiple service access for the Microstack infrastructure"
+  },
+  {
+   "interface": "mount-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": "\"Except storage-extension concept\"",
+   "reason": "Allows the mounting and unmounting of both transient (non-persistent) and persistent filesystem mount points. This interface gives privileged access to the device"
+  },
+  {
+   "interface": "multipass-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows operating as the Multipass service"
+  },
+  {
+   "interface": "netlink-audit",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows access to the kernel part of the Linux Audit Subsystem through Netlink"
+  },
+  {
+   "interface": "netlink-connector",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows communication through the kernel Netlink connector"
+  },
+  {
+   "interface": "netlink-driver",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows a kernel module to expose itself to user-space via the Netlink protocol, typically to transfer information between the kernel and user-space processes"
+  },
+  {
+   "interface": "network-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Gives access to wifi credentials"
+  },
+  {
+   "interface": "network-manager",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Gives access to wifi credentials"
+  },
+  {
+   "interface": "network-manager-observe",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Gives access to wifi credentials"
+  },
+  {
+   "interface": "network-setup-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Gives access to wifi credentials"
+  },
+  {
+   "interface": "network-setup-observe",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Gives access to wifi credentials"
+  },
+  {
+   "interface": "packagekit-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows control of the PackageKit service, giving privileged access to native package management on the system"
+  },
+  {
+   "interface": "password-manager-service",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Provides access to the global password manager services provided by popular desktop environments, such as Secret Service and Kwallet"
+  },
+  {
+   "interface": "personal-files",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Provides access to the specified files in the user\u2019s home. This interface gives privileged access to the user\u2019s data"
+  },
+  {
+   "interface": "physical-memory-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows write access the to physical address space via the /dev/mem device"
+  },
+  {
+   "interface": "physical-memory-observe",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows read access the to physical address space via the /dev/mem device"
+  },
+  {
+   "interface": "polkit-interface",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Provides daemons with the permission to use the polkit authorisation manager (polkitd) to make access control decisions for requests from unprivileged clients"
+  },
+  {
+   "interface": "process-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Prevent tampering with running processes"
+  },
+  {
+   "interface": "scsi-generic",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows read and write access to SCSI Generic driver (sg) devices"
+  },
+  {
+   "interface": "sd-control",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows for the management and control of SD cards on certain devices using the DualSD driver"
+  },
+  {
+   "interface": "shared-memory",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": "\"shared-memory=^(datalayer-shm)$\"",
+   "reason": "Allows two snaps to communicate with each other using a specific predefined shared-memory path or directory in /dev/sh"
+  },
+  {
+   "interface": "ssh-keys",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows a user\u2019s SSH (Secure Socket Shell) configuration to be read, along with both their public and private keys"
+  },
+  {
+   "interface": "storage-framework-service",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Allows operating as, or interacting with, the Storage Framework - storage is part of the DeviceAdmin"
+  },
+  {
+   "interface": "system-backup",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Provides read-only access to the system via /var/lib/snapd/hostfs. This interface gives privileged access to system data"
+  },
+  {
+   "interface": "system-trace",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Enables the monitoring and control of any running program, via kernel tracing facilities. This interface is restricted because it gives privileged access to all processes on the system and should only be used with trusted apps"
+  },
+  {
+   "interface": "tee",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Permits access to Trusted Execution Environment (TEE) devices via the TEE subsystem in the Linux kernel"
+  },
+  {
+   "interface": "tpm",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "tpm allows access to the Trusted Platform Module (tpm) device, /dev/tpm0, and to the in-kernel resource manager, /dev/tpmrm0, on recent kernels (at least v4.12)"
+  },
+  {
+   "interface": "uhid",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Enables the creation of kernel USB Human Interface Devices (HID) from user-space, via /dev/uhid , giving privileged access to HID transport drivers"
+  },
+  {
+   "interface": "uinput",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Super privileged interface to allows write access to /dev/uinput on the host system for emulating input devices from userspace that can send input events"
+  },
+  {
+   "interface": "fuse-support",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Doc lists 'use-support' (typo) - Allows access to fuse subsystem"
+  },
+  {
+   "interface": "udisks2",
+   "direction": "plug",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Doc lists 'udisk2' (typo) - Prevent mounting of partitions"
+  },
+  {
+   "interface": "udisks2",
+   "direction": "slot",
+   "parameters": null,
+   "exceptions": null,
+   "reason": "Doc lists 'udisk2' (typo) - Prevent mounting of partitions"
+  }
+ ],
+ "ports": {
+  "ctrlX OS": [
+   22,
+   80,
+   81,
+   443,
+   1338,
+   1880,
+   1900,
+   2069,
+   2070,
+   4840,
+   5355,
+   5353,
+   5858,
+   6000,
+   7878,
+   8069,
+   11740,
+   11741
+  ],
+  "Other apps": [
+   1881,
+   1884,
+   1885,
+   2883,
+   4222,
+   6123,
+   7505,
+   9230,
+   9240,
+   8000,
+   8080,
+   8088,
+   8142,
+   8840,
+   8883,
+   10123,
+   16620,
+   16700,
+   16701,
+   16800,
+   16810,
+   18500,
+   47808,
+   48898,
+   [
+    49250,
+    50250
+   ],
+   56090,
+   58000,
+   51218
+  ]
+ }
+}

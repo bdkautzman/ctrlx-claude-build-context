@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-core/apps/package-manifest/package-manifest.v1.3.schema.json",
+  "menus": {
+    "sidebar": [
+      {
+        "id": "cip-connect",
+        "title": "CIP Connect",
+        "icon": "bosch-ic-components",
+        "link": "/solutions/configurations/appdata/content?path=CIPData%2F",
+        "permissions": [
+          "solutions.r",
+          "solutions.rw"
+        ]
+      }
+    ],
+    "overview": [
+      {
+        "id": "cip-connect-overview",
+        "title": "CIP Connect",
+        "description": "Configure CIP tag provider",
+        "icon": "bosch-ic-components",
+        "link": "/solutions/configurations/appdata/content?path=CIPData%2F",
+        "permissions": [
+          "solutions.r",
+          "solutions.rw"
+        ]
+      }
+    ]
+  },
+    "configuration": {
+    "appDirectories": [
+      {
+        "name": "CIP Connect",
+        "description": "CIP Connect configuration data",
+        "icon": "bosch-ic-components",
+        "copyOnLoad": false,
+        "writeProtected" : false
+      }
+    ]
+  }
+}

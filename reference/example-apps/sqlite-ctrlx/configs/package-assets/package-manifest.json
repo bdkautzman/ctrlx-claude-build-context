@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-core/apps/package-manifest/package-manifest.v1.3.schema.json",
+  "menus": {
+    "sidebar": [
+      {
+        "id": "sqlite-database",
+        "title": "SQLite",
+        "icon": "bosch-ic-core-data",
+        "link": "/solutions/configurations/appdata/content?path=SQLite%2F",
+        "permissions": [
+          "solutions.r",
+          "solutions.rw"
+        ]
+      }
+    ],
+    "overview": [
+      {
+        "id": "sqlite-database-overview",
+        "title": "SQLite",
+        "description": "Simple python powered SQLite Database",
+        "icon": "bosch-ic-core-data",
+        "link": "/solutions/configurations/appdata/content?path=SQLite%2F",
+        "permissions": [
+          "solutions.r",
+          "solutions.rw"
+        ]
+      }
+    ]
+  },
+    "configuration": {
+    "appDirectories": [
+      {
+        "name": "SQLite",
+        "description": "SQLite Database: Configuration, Logs, Database files",
+        "icon": "bosch-ic-core-data",
+        "copyOnLoad": false,
+        "writeProtected" : false
+      }
+    ]
+  }
+}

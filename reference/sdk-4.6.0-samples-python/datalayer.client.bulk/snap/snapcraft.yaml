@@ -1,0 +1,59 @@
+name: sdk-py-client-bulk
+title: SDK Python Client Bulk
+version: 1.0.0
+summary: ctrlX Data Layer client sample written in Python for ctrlX OS.
+description: |
+  The sample demonstrates ctrlX Data Layer bulk operations.
+base: core24
+confinement: strict
+grade: stable
+
+contact: https://github.com/boschrexroth/ctrlx-automation-sdk
+license: MIT
+donation: https://github.com/boschrexroth/ctrlx-automation-sdk
+issues: https://github.com/boschrexroth/ctrlx-automation-sdk/issues
+source-code: https://github.com/boschrexroth/ctrlx-automation-sdk
+website: https://github.com/boschrexroth/ctrlx-automation-sdk
+
+platforms:
+  amd64:
+  arm64:
+    build-on: [amd64, arm64]
+    build-for: [arm64]
+
+apps:
+  client:
+    command: bin/run.sh
+    plugs:
+      - network
+      - datalayer
+    daemon: simple
+    restart-condition: always
+    passthrough:
+      restart-delay: 10s
+
+parts:
+  client:
+    plugin: python
+    source: .
+    stage-packages:
+      - ctrlx-datalayer
+      - libsystemd-dev
+
+  wrapper-scripts:
+    plugin: dump
+    source: wrapper/
+    organize:
+      ./run.sh : bin/run.sh
+
+plugs:
+  datalayer:
+    interface: content
+    content: datalayer
+    target: $SNAP_DATA/.datalayer
+
+lint:
+  ignore:
+    - library:
+        - usr/lib/aarch64-linux-gnu/libcomm_datalayer.so.*
+        - usr/lib/x86_64-linux-gnu/libcomm_datalayer.so.*

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/package-manifest/package-manifest.v1.7.schema.json",
+  "version": "1.0.0",
+  "id": "ctrlx-acme-template",
+  "scopes-declaration": [
+    {
+      "identifier": "ctrlx-acme-template.web",
+      "name": "Template App",
+      "description": "Permissions for the Template App",
+      "scopes": [
+        {
+          "identifier": "ctrlx-acme-template.web.all.r",
+          "name": "View Template App",
+          "description": "View status, values and settings of the Template App"
+        },
+        {
+          "identifier": "ctrlx-acme-template.web.all.rw",
+          "name": "Manage Template App",
+          "description": "View and change values and settings of the Template App"
+        }
+      ]
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "ctrlx-acme-template.web",
+        "url": "/ctrlx-acme-template",
+        "binding": "unix://{$SNAP_DATA}/package-run/ctrlx-acme-template/web.sock",
+        "restricted": [
+          "/ctrlx-acme-template/api"
+        ]
+      }
+    ]
+  },
+  "menus": {
+    "sidebar": [
+      {
+        "id": "ctrlx-acme-template",
+        "title": "Template App",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-acme-template/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-acme-template.web.all.r",
+          "ctrlx-acme-template.web.all.rw"
+        ],
+        "items": []
+      }
+    ],
+    "settings": [
+      {
+        "id": "ctrlx-acme-template-settings",
+        "title": "Template App",
+        "icon": "bosch-ic-gear",
+        "link": "/ctrlx-acme-template/?token=${bearertoken}#settings",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-acme-template.web.all.rw"
+        ],
+        "items": []
+      }
+    ],
+    "overview": [
+      {
+        "id": "ctrlx-acme-template-overview",
+        "title": "Template App",
+        "description": "Web UI, Data Layer nodes and app-data settings",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-acme-template/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-acme-template.web.all.r",
+          "ctrlx-acme-template.web.all.rw"
+        ],
+        "items": []
+      }
+    ]
+  },
+  "commands": {
+    "activeConfiguration": {
+      "save": [
+        {
+          "id": "ctrlx-acme-template",
+          "subject": "Template App settings",
+          "url": "/ctrlx-acme-template/api/v1/appdata/save"
+        }
+      ],
+      "load": [
+        {
+          "id": "ctrlx-acme-template",
+          "subject": "Template App settings",
+          "url": "/ctrlx-acme-template/api/v1/appdata/load"
+        }
+      ]
+    }
+  },
+  "configuration": {
+    "appDirectories": [
+      {
+        "name": "ctrlx-acme-template",
+        "description": "Template App",
+        "icon": "bosch-ic-components",
+        "copyOnLoad": true,
+        "writeProtected": false
+      }
+    ],
+    "appPrivateFiles": [
+      "^ctrlx-acme-template/.*\\.tmp$"
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+#!/bin/bash
+mkdir -p $SNAP_COMMON/solutions/activeConfiguration/CIPData/
+cp $SNAP/CIPData/config.json $SNAP_COMMON/solutions/activeConfiguration/CIPData/

@@ -1,0 +1,168 @@
+"""Unit tests that run on any PC (no ctrlX, no ctrlxdatalayer):  python3 -m unittest discover -s tests"""
+
+import json
+import os
+import tempfile
+import unittest
+
+from app import appdata_commands
+from app.settings_rules import RULES
+from app.settings_store import SettingsError, SettingsStore, validate
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DEFAULTS_FILE = os.path.join(HERE, "..", "defaults", "settings.json")
+
+
+def read_text(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def load_defaults():
+    with open(DEFAULTS_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+class ValidateTest(unittest.TestCase):
+    def test_defaults_are_valid(self):
+        defaults = load_defaults()
+        normalized, errors = validate(defaults, defaults, RULES)
+        self.assertEqual(errors, [])
+
+    def test_every_rule_points_to_an_existing_setting(self):
+        defaults = load_defaults()
+        for dotted in RULES:
+            node = defaults
+            for part in dotted.split("."):
+                self.assertIn(part, node, "rule {} has no default".format(dotted))
+                node = node[part]
+
+    def test_missing_keys_filled_unknown_kept(self):
+        defaults = load_defaults()
+        normalized, errors = validate({"general": {"logLevel": "DEBUG"}, "future": 1}, defaults, RULES)
+        self.assertEqual(errors, [])
+        self.assertEqual(normalized["general"]["logLevel"], "DEBUG")
+        self.assertEqual(normalized["general"]["heartbeatIntervalMs"], defaults["general"]["heartbeatIntervalMs"])
+        self.assertEqual(normalized["future"], 1)
+
+    def test_type_and_rule_errors(self):
+        defaults = load_defaults()
+        _, errors = validate({"general": {"logLevel": "LOUD", "heartbeatIntervalMs": True}}, defaults, RULES)
+        self.assertTrue(any(e.startswith("general.logLevel") for e in errors))
+        self.assertTrue(any(e.startswith("general.heartbeatIntervalMs") for e in errors))
+
+    def test_int_accepted_for_float(self):
+        defaults = load_defaults()
+        normalized, errors = validate({"example": {"setpoint": 3}}, defaults, RULES)
+        self.assertEqual(errors, [])
+        self.assertIsInstance(normalized["example"]["setpoint"], float)
+
+    def test_root_must_be_object(self):
+        _, errors = validate([1, 2], load_defaults(), RULES)
+        self.assertTrue(errors)
+
+
+class StoreTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.active = os.path.join(self.tmp.name, "solutions", "activeConfiguration")
+        self.file = os.path.join(self.active, "my-app", "settings.json")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def store(self):
+        return SettingsStore(self.file, DEFAULTS_FILE, self.active, RULES)
+
+    def test_no_storage_runs_with_defaults(self):
+        store = self.store()
+        self.assertFalse(store.load_from_disk(create_if_missing=True))
+        self.assertEqual(store.get(), load_defaults())
+        self.assertFalse(os.path.exists(self.file))
+
+    def test_creates_file_and_update_persists(self):
+        os.makedirs(self.active)
+        store = self.store()
+        self.assertTrue(store.load_from_disk(create_if_missing=True))
+        self.assertTrue(os.path.isfile(self.file))
+        seen = []
+        store.add_listener(seen.append)
+        store.update({"general": {"logLevel": "DEBUG", "heartbeatIntervalMs": 250}})
+        with open(self.file, encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["general"]["heartbeatIntervalMs"], 250)
+        self.assertEqual(seen[-1]["general"]["logLevel"], "DEBUG")
+        self.assertFalse(os.path.exists(self.file + ".tmp"))
+        self.assertEqual(os.stat(self.file).st_mode & 0o777, 0o600)
+
+    def test_invalid_update_rejected_and_not_written(self):
+        os.makedirs(self.active)
+        store = self.store()
+        store.load_from_disk(create_if_missing=True)
+        before = read_text(self.file)
+        with self.assertRaises(SettingsError):
+            store.update({"general": {"heartbeatIntervalMs": 1}})
+        self.assertEqual(read_text(self.file), before)
+
+    def test_external_change_is_picked_up_and_invalid_ignored(self):
+        os.makedirs(os.path.dirname(self.file))
+        store = self.store()
+        store.load_from_disk(create_if_missing=True)
+        with open(self.file, "w", encoding="utf-8") as f:
+            json.dump({"general": {"logLevel": "WARNING"}}, f)
+        os.utime(self.file, ns=(1, 1))  # force a different mtime
+        store.poll_external_change()
+        self.assertEqual(store.get()["general"]["logLevel"], "WARNING")
+        with open(self.file, "w", encoding="utf-8") as f:
+            f.write("{broken")
+        os.utime(self.file, ns=(2, 2))
+        store.poll_external_change()  # logged, ignored
+        self.assertEqual(store.get()["general"]["logLevel"], "WARNING")
+        self.assertIn("cannot read", store.status()["error"])
+
+    def test_solutions_load_cycle(self):
+        os.makedirs(os.path.dirname(self.file))
+        store = self.store()
+        store.load_from_disk(create_if_missing=True)
+        store.update({"example": {"label": "before"}})
+
+        def call(phase, kind="load"):
+            body = json.dumps({"configurationPath": "x", "id": "op1", "phase": phase}).encode()
+            fn = appdata_commands.handle_load if kind == "load" else appdata_commands.handle_save
+            return fn(body, store)
+
+        self.assertEqual(call("query")[0], 204)
+        self.assertEqual(call("prepare")[0], 204)
+        # Solutions copies the archived configuration (copyOnLoad) ...
+        with open(self.file, "w", encoding="utf-8") as f:
+            json.dump({"example": {"label": "from archive"}}, f)
+        store.poll_external_change()  # paused during load: must not apply yet
+        self.assertEqual(store.get()["example"]["label"], "before")
+        self.assertEqual(call("load")[0], 204)
+        self.assertEqual(store.get()["example"]["label"], "from archive")
+        self.assertEqual(call("validate")[0], 204)
+        self.assertEqual(call("activate")[0], 204)
+        self.assertEqual(call("save", kind="save")[0], 204)
+        self.assertEqual(call("some-future-phase")[0], 204)
+
+    def test_load_without_data_resets_to_defaults(self):
+        os.makedirs(os.path.dirname(self.file))
+        store = self.store()
+        store.load_from_disk(create_if_missing=True)
+        store.update({"example": {"label": "custom"}})
+        os.remove(self.file)
+        status, _ = appdata_commands.handle_load(b'{"phase":"load","id":"x"}', store)
+        self.assertEqual(status, 204)
+        self.assertEqual(store.get(), load_defaults())
+
+    def test_load_invalid_returns_problem(self):
+        os.makedirs(os.path.dirname(self.file))
+        store = self.store()
+        with open(self.file, "w", encoding="utf-8") as f:
+            json.dump({"general": {"logLevel": 42}}, f)
+        status, body = appdata_commands.handle_load(b'{"phase":"load","id":"op7"}', store)
+        self.assertEqual(status, 400)
+        self.assertIn("[op7]", body["dynamicDescription"])
+
+
+if __name__ == "__main__":
+    unittest.main()

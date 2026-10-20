@@ -1,0 +1,63 @@
+name: sqlite-ctrlx
+version: 2.0.05
+summary: Simple python powered SQLite database
+title: SQLite Database
+description: |
+  Writing a node will exectue the SQL statement on the SQLite database. Reading returns the result of the last successful operation. 
+base: core20
+confinement: strict
+grade: stable
+
+apps:
+  provider:
+    command: bin/main.py
+    plugs: 
+      - network
+      - datalayer
+      - active-solution
+    daemon: simple
+    passthrough:   
+      restart-condition: always
+      restart-delay: 10s
+
+parts:
+  provider:
+    plugin: python
+    source: .
+    stage-packages: 
+      - libzmq5 
+      - ctrlx-datalayer
+      - sqlite3
+  data:    
+    plugin: dump 
+    source:  AppData
+    organize:
+      '*': ./SQLite/
+  configs:
+    source: ./configs
+    plugin: dump
+    organize:
+      'package-assets/*': package-assets/${SNAPCRAFT_PROJECT_NAME}/
+
+plugs:
+  datalayer:
+    interface: content
+    content: datalayer
+    target: $SNAP_DATA/.datalayer
+  active-solution:
+    interface: content
+    content: solutions
+    target: $SNAP_COMMON/solutions
+
+slots: 
+  package-assets:
+      interface: content
+      content: package-assets
+      source:
+        read:
+        - $SNAP/package-assets/${SNAPCRAFT_PROJECT_NAME}
+
+hooks:
+  connect-plug-active-solution:
+    plugs: [active-solution]    
+

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/validation/slotplug-description/slotplug-description.v1.schema.json",
+  "$id": "https://boschrexroth.com/app-validation/slotplug-description.v1.json",
+  "type": "object",
+  "title": "Slot and Plug Description",
+  "description": "All used slots and plugs of ctrlx-acme-template",
+  "slots": [
+    {
+      "name": "package-assets",
+      "purpose": "Provides the package manifest, FOSS info and translations to the ctrlX Device Admin (menus, reverse proxy, scopes, app data)."
+    },
+    {
+      "name": "package-run",
+      "purpose": "Shares the folder with the web server Unix socket so the ctrlX reverse proxy can forward requests to the app."
+    }
+  ],
+  "plugs": [
+    {
+      "name": "network",
+      "purpose": "Network client access required by the ctrlX Data Layer client/provider library."
+    },
+    {
+      "name": "network-bind",
+      "purpose": "Allows the app to create and listen on its web server Unix socket."
+    },
+    {
+      "name": "datalayer",
+      "purpose": "Content interface to the ctrlX Data Layer (IPC) to provide the app's Data Layer nodes."
+    },
+    {
+      "name": "active-solution",
+      "purpose": "Access to the active configuration (app data) to store and load the app settings JSON file."
+    }
+  ]
+}

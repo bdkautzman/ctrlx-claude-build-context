@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.dev/
+/ctrlx-app-build-context.tar.gz
+# snapcraft build output inside apps
+apps/*/parts/
+apps/*/stage/
+apps/*/prime/
+apps/*/*.snap

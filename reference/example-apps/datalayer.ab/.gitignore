@@ -1,0 +1,9 @@
+/parts
+/prime
+/stage
+/venv
+.vscode
+*.snap
+*.log
+*.log.*
+*.csv

@@ -1,0 +1,64 @@
+# GitHub Actions starting point - UNVERIFIED (not yet run against a real repo).
+# Copy to .github/workflows/build.yml in the app's own repository and run it once;
+# record any fix in docs/ctrlx/gotchas.md of the context kit.
+#
+# Why not boschrexroth/ctrlx-actions? Its build-snap action (last change 2022) installs
+# focal (20.04) multiarch sources and uses legacy snapcraft flags - unsuitable for core24.
+#
+# Approach: native builds on Ubuntu 24.04 runners (amd64 + arm64) in destructive mode,
+# with the ctrlx-datalayer .deb from the SDK release zip served from a local apt repo
+# (same as scripts/install-ctrlx-datalayer.sh of the SDK).
+name: build-snaps
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  SDK_VERSION: "4.6.0"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s tests -t .
+      - run: python3 -m pip install --break-system-packages jsonschema pyyaml
+      - run: python3 tools/ctrlx_check.py . --schemas tools/schemas   # copy tools/ from the kit into the repo
+
+  snap:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ctrlx-datalayer apt repo from the SDK release
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y dpkg-dev unzip
+          curl -fsSL -o sdk.zip "https://github.com/boschrexroth/ctrlx-automation-sdk/releases/download/${SDK_VERSION}/ctrlx-automation-sdk-${SDK_VERSION}.zip"
+          mkdir -p sdk && unzip -q sdk.zip -d sdk
+          mkdir -p /tmp/ctrlx-apt
+          find sdk -name "ctrlx-datalayer*_${{ matrix.arch }}.deb" -exec cp {} /tmp/ctrlx-apt/ \;
+          ls -l /tmp/ctrlx-apt
+          (cd /tmp/ctrlx-apt && dpkg-scanpackages -m . > Packages)
+          echo "deb [trusted=yes] file:/tmp/ctrlx-apt ./" | sudo tee /etc/apt/sources.list.d/ctrlx-automation.list
+          sudo apt-get update
+
+      - name: snapcraft
+        run: |
+          sudo snap install snapcraft --channel=8.x/stable --classic
+          sudo snapcraft pack --destructive-mode --build-for=${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snap-${{ matrix.arch }}
+          path: "*.snap"

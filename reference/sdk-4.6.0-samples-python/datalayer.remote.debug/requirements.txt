@@ -1,0 +1,5 @@
+autopep8
+flake8
+ctrlx-datalayer<=3.5
+ctrlx-fbs
+debugpy

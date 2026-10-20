@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Template App</title>
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1 id="app-title">Template App</h1>
+      <span id="app-version" class="muted"></span>
+    </div>
+    <div id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="grid">
+    <section class="card" aria-labelledby="status-h">
+      <h2 id="status-h">Status</h2>
+      <dl class="kv" id="status-list">
+        <dt>Uptime</dt><dd id="st-uptime">–</dd>
+        <dt>Settings source</dt><dd id="st-source">–</dd>
+        <dt>Settings persisted</dt><dd id="st-persisted">–</dd>
+        <dt>Data Layer nodes</dt><dd id="st-nodes">–</dd>
+      </dl>
+      <p id="st-error" class="error" hidden></p>
+    </section>
+
+    <section class="card" aria-labelledby="values-h">
+      <h2 id="values-h">Data Layer values</h2>
+      <table class="values">
+        <thead><tr><th>Address</th><th>Type</th><th>Value</th><th></th></tr></thead>
+        <tbody id="values-body"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="card card-wide" id="settings" aria-labelledby="settings-h">
+      <div class="card-head">
+        <h2 id="settings-h">Settings</h2>
+        <span class="muted">Stored in ctrlX app data · saved and loaded with configurations</span>
+      </div>
+      <form id="settings-form" novalidate>
+        <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
+        <ul id="settings-errors" class="error-list" hidden></ul>
+        <div class="actions">
+          <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+          <button type="button" id="btn-revert" class="btn">Revert</button>
+          <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
+          <span id="save-state" class="muted" aria-live="polite"></span>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

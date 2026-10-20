@@ -1,0 +1,80 @@
+name: cam-builder
+title: Cam Builder
+version: 2.2.0
+summary: Simple web-based cam editor
+description: Limited UI for editing cams at runtime. Uses ChartJS.
+base: core22
+confinement: strict
+grade: stable
+
+architectures:
+  - build-on: [amd64, arm64]
+    build-for: [amd64]
+  - build-on: [amd64, arm64]
+    build-for: [arm64]
+
+apps:
+  webserver:
+    command: bin/main.py
+    plugs:
+      - network-bind
+      - active-solution
+      - datalayer
+      - network
+    slots:
+      - package-assets
+      - package-run
+    daemon: simple
+    restart-condition: always
+    passthrough:
+      restart-delay: 30s
+
+parts:
+  webserver:
+    plugin: python
+    source: .
+    stage-packages:
+      - ctrlx-datalayer
+      - libsystemd-dev
+
+  configs:
+    plugin: dump
+    source: ./configs
+    organize:
+      'package-assets/*': package-assets/${CRAFT_PROJECT_NAME}/
+
+  www:
+    plugin: dump
+    source: ./www
+    organize:
+      '*': www/
+
+slots:
+  package-assets:
+    interface: content
+    content: package-assets
+    source:
+      read:
+        - $SNAP/package-assets/${CRAFT_PROJECT_NAME}
+  package-run:
+    interface: content
+    content: package-run
+    source:
+      write:
+        - $SNAP_DATA/package-run/${CRAFT_PROJECT_NAME}
+
+plugs:
+  active-solution:
+    interface: content
+    content: solutions
+    target: $SNAP_COMMON/solutions
+  datalayer:
+    interface: content
+    content: datalayer
+    target: $SNAP_DATA/.datalayer
+
+lint:
+  ignore:
+    - library:
+      - usr/lib/aarch64-linux-gnu/libcomm_datalayer.so.*
+      - usr/lib/x86_64-linux-gnu/libcomm_datalayer.so.*

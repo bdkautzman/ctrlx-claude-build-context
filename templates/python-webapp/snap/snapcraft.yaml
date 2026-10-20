@@ -1,0 +1,111 @@
+# ctrlX OS app template — Python web UI + Data Layer provider + app-data settings
+# Target: ctrlX OS 4.6 (Ubuntu Core 24)  |  SDK 4.6.0  |  snapcraft 8.x
+#
+# Rules this file must keep (enforced by tools/check.sh):
+#   - name: starts with "ctrlx-", lowercase, <= 32 chars (<= 29 keeps the socket path short enough)
+#   - base: core24, confinement: strict, grade: stable for releases
+#   - description contains the <!-- author/url --> HTML comment + >= 16 chars of text
+#   - version is MAJOR.MINOR.PATCH and must increase with every release
+#   - restart-delay >= 5s
+#   - only plugs/slots that are listed in validation/slotplug-description.json
+#   - NO reserved interfaces (docs/ctrlx/reserved-interfaces-and-ports.md)
+
+name: ctrlx-acme-template
+title: Template App
+version: 0.1.0
+summary: ctrlX OS app template with web UI, Data Layer nodes and app-data settings
+description: |
+  <!--
+  author: ACME Automation
+  url: https://example.com
+  -->
+  Template ctrlX OS app. Serves a web UI through the ctrlX reverse proxy,
+  provides nodes in the ctrlX Data Layer and stores its settings as JSON in
+  the ctrlX app data (Solutions) so they are saved and loaded with configurations.
+
+base: core24
+confinement: strict
+grade: stable
+
+platforms:
+  amd64:
+  arm64:
+    build-on: [amd64, arm64]
+    build-for: [arm64]
+
+apps:
+  service:
+    command: bin/run.sh
+    daemon: simple
+    restart-condition: always
+    passthrough:
+      restart-delay: 5s
+    plugs:
+      - network
+      - network-bind
+      - datalayer
+      - active-solution
+    slots:
+      - package-assets
+      - package-run
+
+parts:
+  app:
+    plugin: python
+    source: .
+    stage-packages:
+      - ctrlx-datalayer
+
+  wrapper:
+    plugin: dump
+    source: ./wrapper
+    organize:
+      run.sh: bin/run.sh
+
+  configs:
+    plugin: dump
+    source: ./configs
+    organize:
+      'package-assets/*': package-assets/${CRAFT_PROJECT_NAME}/
+
+  www:
+    plugin: dump
+    source: ./www
+    organize:
+      '*': www/
+
+  defaults:
+    plugin: dump
+    source: ./defaults
+    organize:
+      '*': defaults/
+
+slots:
+  package-assets:
+    interface: content
+    content: package-assets
+    source:
+      read:
+        - $SNAP/package-assets/${CRAFT_PROJECT_NAME}
+  package-run:
+    interface: content
+    content: package-run
+    source:
+      write:
+        - $SNAP_DATA/package-run/${CRAFT_PROJECT_NAME}
+
+plugs:
+  datalayer:
+    interface: content
+    content: datalayer
+    target: $SNAP_DATA/.datalayer
+  active-solution:
+    interface: content
+    content: solutions
+    target: $SNAP_COMMON/solutions
+
+lint:
+  ignore:
+    - library:
+        - usr/lib/aarch64-linux-gnu/libcomm_datalayer.so.*
+        - usr/lib/x86_64-linux-gnu/libcomm_datalayer.so.*

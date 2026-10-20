@@ -1,0 +1,34 @@
+{
+  "LOG LEVEL": "INFO", 
+  "LOG PERSIST": false,
+  "ctrlX provider": {
+    "local": true,
+    "ip":"",
+    "port":""
+  },    
+  "scan": false,
+  "standard tags":{
+    "controllers": [
+      {
+        "name": "Machine1",
+        "ip": "192.168.1.21",
+        "tags": []
+      }
+    ]
+  },
+  "priority tags":{
+    "controllers": [
+      {
+        "name": "Machine1",
+        "ip": "192.168.1.21",
+        "tags" : [],
+        "programs": [
+          {
+            "name": "EIPDrives",
+            "tags": ["*"]
+          }
+        ]
+      }
+    ]
+  }
+}

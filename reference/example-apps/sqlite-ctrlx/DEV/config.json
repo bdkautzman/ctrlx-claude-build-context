@@ -1,0 +1,6 @@
+{
+    "LOG LEVEL": "DEBUG",
+    "LOG PERSIST": false,
+    "database path" : "database.db",
+    "terminals" : ["RestInterface", "PLC"]
+}

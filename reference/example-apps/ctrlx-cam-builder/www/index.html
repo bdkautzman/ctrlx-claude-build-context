@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>
+        Cam Builder
+    </title>
+    <link rel="icon" type="image/png" sizes="16x16" href="/cam-builder/favicon.png" >
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+</head>
+<body>
+    <div id="plot"></div>
+</body>
+</html>
+<script src="/cam-builder/d3.js"></script>
+<script src="/cam-builder/plot.js"></script>
+<script type="module">
+
+    let numbers = []
+    let dots = []; 
+
+    const drag = d3.drag().on("drag", dragged).on("end", sendData);
+
+    async function init() {
+        const resp = await fetch('/cam-builder/position-array');
+        console.log(resp)
+        const reader = resp.body.getReader();
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break; // Exit loop when the stream is finished
+                // 'value' is a Uint8Array. Decode it if necessary.
+                const textChunk = new TextDecoder().decode(value);
+                console.log("TextChunk: " + textChunk)
+                const jsonChunk = JSON.parse(textChunk)
+                jsonChunk.forEach(el =>{
+                    numbers.push([el.x, el.y])
+                }) 
+                dots = [...numbers]; 
+                dots.shift();// Remove first and last dot
+                dots.pop();
+            }
+        } finally {
+            reader.releaseLock(); // Release the lock on the stream
+            createChart();
+        }
+    }
+
+    function createChart(){
+
+        const plot = Plot.plot({
+            y: {
+                grid: true,
+                label: "Slave",
+                domain: [0, 360],
+                ticks: [0, 45, 90, 135, 180, 225, 270, 315, 360]
+            },
+            x: {
+                grid: true,
+                label: "Master",
+                domain: [0, 360],
+                ticks: [0, 60, 120, 180, 240, 300, 360]
+            },
+            marks: [
+                Plot.line(numbers, {curve: "bump-x"}),           
+                Plot.dot(dots, {stroke: "Black", fill: "Black", tip: "xy", r: 5})
+            ]
+        })
+        const div = document.querySelector("#plot");
+        div.append(plot);
+        const svg = d3.select('[aria-label="dot"]');
+                svg.selectAll("circle").call(drag);
+    }
+
+    function dragged(d) {
+        const subj = d.subject + 1; // Add 1 to account for difference in dot number vs. graphed points
+        const newPos = numbers[subj][1] - d.dy;
+        if (newPos <= 360 && newPos >= 0){
+            movePoint(newPos, subj);
+        }      
+    }
+
+    function convertArray(arr){
+        let arrJS = [];
+        arr.forEach(el => {
+            arrJS.push({"x" : el[0], "y" : el[1]})
+        });
+        return arrJS;
+    }
+
+    function sendData(){
+        const newPositions = convertArray(numbers);
+        fetch('/cam-builder', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(newPositions)
+        })
+    }
+
+    function movePoint(newPos, subj){
+        numbers[subj][1] = Math.round(newPos); 
+        const div = document.querySelector("#plot");
+        div.firstChild.remove();
+        createChart();
+    }
+
+    init();
+
+</script>

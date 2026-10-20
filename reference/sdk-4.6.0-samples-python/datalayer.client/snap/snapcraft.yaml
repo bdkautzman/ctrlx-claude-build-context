@@ -1,0 +1,58 @@
+name: sdk-py-client
+title: SDK Python Client
+version: 1.0.0
+summary: ctrlX Data Layer client sample written in Python for ctrlX OS.
+description: |
+  The sample demonstrates how to read values from ctrlX Data Layer and write out the values to console.
+base: core24
+confinement: strict
+grade: stable
+
+contact: https://github.com/boschrexroth/ctrlx-automation-sdk
+license: MIT
+donation: https://github.com/boschrexroth/ctrlx-automation-sdk
+issues: https://github.com/boschrexroth/ctrlx-automation-sdk/issues
+source-code: https://github.com/boschrexroth/ctrlx-automation-sdk
+website: https://github.com/boschrexroth/ctrlx-automation-sdk
+
+platforms:
+  amd64:
+  arm64:
+    build-on: [amd64, arm64]
+    build-for: [arm64]
+
+apps:
+  client:
+    command: bin/run.sh
+    plugs:
+      - network
+      - datalayer
+    daemon: simple
+    restart-condition: always
+    passthrough:
+      restart-delay: 10s
+
+parts:
+  client:
+    plugin: python
+    source: .
+    stage-packages:
+      - ctrlx-datalayer
+
+  wrapper-scripts:
+    plugin: dump
+    source: wrapper/
+    organize:
+      ./run.sh : bin/run.sh
+
+plugs:
+  datalayer:
+    interface: content
+    content: datalayer
+    target: $SNAP_DATA/.datalayer
+
+lint:
+  ignore:
+    - library:
+        - usr/lib/aarch64-linux-gnu/libcomm_datalayer.so.*
+        - usr/lib/x86_64-linux-gnu/libcomm_datalayer.so.*

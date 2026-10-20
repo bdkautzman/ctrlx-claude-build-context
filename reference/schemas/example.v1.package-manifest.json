@@ -1,0 +1,183 @@
+{
+  "$schema": "./package-manifest.v1.schema.json",
+  "version": "1.0.0",
+  "id": "ctrlx-helloworld",
+  "configuration": {
+    "appDirectories": [
+      {
+        "name": "my-app",
+        "description": "My cool feature",
+        "icon": "my-icon",
+        "copyOnLoad": true,
+        "writeProtected": true
+      }
+    ],
+    "appPrivateFiles": [
+      "^my-app/[^/]+\\.bak$",
+      "^my-app/tmp"
+    ]
+  },
+  "documentation": [
+    {
+      "name": "My-App API",
+      "description": "Provides my-app related functionalities on ctrlX devices.",
+      "type": "api",
+      "url": "/my-app/doc/api"
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "ctrlx-helloworld.web",
+        "url": "/ctrlx-helloworld",
+        "binding": "unix://{$SNAP_DATA}/package-run/ctrlx-helloworld/ctrlx-helloworld.web.sock",
+        "caddyfile": "./caddyfile",
+        "options": [
+          {
+            "option": "websockets",
+            "value": ""
+          },
+          {
+            "option": "max_conns",
+            "value": "2"
+          }
+        ],
+        "restricted": [
+          "/ctrlx-helloworld/api/v1",
+          {
+            "path": "/my-app/api/v1.0",
+            "except": [
+              "/my-app/api/v1.0/except-path-1",
+              "/my-app/api/v1.0/except-path-2"
+            ],
+            "headersForwarding": [
+              "X-Auth-Name",
+              "X-Auth-ID",
+              "X-Auth-Scopes",
+              "X-Auth-Expires",
+              "X-Auth-Issued",
+              "X-Auth-PlcHandle",
+              "X-Auth-RemoteAuth",
+              "X-Auth-Nonce"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "scopes-declaration": [
+    {
+      "identifier": "ctrlx-helloworld.web",
+      "name": "Helloworld Scopes",
+      "description": "Scopes for the Hello World App",
+      "scopes": [
+        {
+          "identifier": "ctrlx-helloworld.web.all.rw",
+          "name": "Manage hello world",
+          "description": "Manage and modify hello world",
+          "i18n": "scopes.manage"
+        },
+        {
+          "identifier": "ctrlx-helloworld.web.all.r",
+          "name": "View hello world",
+          "description": "View (but not modify) hello world",
+          "i18n": "scopes.view"
+        }
+      ]
+    }
+  ],
+  "menus": {
+    "sidebar": [
+      {
+        "id": "helloworld",
+        "title": "Hello, World!",
+        "icon": "bosch-ic-world-frame",
+        "permissions": [
+          "ctrlx-helloworld.web.all.r",
+          "ctrlx-helloworld.web.all.rw"
+        ],
+        "items": [
+          {
+            "id": "helloworld-home",
+            "title": "Overview",
+            "link": "/ctrlx-helloworld",
+            "permissions": [
+              "ctrlx-helloworld.web.all.r",
+              "ctrlx-helloworld.web.all.rw"
+            ]
+          },
+          {
+            "id": "helloworld-manage",
+            "title": "Manage",
+            "link": "/ctrlx-helloworld/manage",
+            "permissions": [
+              "ctrlx-helloworld.web.all.rw"
+            ]
+          }
+        ]
+      }
+    ],
+    "settings": [
+      {
+        "id": "helloworld-settings",
+        "title": "Hello World!",
+        "link": "/ctrlx-helloworld/settings",
+        "permissions": [
+          "ctrlx-helloworld.web.all.rw"
+        ]
+      }
+    ],
+    "overview": [
+      {
+        "id": "helloworld-home",
+        "title": "Overview",
+        "link": "/ctrlx-helloworld",
+        "icon": "bosch-ic-world-frame",
+        "permissions": [
+          "ctrlx-helloworld.web.all.r",
+          "ctrlx-helloworld.web.all.rw"
+        ]
+      }
+    ]
+  },
+  "commands": {
+    "activeConfiguration": {
+      "save": [
+        {
+          "id": "ctrlx-helloworld",
+          "subject": "hello world",
+          "url": "/ctrlx-helloworld/api/v1/save"
+        }
+      ],
+      "load": [
+        {
+          "id": "ctrlx-helloworld",
+          "subject": "hello world",
+          "url": "/ctrlx-helloworld/api/v1/load"
+        }
+      ]
+    }
+  },
+  "certificatestores": [
+    {
+      "id": "ctrlx-helloworld.certificates",
+      "title": "Hello World Certificate Store",
+      "description": "Certficates & Keys to connect to the World"
+    }
+  ],
+  "apps": {
+    "rexroth-remoteagent": {
+      "commands": [
+        "BACKUP",
+        "RESTORE",
+        "REBOOT"
+      ]
+    }
+  },
+  "required": false,
+  "dependencies": {
+    "dependsOn": {
+      "rexroth-deviceadmin": "~1.20.0"
+    }
+  }
+}

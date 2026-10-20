@@ -1,0 +1,5 @@
+PyJWT
+autopep8
+ctrlx-datalayer<=3.5
+ctrlx-fbs
+cysystemd
