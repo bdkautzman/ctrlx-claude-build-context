@@ -30,7 +30,8 @@ Template folder structure: `upstream-sdk-4.6.0/` → `appdevguide.md` §4.1 and 
 | snaps | `ctrlx-<company>-<app>_<version>_arm64.snap` (mandatory), `_amd64.snap` (recommended) | build |
 
 Plus `architecture-overview.x` for the initial meeting. Mandatory runtime aspects for partner
-apps: **ctrlX license check** (`licensing.md`), app signing by Bosch Rexroth (or OEM signing,
+apps: **ctrlX license check** (out of scope for this kit, which builds unlicensed apps -
+see `upstream-sdk-4.6.0/licensing.md` if that changes), app signing by Bosch Rexroth (or OEM signing,
 `upstream-sdk-4.6.0/appsigning-oem.md`).
 
 What the validation team checks automatically: `upstream-sdk-4.6.0/appdevguide_basechecks.md`

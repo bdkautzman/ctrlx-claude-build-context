@@ -30,6 +30,9 @@ import time
 log = logging.getLogger("settings")
 
 LOAD_OPERATION_TIMEOUT_S = 600
+# After "query" Solutions sends nothing (no abort) if another participant refuses the load, so the
+# pause started there must expire soon; "prepare" follows within seconds when the load goes ahead.
+LOAD_QUERY_TIMEOUT_S = 60
 
 
 class SettingsError(Exception):
@@ -183,7 +186,7 @@ class SettingsStore:
         self._listeners = []
         self._last_mtime_ns = None
         self._last_bad_mtime_ns = None
-        self._load_started = None  # monotonic time while a Solutions load operation runs
+        self._load_deadline = None  # monotonic time until which a Solutions load pauses polling
         self._status = {"source": "defaults", "persisted": False, "error": None}
 
     # -- read access -------------------------------------------------------
@@ -291,26 +294,27 @@ class SettingsStore:
             self._write_atomic(self._current)
             self._status.update({"persisted": True, "error": None})
 
-    def begin_load_operation(self):
-        """Solutions load started (phase query/prepare): pause polling.
+    def begin_load_operation(self, timeout_s=LOAD_OPERATION_TIMEOUT_S):
+        """Solutions load started or progressed (phase query/prepare/load): pause polling.
 
         While Solutions copies/removes files we must neither recreate nor half-read them.
+        Every call (re)sets the pause to `timeout_s` from now.
         """
         with self._lock:
-            self._load_started = time.monotonic()
+            self._load_deadline = time.monotonic() + timeout_s
 
     def end_load_operation(self):
         """Solutions load finished (phase activate/abort): resume polling."""
         with self._lock:
-            self._load_started = None
+            self._load_deadline = None
 
     def _load_in_progress(self):
         with self._lock:
-            if self._load_started is None:
+            if self._load_deadline is None:
                 return False
-            if time.monotonic() - self._load_started > LOAD_OPERATION_TIMEOUT_S:
-                log.warning("Solutions load operation did not finish - resuming settings polling")
-                self._load_started = None
+            if time.monotonic() > self._load_deadline:
+                log.info("Solutions load operation ended without activate/abort - resuming settings polling")
+                self._load_deadline = None
                 return False
             return True
 

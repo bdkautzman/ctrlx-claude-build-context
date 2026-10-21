@@ -93,6 +93,7 @@
     if (editing) return;
     let values;
     try { values = await api("GET", "/values"); } catch (e) { return; }
+    if (editing) return; // an edit may have started while the request was running
     const body = $("values-body");
     body.replaceChildren();
     for (const [name, v] of Object.entries(values)) {
@@ -101,7 +102,9 @@
       const actionCell = el("td");
       if (v.writable && canWrite) {
         const btn = el("button", { type: "button", class: "btn btn-small", text: "Edit" });
-        btn.addEventListener("click", () => startEdit(name, v, valueCell, btn));
+        // onclick (not addEventListener): startEdit replaces it with "Set" - with two listeners a
+        // click on "Set" ran startEdit again first and wrote the old value back
+        btn.onclick = () => startEdit(name, v, valueCell, btn);
         actionCell.append(btn);
       }
       body.append(el("tr", { title: v.description || "" },

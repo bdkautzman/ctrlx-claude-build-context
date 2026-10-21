@@ -34,7 +34,7 @@ Codes in brackets are `tools/ctrlx_check.py` findings that catch the problem.
     `snap/package-assets/...` location; the official schema and json-schema README use
     `components` and `package-assets/<snap>/<snap>.fossinfo.json`. Follow the schema. [FOSS-FORMAT]
 11. **`ctrlx-actions` GitHub Action is outdated** (last change 2022, focal multiarch, legacy
-    flags) → don't use it for core24; see `templates/python-webapp/ci/github-build.yml`.
+    flags) → don't use it for core24; the kit builds locally (`build-snap-amd64.sh` / `-arm64.sh`).
 12. **Unix socket path too long** → binding path ≤ 108 chars, part after `.../current/` ≤ 50.
     Snap names > 29 chars need `run/<snap>/web.sock`. [PROXY-SOCKET-LEN]
 13. **`${SNAP_DATA}` in the manifest binding** doesn't resolve - the manifest syntax is
@@ -59,16 +59,101 @@ Codes in brackets are `tools/ctrlx_check.py` findings that catch the problem.
 
 ## Unverified assumptions in this kit (confirm on first real use, then move up)
 
-* `tools/ctrlx.py install` (multipart field `file` + `update`, task polling) – built from
-  packagemanager OpenAPI 1.15, tested against a mock only.
-* `tools/ctrlx.py logs` field names (logbook OpenAPI 2.4).
-* `templates/python-webapp/ci/github-build.yml` (SDK zip layout, native arm64 runner).
-* `templates/snippets/licensing.py`.
-* The `<N>` syslog-priority prefix in `app/logsetup.py` → levels in the ctrlX Logbook
-  (relies on systemd `SyslogLevelPrefix=yes`, the default for services).
-* The Solutions app sends a token with the app's `.rw` scope (or admin) to save/load commands
-  (persistdata.md says it "ensures the required permissions") - if save/load fails with 403,
-  log the token scopes and adjust `auth.require` for `/appdata/*`.
+* Browser click-through on the real CORE (its REST/web API passed; the UI is the same files as on the virtual).
+
+Verified on ctrlX COREvirtual 4.6 (2026-10-20, template 0.1.0): `tools/ctrlx.py install`
+(multipart `file` + `update`, task polling), `logs` entry field names, the `<N>` syslog prefix
+(warnings show as `warning` in the Logbook), and the Solutions token on `/appdata/save|load`
+(save and a full load cycle pass `auth.require(write=True)`). Browser click-through by the user
+(2026-10-21, 0.1.1/0.1.2): sidebar/overview open the UI with the token, settings and Data Layer
+values can be edited and saved, a read-only user has no write access, no Settings-page tile.
 
 ## Found during development
 <!-- Append here: date - symptom - cause - fix - (check code if you added one) -->
+
+First device test, 2026-10-20 (App Build Environment VM → ctrlX COREvirtual 4.6, port forwarding):
+
+21. **`tools/ctrlx.py`/curl time out against the device** → the App Build Environment sets
+    `http(s)_proxy=http://10.0.2.2:3128` (`/etc/environment`); that proxy can't reach the device.
+    `ctrlx.py` now ignores proxies; curl needs `--noproxy '*'`. Use `10.0.2.2:8443` (the tool's
+    default): the Windows host's LAN IP worked at first, then stopped answering from the VM.
+    SSH to the COREvirtual: `ssh -p 8022 <user>@10.0.2.2` (port 10022 is the build VM itself).
+22. **Install fails: HTTP 409 `system must be in state 'SERVICE' to execute this task`** → ctrlX OS
+    4.6 installs apps only in SERVICE. Writable node `scheduler/admin/state`
+    (`{"state": "SERVICE|SETUP|OPERATING"}`). Fix: `tools/ctrlx.py install --service` (switches and
+    restores), `tools/ctrlx.py state`.
+23. **HTTP 502 Bad Gateway for a few seconds right after an install** (reverse proxy reloads the new
+    proxy mapping); reading the error body may even raise `IncompleteRead` → retry; `ctrlx.py`
+    does so when it restores the state.
+24. **Solutions load refused in phase `query` with 409 from `rexroth-motion`** ("Cannot modify motion
+    object for loading configuration in Running State") → loading a configuration needs SERVICE,
+    like installing. Not an app problem; our app answered the query with 204.
+25. **No `abort` after a refused `query`** (persistdata.md: "the load operation is canceled") → an
+    app that pauses its file watcher in `query` must not wait for `abort`. Template: pause from
+    `query` expires after 60 s, `prepare`/`load` extend it (`LOAD_QUERY_TIMEOUT_S`). A load that goes
+    ahead calls our app with `query, prepare, load, validate, activate`, then `save` (same id).
+26. **Logbook `search_text` always answers 204 No Content** (plain and wildcard text) → filter by
+    `unit=snap.<snap>.<app>.service` (works) and search client-side: `ctrlx.py logs --snap/--search`.
+27. **Package Manager list has no top-level `version`** → it is `release.version`; state in
+    `health.status`. Data Layer REST reports `float64` nodes as type `double` (writes with
+    `float64` are accepted).
+28. **First start: `Data Layer provider start failed: Result.CLIENT_NOT_CONNECTED`** → the content
+    interfaces are connected (by Device Admin) after the first start; snapd restarts the service
+    and the provider comes up. Also on every SERVICE↔OPERATING switch the provider disconnects
+    and reconnects within seconds. Harmless as long as the app retries (template does).
+29. **`tools/tests` `test_template_passes` fails with `SRC-EXEC-BIT`, `tools/check.sh: Permission denied`**
+    after the Windows transfer → `bash tools/fix-permissions.sh` (see #2); in git the restored
+    bits show up as mode changes - commit them so a fresh clone keeps them.
+30. **Build environment facts**: the App Build Environment sets `SNAPCRAFT_BUILD_ENVIRONMENT=host`
+    (destructive mode, no LXD; the warning "destructive mode as a non-super user" is expected);
+    that is also why the local `file:` apt repo with `ctrlx-datalayer` works. The python plugin's
+    "Python interpreter not found in payload." is normal: `bin/python3` links to core24's
+    `/usr/bin/python3.12`. A first build took ~25 min. snapcraft lint warns that `contact` and
+    `license` are missing - set them per app.
+31. **`tools/new_app.py` after a template build** copied `parts/ stage/ prime/` into the new app →
+    fixed (skips build output); new apps also start at version 0.1.0 whatever the template's version.
+32. **Snap 35 MB (149 MB unpacked) for a few KB of app code** → the `ctrlx-datalayer` .deb stages
+    `libcomm_datalayer` for amd64 AND arm64, a 36 MB static lib, headers and `dl_compliance` /
+    `mddb_compiler`; the python plugin adds pip/setuptools/wheel/packaging. The SDK samples ship
+    all of it. Template 0.1.1: `prime:` filter + `override-prime` (keeps only
+    `usr/lib/${CRAFT_ARCH_TRIPLET_BUILD_FOR}/libcomm_datalayer.so*`) → 9.4 MB, runs unchanged.
+    `foss_from_prime.py` listed the app's own package and `packaging` as FOSS components → it now
+    skips the app itself and the venv tooling.
+33. **`tools/check.sh` / checker self-tests very slow after a build** (self-tests > 2 min instead
+    of 20 s) → `parts/ stage/ prime/` hold ~11 000 files; the checker globbed them before
+    filtering and the self-test copied them per test. Both now skip build output.
+
+Browser click-through by the user, 2026-10-21 (template 0.1.1):
+
+34. **Settings page shows a category "core.settings.categories.undefined" with a tile that does
+    nothing** → (from the device UI code, rexroth-deviceadmin 4.6) the page groups `menus.settings`
+    and `menus.system` entries by `category` (missing → "undefined"; translated only: apps, device,
+    system, security, network, written `0_apps` ...), and builds tiles from the entry's URL only.
+    An entry with `target: "_blank"` gets a click callback instead of a URL, which the sidebar
+    handles but the Settings page ignores. Fix: no `target` (same tab) or `embedded`, plus a valid
+    `category`; the template dropped its settings entry. [MENU-SETTINGS]
+35. **Editing a Data Layer value in the template UI and clicking "Set" restored the old value** →
+    `www/app.js` added the Edit handler with `addEventListener` and later set `btn.onclick` for
+    "Set"; a click ran both, `startEdit` first, which rebuilt the field with the old value. Enter
+    in the field worked, so a headless check that used Enter missed it. Fix: one `onclick` slot,
+    and re-check `editing` after the refresh request. Lesson: when testing a UI, click the buttons.
+
+Real ctrlX CORE (arm64, ctrlX OS 4.6, rexroth-arch01-*), 2026-10-21 (template 0.1.2):
+
+36. **arm64 cross-build works as-is** in the App Build Environment (multiarch apt sources from the
+    SDK setup script; the `ctrlx-datalayer` .deb is `Architecture: all`; the prime filter keeps
+    `usr/lib/aarch64-linux-gnu/libcomm_datalayer.so*`). 8.4 MB; no "Unable to determine library
+    dependencies" warnings this time; same `contact`/`license` lint warnings as amd64.
+37. **Real-device differences**: `GET /package-manager/api/v1/settings` returns `{}` while "unknown
+    sources" is off (the key is omitted, not `false`); the install took 2 min 40 s over the LAN
+    (COREvirtual: ~50 s); the Logbook shows "System integrity degraded - Reason: UNSIGNED_APPS" for
+    our unsigned snap (expected). The app itself (Data Layer, reconnects) behaves as on the virtual.
+38. **App installed fine, Data Layer OK, but every `/<snap>/...` URL returns the ctrlX UI's
+    `index.html` (HTTP 200, "Loading...") - no reverse-proxy route** → Device Admin's
+    `proxy-monitor` logged `Failed to load caddy config: ... dial unix /tmp/caddy.admin.sock: no such
+    file or directory`. The device had been up 33 days; `systemd-tmpfiles` cleaned Device Admin's
+    private `/tmp` (`/tmp/snap-private-tmp/snap.rexroth-deviceadmin/tmp/caddy.admin.sock`) that
+    morning. Existing routes keep working, new apps get none. A ctrlX OS issue, not the app's.
+    Check: `sudo journalctl | grep "Failed to load caddy config"`. Fix: restart
+    `rexroth-deviceadmin.proxy` (+ `.proxy-monitor`) or reboot - it's the user's device, ask first.
+    Confirmed: after a reboot the socket was back and the app's route worked (no reinstall needed).

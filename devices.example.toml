@@ -1,0 +1,32 @@
+# Test devices for tools/ctrlx.py (and run-local.sh via `tools/ctrlx.py env`).
+#
+#   cp devices.example.toml devices.toml      # then edit; devices.toml is git-ignored
+#   tools/ctrlx.py devices                    # list (without passwords)
+#   tools/ctrlx.py --device core packages     # pick one (or CTRLX_DEVICE=core)
+#
+# Precedence: command-line options > CTRLX_* environment variables > this file > built-in defaults.
+# Never commit real passwords: only devices.toml holds them.
+
+default = "virtual"
+
+[virtual]
+description = "ctrlX COREvirtual (port forwarding, seen from the App Build Environment VM)"
+host = "10.0.2.2"
+https_port = 8443          # host port forwarded to the device's 443
+ssh_port = 8022            # host port forwarded to the device's 22 (10022 is the build VM itself)
+arch = "amd64"             # snaps for this device: *_amd64.snap
+api_user = "boschrexroth"
+api_password = "boschrexroth"
+ssh_user = "rexroot"  # needs SSH rights on the device (Settings > Users & Permissions)
+ssh_password = "rexroot"
+
+[core]
+description = "ctrlX CORE hardware"
+host = "192.168.1.1"
+https_port = 443
+ssh_port = 22
+arch = "arm64"
+api_user = "boschrexroth"
+api_password = "boschrexroth"
+ssh_user = "rexroot"
+ssh_password = "rexroot"

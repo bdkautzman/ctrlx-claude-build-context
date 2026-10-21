@@ -3,7 +3,8 @@
 ctrlX OS 4.6 app (snap, `core24`) written in Python:
 
 * **Web UI** served on a Unix socket behind the ctrlX reverse proxy, opened from the ctrlX
-  sidebar / overview / settings menu, permissions via ctrlX scopes.
+  sidebar / overview (new tab), permissions via ctrlX scopes. No Settings-page tile: the ctrlX
+  Settings page can't open a new tab (docs/ctrlx/package-manifest.md).
 * **Data Layer provider** with nodes under `ctrlx-acme-template/…`.
 * **Settings** as `settings.json` in the ctrlX **app data** (Solutions active configuration),
   saved/loaded with configurations and editable in the web UI or "Manage app data".
@@ -34,7 +35,7 @@ python3 -m unittest discover -s tests -t .     # tests, any PC
 ../../tools/check.sh .                          # ctrlX compliance checks
 ./build-snap-amd64.sh                           # snap for ctrlX COREvirtual
 ./build-snap-arm64.sh                           # snap for ctrlX CORE hardware
-../../tools/ctrlx.py install ./*_amd64.snap     # install on the COREvirtual
+../../tools/ctrlx.py install ./*_amd64.snap --service   # install on the COREvirtual (needs SERVICE state)
 ```
 
 ## On the device

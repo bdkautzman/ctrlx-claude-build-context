@@ -21,7 +21,7 @@
 | `$SNAP_COMMON` | `/var/snap/<name>/common` (all revisions) | `solutions/` mount (app data) |
 | app data dir | `$SNAP_COMMON/solutions/activeConfiguration/<name>/` | `settings.json` |
 | socket | `$SNAP_DATA/package-run/<name>/web.sock` | reverse proxy → web server |
-| `/tmp` | private per snap | license ids, scratch (RAM) |
+| `/tmp` | private per snap | scratch (RAM) |
 
 ## Network facts
 

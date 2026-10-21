@@ -16,14 +16,13 @@ disagree, the upstream file wins, and the disagreement belongs in `gotchas.md`.
 | `reserved-interfaces-and-ports.md` | want to add any plug, slot, or open a port |
 | `build-deploy-test.md` | build, install on COREvirtual, read logs, debug |
 | `release-and-validation.md` | prepare a release or the Bosch validation artifacts |
-| `licensing.md` | the app must check a ctrlX license |
 | `gotchas.md` | **before** debugging anything: known problems and fixes |
 | `sources.md` | need provenance (repos, commits, URLs) |
 
 Upstream SDK docs worth opening directly (in `upstream-sdk-4.6.0/`):
 `appdevguide.md` (all rules), `appdevguide_basechecks.md` (what validation checks),
 `package-assets.md` (full manifest reference), `persistdata.md` (app data protocol),
-`persist-device-settings.md` (backup/restore via the Setup app), `licensing.md`.
+`persist-device-settings.md` (backup/restore via the Setup app).
 
 Exact Python Data Layer API: `../../reference/ctrlxdatalayer-api-3.6.0/*.py`.
 REST APIs of the device: `../../reference/rest-api/*.openapi.json`.

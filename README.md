@@ -14,7 +14,7 @@ and a settings JSON in ctrlX app data.
 | `.claude/settings.json` | permissions (checks/tests allowed, device installs ask, reference read-only) + a hook that re-checks an app after edits to its snapcraft/manifest/validation files |
 | `docs/ctrlx/` | curated rules (start at `docs/ctrlx/README.md`), `gotchas.md` (grows over time), verbatim SDK 4.6.0 docs in `upstream-sdk-4.6.0/` |
 | `templates/python-webapp/` | known-good template app (web UI + Data Layer provider + app-data settings, 28 unit tests, fake Data Layer) |
-| `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/logs on a device via REST), `foss_from_prime.py` |
+| `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/logs/ssh on a test device from `devices.toml`), `foss_from_prime.py` |
 | `reference/` | read-only: Python Data Layer API source 3.6.0, SDK 4.6.0 Python samples, ctrlX REST OpenAPI specs, example apps with notes |
 | `apps/` | your apps go here |
 

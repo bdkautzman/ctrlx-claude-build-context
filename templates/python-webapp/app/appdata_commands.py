@@ -14,7 +14,7 @@ template is synchronous because reading one JSON file is fast.
 import json
 import logging
 
-from app.settings_store import SettingsError
+from app.settings_store import LOAD_QUERY_TIMEOUT_S, SettingsError
 
 log = logging.getLogger("appdata")
 
@@ -64,10 +64,13 @@ def handle_load(body_bytes, store):
     if phase == "query":
         # Can we load in the current system state? Answer 409 + mainDiagnosisCode 080F0E00 if a
         # specific device state (e.g. Setup) were required. This app can always load.
-        store.begin_load_operation()
+        # Pause polling already now (copyOnLoad copies files between query and prepare), but only
+        # briefly: if another app refuses in this phase, Solutions cancels without sending abort.
+        store.begin_load_operation(LOAD_QUERY_TIMEOUT_S)
         return 204, None
-    if phase == "prepare":
+    if phase in ("prepare", "load"):
         store.begin_load_operation()
+    if phase == "prepare":
         return 204, None
     if phase == "load":
         # copyOnLoad=true: Solutions already copied our directory into the active configuration.

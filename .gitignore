@@ -7,3 +7,5 @@ apps/*/parts/
 apps/*/stage/
 apps/*/prime/
 apps/*/*.snap
+# device credentials for tools/ctrlx.py (template: devices.example.toml)
+/devices.toml

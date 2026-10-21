@@ -40,8 +40,7 @@ apps:
 | `active-solution` | plug, content | `content: solutions`, `target: $SNAP_COMMON/solutions` | app data (configurations) |
 | `network`, `network-bind` | plug | standard | Data Layer lib / socket server (as in SDK samples) |
 
-Optional ones you may need later: `licensing-service` (plug, content, `target: $SNAP_DATA/licensing-service`,
-see `licensing.md`), `package-certificates` (slot, content, `source.write: [$SNAP_COMMON/package-certificates/${CRAFT_PROJECT_NAME}]`,
+Optional ones you may need later: `package-certificates` (slot, content, `source.write: [$SNAP_COMMON/package-certificates/${CRAFT_PROJECT_NAME}]`,
 needs `certificatestores` in the manifest), `serial-port`, `raw-usb`, `hardware-observe` …
 **Every new plug/slot: check `reserved-interfaces-and-ports.md` first, add it to the
 validation description, and justify it. Never add a plug just to make an error go away.**
@@ -54,6 +53,8 @@ parts:
     plugin: python               # core24: builds a venv into the snap from pyproject.toml
     source: .
     stage-packages: [ctrlx-datalayer]   # native libcomm_datalayer; apt repo from the SDK
+    prime: [...]                 # + override-prime: keep only the target arch's libcomm_datalayer.so*
+                                 #   (full list in templates/python-webapp/snap/snapcraft.yaml)
   wrapper:  {plugin: dump, source: ./wrapper,  organize: {run.sh: bin/run.sh}}
   configs:  {plugin: dump, source: ./configs,  organize: {'package-assets/*': package-assets/${CRAFT_PROJECT_NAME}/}}
   www:      {plugin: dump, source: ./www,      organize: {'*': www/}}
@@ -63,6 +64,9 @@ lint:
     - library: [usr/lib/aarch64-linux-gnu/libcomm_datalayer.so.*, usr/lib/x86_64-linux-gnu/libcomm_datalayer.so.*]
 ```
 
+* Keep the template's `prime:` filter: without it the `ctrlx-datalayer` .deb adds ~100 MB
+  (both architectures' libs, a static lib, headers, tools) - gotchas #32. If you add a
+  stage-package, check `du -h --max-depth=3 prime/usr` after the build.
 * Every Python sub-package must be listed in `pyproject.toml` `[tool.setuptools] packages`
   (check: `PY-PACKAGES`), otherwise it is silently missing in the snap.
 * Pure-Python wheels only, if possible. Packages with C extensions must have manylinux

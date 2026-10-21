@@ -2,7 +2,7 @@
 # Build the snap for ctrlX CORE hardware (X3/X5/X7: arm64).
 # Cross-build on amd64 works in the ctrlX App Build Environment (multiarch set up by the SDK
 # script install-required-packages.sh). Warnings "Unable to determine library dependencies"
-# are expected when cross-building and can be ignored.
+# may appear when cross-building and can be ignored (none in the 0.1.2 build).
 set -euo pipefail
 cd "$(dirname "$0")"
 ../../tools/check.sh . --pre-build

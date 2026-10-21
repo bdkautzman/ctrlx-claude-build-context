@@ -2,8 +2,9 @@
 # Run the app WITHOUT building a snap - the fastest development loop.
 #
 #   ./run-local.sh                      web UI + settings only (Data Layer disabled)
-#   CTRLX_HOST=10.0.2.2 CTRLX_SSL_PORT=8443 ./run-local.sh
-#                                       + Data Layer provider against a ctrlX COREvirtual
+#   (eval "$(../../tools/ctrlx.py env)"; ./run-local.sh)
+#                                       + Data Layer provider against the default device of
+#                                         devices.toml (or set CTRLX_HOST/CTRLX_SSL_PORT/...): a COREvirtual
 #                                         (port forwarding, seen from the App Build Environment;
 #                                          needs ctrlx-datalayer installed in the venv + the
 #                                          ctrlx-datalayer .deb on this machine)

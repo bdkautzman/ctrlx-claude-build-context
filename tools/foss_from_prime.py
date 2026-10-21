@@ -18,19 +18,27 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 from email.parser import Parser
 
-SKIP = {"pip", "setuptools", "wheel", "pkg-resources", "_distutils_hack"}
+# venv tooling of the python plugin; the template primes it out (snap/snapcraft.yaml, part app)
+SKIP = {"pip", "setuptools", "wheel", "packaging", "pkg-resources", "_distutils_hack"}
 
 
-def read_dists(site):
+def normalize(name):
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def read_dists(site, own=()):
+    """Python distributions in site-packages, without venv tooling and the app's own package."""
+    skip = {normalize(n) for n in SKIP} | {normalize(n) for n in own}
     dists = []
     for meta in glob.glob(os.path.join(site, "*.dist-info", "METADATA")):
         with open(meta, encoding="utf-8", errors="replace") as f:
             msg = Parser().parse(f, headersonly=True)
         name = msg.get("Name", "")
-        if not name or name.lower() in SKIP:
+        if not name or normalize(name) in skip:
             continue
         lic = msg.get("License-Expression") or msg.get("License") or ""
         if len(lic) > 80:
@@ -56,13 +64,13 @@ def main():
     site = args.site or next(iter(glob.glob(os.path.join(args.app_dir, "prime", "lib", "python3*", "site-packages"))), None)
     if not site or not os.path.isdir(site):
         sys.exit("site-packages not found - build the snap first (snapcraft pack keeps prime/) or pass --site")
-    dists = read_dists(site)
+    with open(os.path.join(args.app_dir, "snap", "snapcraft.yaml"), encoding="utf-8") as f:
+        name = next(l.split(":", 1)[1].strip() for l in f if l.startswith("name:"))
+    dists = read_dists(site, own=[name])  # pyproject name == snap name (tools/new_app.py)
     print("{:30} {:15} {}".format("package", "version", "license"))
     for d in dists:
         print("{:30} {:15} {}".format(d["name"], d["version"], d["license"] or "?"))
 
-    with open(os.path.join(args.app_dir, "snap", "snapcraft.yaml"), encoding="utf-8") as f:
-        name = next(l.split(":", 1)[1].strip() for l in f if l.startswith("name:"))
     foss = os.path.join(args.app_dir, "configs", "package-assets", name + ".fossinfo.json")
     with open(foss, encoding="utf-8") as f:
         doc = json.load(f)

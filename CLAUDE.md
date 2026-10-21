@@ -8,12 +8,13 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 ## Pinned baseline (never change without the human)
 - base `core24`, snapcraft 8.x, ctrlX AUTOMATION SDK 4.6.0, `ctrlx-datalayer<=3.6` + `ctrlx-fbs`
 - package-manifest schema v1.7, Python 3.12 in the snap, stdlib-only web server
+- Unofficial, unlicensed apps: no ctrlX license check (`licensing-service`, manifest `licenses`)
 - Details: `docs/ctrlx/platform-baseline.md`
 
 ## Layout
 - `apps/<snap-name>/` – the apps (create with `python3 tools/new_app.py ...`, never by hand-copying)
 - `templates/python-webapp/` – reference implementation; keep it working, don't put app code in it
-- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
+- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
 - `docs/ctrlx/` – curated rules; start at `docs/ctrlx/README.md`; `upstream-sdk-4.6.0/` = verbatim SDK docs
 - `reference/` – read-only: Data Layer API source, SDK samples, REST specs, example apps (see `reference/README.md`)
 
@@ -36,7 +37,8 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 - **Flash**: no log files, no cyclic disk writes (also not on Data Layer writes). Log to stdout via `logging`.
 - **Data Layer**: look up signatures in `reference/ctrlxdatalayer-api-3.6.0/` – never guess. Callbacks call `cb` exactly once.
   Nodes are declared in `app/datalayer_nodes.py::build_node_specs`.
-- **Secrets**: no credentials in snap code (`ipc://` needs none). Device credentials only via env vars for tools.
+- **Secrets**: no credentials in snap code (`ipc://` needs none). Device credentials only in the git-ignored
+  `devices.toml` (template `devices.example.toml`) or env vars for tools - never in committed files.
 - **Versions**: bump `version` (snapcraft.yaml + pyproject.toml) and CHANGELOG for every build you hand over.
 - **Files**: LF line endings, `wrapper/run.sh` executable. Don't edit `reference/` or `docs/ctrlx/upstream-*`.
 - Don't run `snap install`/`snapcraft` with sudo tricks, don't touch other snaps, don't change device settings
@@ -48,8 +50,10 @@ python3 tools/new_app.py --name ctrlx-<company>-<app> --title "<Title>" --author
 tools/check.sh apps/<app> [--release] [--pre-build] [--snap file.snap]
 cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  (no ctrlX needed)
 cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh
-CTRLX_HOST=10.0.2.2:8443 tools/ctrlx.py install apps/<app>/<snap>_<ver>_amd64.snap
-tools/ctrlx.py dl-read <snap>/status/heartbeat | appdata <snap>/settings.json | logs --search <snap>
+tools/ctrlx.py devices                         # test devices from devices.toml: virtual (amd64), core (arm64)
+tools/ctrlx.py [--device core] install apps/<app>/<snap>_<ver>_<arch>.snap --service   # --service: ask first
+tools/ctrlx.py [--device core] dl-read <snap>/status/heartbeat | appdata <snap>/settings.json | logs --snap <snap> | state
+tools/ctrlx.py [--device core] ssh 'sudo snap logs -n 50 <snap>'
 python3 -m unittest discover -s tools/tests    # self-test of the checker
 ```
 

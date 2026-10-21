@@ -318,6 +318,27 @@ def check_snapcraft(app_dir, rep, ctx, release):
 # package manifest
 # ---------------------------------------------------------------------------
 
+# Settings/system page of the ctrlX OS 4.6 UI (rexroth-deviceadmin): tiles are grouped by `category`,
+# shown as core.settings.categories.<category without "N_" prefix>; only these names are translated.
+SETTINGS_CATEGORIES = {"apps", "device", "system", "security", "network"}
+
+
+def check_settings_tiles(kind, entries, rep, where):
+    for e in entries or []:
+        eid = e.get("id", "")
+        target = e.get("target")
+        if target and target != "embedded":
+            # the page builds tiles from the entry's url only; a target turns it into a click callback
+            rep.error("MENU-SETTINGS", "menus.{} entry '{}' has target '{}': the ctrlX Settings page cannot open it "
+                      "(tile without link). Omit target (same tab) or use 'embedded'".format(kind, eid, target), where)
+        category = e.get("category")
+        short = re.sub(r"^\d*_?", "", (category or "").lower())
+        if short not in SETTINGS_CATEGORIES:
+            rep.warn("MENU-SETTINGS", "menus.{} entry '{}': category {} is shown as 'core.settings.categories.{}' - "
+                     "use one of 0_apps, 0_device, 1_system, 2_security, 3_network".format(
+                         kind, eid, json.dumps(category), short or "undefined"), where)
+
+
 def check_manifest(app_dir, rep, ctx, schemas):
     name = ctx.get("name") or ""
     assets = os.path.join(app_dir, "configs", "package-assets")
@@ -421,6 +442,8 @@ def check_manifest(app_dir, rep, ctx, schemas):
                         rep.warn("MENU-PERMISSION", "menu permission '{}' is not a declared scope".format(perm), where)
                 walk(e.get("items"))
         walk(entries)
+        if kind in ("settings", "system"):
+            check_settings_tiles(kind, entries, rep, where)
 
     # app data commands + directories
     cmds = ((man.get("commands") or {}).get("activeConfiguration") or {})
@@ -585,10 +608,18 @@ SOURCE_RULES = [
 ]
 
 
+def walk_files(app_dir, skip_dirs):
+    """Files below app_dir; never descends into skip_dirs (snapcraft output has thousands of files)."""
+    for root, dirs, files in os.walk(app_dir):
+        dirs[:] = sorted(d for d in dirs if d not in skip_dirs)
+        for fn in sorted(files):
+            yield os.path.join(root, fn)
+
+
 def check_sources(app_dir, rep, ctx):
     name = ctx.get("name") or ""
-    py_files = [f for f in glob.glob(os.path.join(app_dir, "**", "*.py"), recursive=True)
-                if not re.search(r"(/|\\)(tests|venv|\.venv|parts|stage|prime|build)(/|\\)", f)]
+    py_files = [f for f in walk_files(app_dir, {"tests", "venv", ".venv", "parts", "stage", "prime", "build"})
+                if f.endswith(".py")]
     uses_dl = False
     for f in py_files:
         try:
@@ -653,9 +684,7 @@ def check_sources(app_dir, rep, ctx):
                         rep.error("SRC-EXEC-BIT", "{} is not executable - the daemon cannot start. chmod +x it "
                                   "(git: git update-index --chmod=+x)".format(rel(c, app_dir)), rel(c, app_dir))
                     break
-    for f in glob.glob(os.path.join(app_dir, "**", "*"), recursive=True):
-        if not os.path.isfile(f) or re.search(r"(/|\\)(\.git|parts|stage|prime|venv|\.venv)(/|\\)", f):
-            continue
+    for f in walk_files(app_dir, {".git", "parts", "stage", "prime", "venv", ".venv"}):
         if f.endswith((".sh", ".py", ".yaml", ".json")) or os.path.basename(os.path.dirname(f)) == "wrapper":
             with open(f, "rb") as fh:
                 head = fh.read(65536)

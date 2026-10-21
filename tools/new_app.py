@@ -49,7 +49,16 @@ def main():
     dest = os.path.join(args.dest, name)
     if os.path.exists(dest):
         sys.exit("already exists: " + dest)
-    shutil.copytree(TEMPLATE, dest, ignore=shutil.ignore_patterns(".dev", "__pycache__", "*.pyc", "*.snap"))
+    common = shutil.ignore_patterns(".dev", "__pycache__", "*.pyc", "*.snap")
+
+    def ignore(directory, names):
+        skip = set(common(directory, names))
+        if os.path.abspath(directory) == os.path.abspath(TEMPLATE):
+            # snapcraft build output and local venv of the template (after a template build)
+            skip |= {n for n in names if n in ("parts", "stage", "prime", "overlay", ".venv")}
+        return skip
+
+    shutil.copytree(TEMPLATE, dest, ignore=ignore)
 
     replacements = [(T_NAME, name), (T_TITLE, title), (T_AUTHOR, args.author), (T_URL, args.url)]
     for root, _, files in os.walk(dest):
@@ -72,6 +81,15 @@ def main():
         p = os.path.join(dest, rel)
         if os.path.exists(p):
             os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    # a new app starts at 0.1.0, whatever version the template itself is at
+    for rel, pattern, rep in (("snap/snapcraft.yaml", r"(?m)^version: .*$", "version: 0.1.0"),
+                              ("pyproject.toml", r'(?m)^version = ".*"$', 'version = "0.1.0"')):
+        p = os.path.join(dest, rel)
+        with open(p, "r", encoding="utf-8", newline="") as f:
+            text = f.read()
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(re.sub(pattern, rep, text, count=1))
 
     with open(os.path.join(dest, "CHANGELOG.md"), "w", encoding="utf-8") as f:
         f.write("# Changelog\n\nVersions follow semantic versioning and must match `version:` in "

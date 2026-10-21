@@ -48,19 +48,6 @@
         "items": []
       }
     ],
-    "settings": [
-      {
-        "id": "ctrlx-acme-template-settings",
-        "title": "Template App",
-        "icon": "bosch-ic-gear",
-        "link": "/ctrlx-acme-template/?token=${bearertoken}#settings",
-        "target": "_blank",
-        "permissions": [
-          "ctrlx-acme-template.web.all.rw"
-        ],
-        "items": []
-      }
-    ],
     "overview": [
       {
         "id": "ctrlx-acme-template-overview",

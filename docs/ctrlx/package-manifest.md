@@ -46,6 +46,12 @@ unique), `title`, **`items` (required by the schema, use `[]`)**, optional `link
 * `link` placeholders: `${bearertoken}` (current user token), `${hostname}`.
 * `target`: `_blank` (recommended for 3rd-party UIs, new tab) or `embedded` (inside the ctrlX UI;
   only if your page is designed for it) or a window name.
+* **`settings` / `system` entries (ctrlX OS 4.6, verified)**: the Settings page builds tiles from the
+  entry's URL only - with `target: "_blank"` the tile has **no link** (it cannot open a new tab);
+  omit `target` (opens in the same tab) or use `embedded`. Tiles are grouped by **`category`**:
+  `0_apps`, `0_device`, `1_system`, `2_security`, `3_network` (shown as Apps, Device, ...); a missing or
+  other category is shown as `core.settings.categories.<name>`. Check: `MENU-SETTINGS`.
+  The template has no settings entry; its settings are part of its own UI (sidebar/overview).
 * Link to your app data in the ctrlX file view: `/solutions/configurations/appdata/content?path=<dir>%2F`
   (pattern used by community apps).
 
@@ -70,7 +76,7 @@ so they must be below the proxy url and inside `restricted`. Protocol: `app-data
 * `appPrivateFiles`: RE2 regexes of files excluded from save/load (temp files, caches).
 
 ## Sections you may add later
-* `licenses` (license names the app checks; `supportsTrial` needs schema 1.7) → `licensing.md`
+* `licenses` - not used: this kit builds unofficial, unlicensed apps (no ctrlX license check)
 * `certificatestores` + slot `package-certificates` (key/cert management UI)
 * `apps.rexroth-setup.settings` (device backup/restore of settings) → `upstream-sdk-4.6.0/persist-device-settings.md`
 * `uiExtensions.dashboard` (home screen widgets as Web Components)

@@ -3,7 +3,7 @@
   "components": [
     {
       "name": "ctrlx-datalayer",
-      "version": "TODO-set-from-build",
+      "version": "3.5.0",
       "homepage": "https://pypi.org/project/ctrlx-datalayer/",
       "usage": "AsIs",
       "integrationMechanism": "LinkedDynamically",
@@ -20,7 +20,7 @@
     },
     {
       "name": "ctrlx-fbs",
-      "version": "TODO-set-from-build",
+      "version": "2.5.1",
       "homepage": "https://pypi.org/project/ctrlx-fbs/",
       "usage": "AsIs",
       "integrationMechanism": "LinkedDynamically",
@@ -37,7 +37,7 @@
     },
     {
       "name": "flatbuffers",
-      "version": "TODO-set-from-build",
+      "version": "24.3.25",
       "homepage": "https://github.com/google/flatbuffers",
       "usage": "AsIs",
       "integrationMechanism": "LinkedDynamically",

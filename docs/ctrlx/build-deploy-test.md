@@ -28,7 +28,7 @@ Put the kit on the VM with git (preferred) or scp; keep LF line endings (see got
 cd apps/<name>
 python3 -m unittest discover -s tests -t .        # unit tests (fake Data Layer)
 ./run-local.sh                                     # http://127.0.0.1:8080/<name>/ , auth off
-CTRLX_HOST=10.0.2.2 CTRLX_SSL_PORT=8443 ./run-local.sh   # + real Data Layer of the COREvirtual
+(eval "$(../../tools/ctrlx.py env)"; ./run-local.sh)   # + real Data Layer of the default device
 ```
 For the last one install the Python deps in a venv (`python3 -m venv .venv && . .venv/bin/activate
 && pip install ctrlx-datalayer'<=3.6' ctrlx-fbs`) – the native lib comes from the .deb.
@@ -50,14 +50,25 @@ ctrlX WORKS → create/start a COREvirtual (port forwarding), log in once in the
 (https://localhost:8443 from Windows), then Settings → Apps → allow installation from
 unknown sources (or `--allow-unknown` below).
 
+Test devices: `cp devices.example.toml devices.toml` (kit root, git-ignored) and fill in address,
+API and SSH credentials per device. `virtual` (COREvirtual from the build VM, amd64) is the default;
+pick another with `--device core` or `CTRLX_DEVICE=core`.
+
 ```bash
-export CTRLX_HOST=10.0.2.2:8443           # from the App Build Environment VM
-../../tools/ctrlx.py install <name>_<ver>_amd64.snap
-../../tools/ctrlx.py packages
+../../tools/ctrlx.py devices                                    # list (no passwords)
+../../tools/ctrlx.py install <name>_<ver>_amd64.snap --service   # SERVICE -> install -> back
+../../tools/ctrlx.py --device core install <name>_<ver>_arm64.snap --service   # real CORE (arm64)
+../../tools/ctrlx.py ssh 'sudo snap logs -n 50 <name>'           # SSH with the devices.toml login
+../../tools/ctrlx.py packages                                   # name, version, health
 ../../tools/ctrlx.py dl-read <name>/status/heartbeat
 ../../tools/ctrlx.py appdata <name>/settings.json
-../../tools/ctrlx.py logs --search <name>
+../../tools/ctrlx.py logs --snap <name>
+../../tools/ctrlx.py state [SERVICE|OPERATING]                  # show / set the operating state
 ```
+ctrlX OS 4.6 installs apps **only in SERVICE state** (HTTP 409 otherwise); `--service` switches the
+device (stops PLC/motion), installs and restores the previous state. Loading a configuration
+(Solutions) also needs SERVICE. `tools/ctrlx.py` never uses `http(s)_proxy` (the build VM sets one
+that can't reach the device); for curl add `--noproxy '*'`.
 Manual alternative: web UI → Settings → Apps → Install from file.
 The COREvirtual's license is the 4-hour engineering license; it shuts down after 4 h.
 
@@ -74,8 +85,9 @@ The COREvirtual's license is the 4-hour engineering license; it shuts down after
 
 ## Debugging
 
-* Logs: Diagnostics → Logbook (filter on the snap) or `tools/ctrlx.py logs`. With SSH
-  (needs a user with SSH rights): `sudo snap logs -f <name>`, `snap services <name>`,
+* Logs: Diagnostics → Logbook (filter on the snap) or `tools/ctrlx.py logs --snap <name>`. With SSH
+  (needs a user with SSH rights): `tools/ctrlx.py [--device core] ssh` (COREvirtual from the build VM:
+  port 8022 - port 10022 is the build VM itself): `sudo snap logs -f <name>`, `snap services <name>`,
   `snap connections <name>`, `sudo snap run --shell <name>.service` then inspect `$SNAP_COMMON/solutions`.
 * Python remote debugging with debugpy: `upstream-sdk-4.6.0/remote-debug-python.md` and the SDK
   sample `reference/sdk-4.6.0-samples-python/datalayer.remote.debug` (debug port only on demand!).

@@ -3,11 +3,13 @@
 import json
 import os
 import tempfile
+import time
 import unittest
+from unittest import mock
 
 from app import appdata_commands
 from app.settings_rules import RULES
-from app.settings_store import SettingsError, SettingsStore, validate
+from app.settings_store import LOAD_QUERY_TIMEOUT_S, SettingsError, SettingsStore, validate
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULTS_FILE = os.path.join(HERE, "..", "defaults", "settings.json")
@@ -143,6 +145,23 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(call("activate")[0], 204)
         self.assertEqual(call("save", kind="save")[0], 204)
         self.assertEqual(call("some-future-phase")[0], 204)
+
+    def test_refused_query_pauses_polling_only_briefly(self):
+        # Seen on ctrlX OS 4.6: when another app refuses the load in "query", Solutions cancels the
+        # operation without sending "abort" - polling must resume after LOAD_QUERY_TIMEOUT_S.
+        os.makedirs(os.path.dirname(self.file))
+        store = self.store()
+        store.load_from_disk(create_if_missing=True)
+        appdata_commands.handle_load(b'{"phase":"query","id":"q1"}', store)
+        self.assertTrue(store._load_in_progress())
+        now = time.monotonic()
+        with mock.patch("app.settings_store.time.monotonic", return_value=now + LOAD_QUERY_TIMEOUT_S + 1):
+            self.assertFalse(store._load_in_progress())
+        # a load that goes ahead extends the pause to the full timeout
+        appdata_commands.handle_load(b'{"phase":"query","id":"q2"}', store)
+        appdata_commands.handle_load(b'{"phase":"prepare","id":"q2"}', store)
+        with mock.patch("app.settings_store.time.monotonic", return_value=now + LOAD_QUERY_TIMEOUT_S + 1):
+            self.assertTrue(store._load_in_progress())
 
     def test_load_without_data_resets_to_defaults(self):
         os.makedirs(os.path.dirname(self.file))

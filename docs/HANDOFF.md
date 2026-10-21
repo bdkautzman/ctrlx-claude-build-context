@@ -25,6 +25,9 @@ was decided and what is still open. Rules for daily work are in `CLAUDE.md`.
 | Data Layer writes are runtime-only, never persisted | PLCs may write cyclically → flash wear |
 | Logging to stdout with `<N>` syslog prefixes | journald levels without bundling cysystemd |
 | Menu target `_blank` (not `embedded`) | Bosch recommends `_blank` for 3rd-party UIs |
+| No CI workflow (2026-10-21) | build locally for now (amd64 + arm64 in the build VM); the untested GitHub Actions template was removed |
+| No ctrlX licensing (2026-10-21) | unofficial, unlicensed apps for now; licensing snippet and docs removed |
+| No `menus.settings` entry (2026-10-21) | the ctrlX Settings page can't open `_blank` tiles; settings live in the app UI |
 | Package-manifest schema v1.7 | released with ctrlX OS 4.4, superset of the v1.6 the samples use |
 | `boschrexroth/ctrlx-actions` not used | last updated 2022, not suitable for core24 |
 
@@ -35,16 +38,23 @@ Verified in a cloud sandbox (no snapcraft, no device available there):
 - `tools/ctrlx_check.py`: 13 self-tests pass; the template is clean; it flags real issues in the SDK samples and example apps
 - `tools/ctrlx.py install/dl-read/packages` tested against a mock HTTPS device only
 
-**Not yet verified → first tasks in Claude Code** (also in `docs/ctrlx/gotchas.md`, "Unverified assumptions"):
-1. The one-time build environment setup (`docs/ctrlx/build-deploy-test.md` §0), then
-   `tools/check.sh templates/python-webapp --pre-build` → OK.
-2. First real snap build of the template (`./build-snap-amd64.sh`) – the python plugin with core24
-   + `ctrlx-datalayer` stage package has not been built yet.
-3. Install on the COREvirtual with `tools/ctrlx.py install` (multipart upload + task polling).
-4. Smoke test on the device (build-deploy-test.md §4): menu entry, token/scopes, Data Layer nodes,
-   app data save/load cycle, Logbook levels, restart behaviour.
-5. Then `tools/foss_from_prime.py --write` to replace the TODO versions in fossinfo.
-Record every finding in `docs/ctrlx/gotchas.md` and fix the template/tools/docs accordingly.
+**First Claude Code session (2026-10-20, App Build Environment VM + ctrlX COREvirtual 4.6):**
+1. ✅ Build environment was already set up (snapcraft 8.14.5, ctrlx-datalayer 3.5.2 .deb, host builds);
+   `tools/fix-permissions.sh` was needed after the Windows transfer; pre-build check OK.
+2. ✅ Template snap builds (amd64). 0.1.1 primes only the target architecture's Data Layer lib.
+3. ✅ `tools/ctrlx.py install` works; needs SERVICE state → new `--service` flag / `state` command.
+4. ✅ Smoke test via REST/SSH: Data Layer nodes (read, write, range/type/read-only rejection),
+   reverse proxy (401 without token), scopes (`.r` user → 403 on writes, no scope → 403),
+   settings API → app data, Solutions save and full load cycle (needs SERVICE), Logbook levels,
+   restart keeps settings and resets runtime values.
+   ✅ Browser (user, 2026-10-21): sidebar + overview open the UI with the token; settings save to app
+   data; read-only user has no access. Found: dead Settings-page tile (entry removed, 0.1.2) and
+   "Set" writing the old Data Layer value back - both fixed in 0.1.2 and re-checked by the user.
+5. ✅ fossinfo filled by `tools/foss_from_prime.py --write`.
+6. ✅ arm64 build (2026-10-21) on the real CORE (192.168.1.7): install, Data Layer, reverse proxy +
+   token checks, settings → app data, restart and reboot all pass. A device-side reverse-proxy
+   problem (gotchas #38) needed a reboot of the CORE first.
+Findings: `docs/ctrlx/gotchas.md` #21–#38. Devices: `devices.toml` (git-ignored).
 
 ## Delivery notes
 - The Claude Code config arrived as `_claude/` on Windows (the transfer tool can't write `.claude`).

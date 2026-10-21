@@ -12,7 +12,7 @@
 
 name: ctrlx-acme-template
 title: Template App
-version: 0.1.0
+version: 0.1.2
 summary: ctrlX OS app template with web UI, Data Layer nodes and app-data settings
 description: |
   <!--
@@ -55,6 +55,36 @@ parts:
     source: .
     stage-packages:
       - ctrlx-datalayer
+    # The ctrlx-datalayer .deb ships build tools, headers, a static lib and the shared libs of BOTH
+    # architectures (~100 MB). At runtime only usr/lib/<triplet>/libcomm_datalayer.so* is used
+    # (ctrlxdatalayer/clib.py loads "libcomm_datalayer.so"). The venv tooling (pip, setuptools,
+    # wheel, packaging) is not needed at runtime either (and would have to be listed in fossinfo).
+    prime:
+      - -usr/bin/dl_compliance
+      - -usr/bin/mddb_compiler
+      - -usr/include
+      - -usr/lib/*/libcomm_datalayer_static.a
+      - -usr/lib/*/pkgconfig
+      - -bin/pip*
+      - -lib/python3.12/site-packages/pip
+      - -lib/python3.12/site-packages/pip-*
+      - -lib/python3.12/site-packages/setuptools
+      - -lib/python3.12/site-packages/setuptools-*
+      - -lib/python3.12/site-packages/_distutils_hack
+      - -lib/python3.12/site-packages/distutils-precedence.pth
+      - -bin/wheel
+      - -lib/python3.12/site-packages/wheel
+      - -lib/python3.12/site-packages/wheel-*
+      - -lib/python3.12/site-packages/packaging
+      - -lib/python3.12/site-packages/packaging-*
+    override-prime: |
+      craftctl default
+      for d in usr/lib/*-linux-gnu; do
+        if [ "$d" != "usr/lib/${CRAFT_ARCH_TRIPLET_BUILD_FOR}" ]; then
+          rm -f "$d"/libcomm_datalayer*
+          rmdir --ignore-fail-on-non-empty "$d"
+        fi
+      done
 
   wrapper:
     plugin: dump

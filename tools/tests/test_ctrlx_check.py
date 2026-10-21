@@ -3,7 +3,9 @@
     python3 -m unittest discover -s tools/tests
 """
 
+import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -19,21 +21,24 @@ import ctrlx_check  # noqa: E402
 NAME = "ctrlx-acme-template"
 
 
-def codes(app_dir, *extra):
+def codes(app_dir, *extra, level="errors"):
+    """Codes of the errors (or level="items": of all findings incl. warnings)."""
     rep, ctx = ctrlx_check.Report(), {}
     if ctrlx_check.check_snapcraft(app_dir, rep, ctx, "--release" in extra) is not None:
         ctrlx_check.check_sources(app_dir, rep, ctx)
         ctrlx_check.check_manifest(app_dir, rep, ctx, ctrlx_check.DEFAULT_SCHEMAS)
         ctrlx_check.check_fossinfo(app_dir, rep, ctx, ctrlx_check.DEFAULT_SCHEMAS, "--release" in extra)
         ctrlx_check.check_validation_files(app_dir, rep, ctx, ctrlx_check.DEFAULT_SCHEMAS, "--release" in extra)
-    return {i["code"] for i in rep.errors}
+    return {i["code"] for i in getattr(rep, level)}
 
 
 class CheckerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.app = os.path.join(self.tmp, "app")
-        shutil.copytree(TEMPLATE, self.app, ignore=shutil.ignore_patterns(".dev", "__pycache__"))
+        # without the snapcraft build output of the template (thousands of files after a build)
+        shutil.copytree(TEMPLATE, self.app, ignore=shutil.ignore_patterns(
+            ".dev", "__pycache__", "parts", "stage", "prime", "overlay", ".venv", "*.snap"))
 
     def tearDown(self):
         shutil.rmtree(self.tmp)
@@ -60,7 +65,9 @@ class CheckerTest(unittest.TestCase):
         self.assertIn("VAL-SLOTPLUG", found)  # also not described in validation/
 
     def test_numeric_version(self):
-        self.edit("snap/snapcraft.yaml", "version: 0.1.0", "version: 1.0")
+        with open(os.path.join(self.app, "snap", "snapcraft.yaml"), encoding="utf-8") as f:
+            current = re.search(r"(?m)^version: .*$", f.read()).group(0)  # whatever the template is at
+        self.edit("snap/snapcraft.yaml", current, "version: 1.0")
         self.assertIn("SNAP-VERSION", codes(self.app))
 
     def test_bad_binding_syntax(self):
@@ -69,9 +76,34 @@ class CheckerTest(unittest.TestCase):
 
     def test_menu_without_items(self):
         self.edit("configs/package-assets/%s.package-manifest.json" % NAME,
-                  '"target": "_blank",\n        "permissions": [\n          "ctrlx-acme-template.web.all.rw"\n        ],\n        "items": []',
-                  '"target": "_blank",\n        "permissions": [\n          "ctrlx-acme-template.web.all.rw"\n        ]')
+                  '"ctrlx-acme-template.web.all.rw"\n        ],\n        "items": []',
+                  '"ctrlx-acme-template.web.all.rw"\n        ]')
         self.assertIn("MANIFEST-SCHEMA", codes(self.app))
+
+    def add_settings_entry(self, **fields):
+        path = os.path.join(self.app, "configs", "package-assets", NAME + ".package-manifest.json")
+        with open(path, encoding="utf-8") as f:
+            man = json.load(f)
+        entry = {"id": NAME + "-settings", "title": "T", "link": "/%s/#settings" % NAME, "items": []}
+        entry.update(fields)
+        man["menus"]["settings"] = [entry]
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(man, f, indent=2)
+
+    def test_settings_tile_with_target(self):
+        # ctrlX OS 4.6: the Settings page shows such a tile without a link
+        self.add_settings_entry(category="0_apps", target="_blank")
+        self.assertIn("MENU-SETTINGS", codes(self.app))
+
+    def test_settings_tile_without_category(self):
+        # ctrlX OS 4.6: shown under "core.settings.categories.undefined"
+        self.add_settings_entry()
+        self.assertNotIn("MENU-SETTINGS", codes(self.app))  # a warning: the tile still works
+        self.assertIn("MENU-SETTINGS", codes(self.app, level="items"))
+
+    def test_settings_tile_ok(self):
+        self.add_settings_entry(category="0_apps")
+        self.assertNotIn("MENU-SETTINGS", codes(self.app, level="items"))
 
     def test_crlf_wrapper(self):
         self.edit("wrapper/run.sh", "\n", "\r\n")
@@ -97,6 +129,12 @@ class CheckerTest(unittest.TestCase):
         self.assertIn("MANIFEST-ID", codes(self.app))
 
     def test_release_mode_fossinfo_todo(self):
+        foss = os.path.join(self.app, "configs", "package-assets", NAME + ".fossinfo.json")
+        with open(foss, encoding="utf-8") as f:
+            doc = json.load(f)
+        doc["components"][0]["version"] = "TODO-set-from-build"  # state before foss_from_prime.py
+        with open(foss, "w", encoding="utf-8") as f:
+            json.dump(doc, f)
         self.assertIn("FOSS-TODO", codes(self.app, "--release"))
 
     def test_hardcoded_solutions_path(self):
