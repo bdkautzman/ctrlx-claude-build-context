@@ -211,3 +211,21 @@ App `ctrlx-core-monitor` (Data Layer remote connections), 2026-10-21:
     full build 16.7 min (was ~20), nothing changed 3.0 min, UI change 4.6 min (was 12.8),
     Python change 13.3 min (was ~20). A Python rebuild is still dominated by venv + pip (~5 min) and
     re-staging thousands of files (~4 min). Snap content is identical to the old layout.
+
+Packaging, 2026-10-22:
+
+48. **`.app` packages (one file for all architectures)** = uncompressed **tar** with
+    `public/snaps/<arch>/release/<snap>_<version>.snap` (+ `<snap>_<version>.signature` for signed
+    apps); the architecture is in the path, not in the snap file name (SDK `scripts/app-signing-tool.sh`,
+    upstream `appsigning-oem.md`). An **unsigned** `.app` (only the amd64 snap, no `.signature`) was
+    accepted by `POST /package-manager/api/v1/packages` on the COREvirtual 4.6 with "unknown sources"
+    allowed and updated the app. Two architectures in one file: verified, #49.
+49. **One unsigned two-architecture `.app` installs on amd64 and arm64** (verified 2026-10-22,
+    ctrlx-core-monitor 0.1.2, `tools/make-app.sh`, 17.5 MB): the same file went through
+    `tools/ctrlx.py install --service` on the COREvirtual (update 0.1.2 → 0.1.2, new revision, 35 s)
+    and the real CORE (update 0.1.1 → 0.1.2, 1 min 40 s). Each device installed the snap of its own
+    architecture: the installed `/var/lib/snapd/snaps/<snap>_x<N>.snap` has the sha256 of the amd64
+    resp. arm64 member, `uname -m` x86_64 / aarch64, the app's API worked on both. The package manager
+    extracts the matching snap and installs it (`snap changes`: `Install "<snap>" snap from file
+    "upload<random>.snap"`; a plain `.snap` upload shows `"upload.snap"`). The whole file is uploaded,
+    so a `.app` costs both snaps' upload time.

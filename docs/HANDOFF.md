@@ -59,9 +59,12 @@ Verified in a cloud sandbox (no snapcraft, no device available there):
 - `ctrlx-core-monitor` 0.1.1 (2026-10-22): monitors other cores via Data Layer remote connections;
   verified amd64 (COREvirtual) and arm64 (real CORE), targets ctrlX OS 4.6 and 3.6.
   Brought back into the template (0.1.3): settings rules `items`/`pattern`/`secret`, read-only-first
-  write errors; docs: `datalayer-python.md` (client, remote connections), gotchas #39–#47.
+  write errors; docs: `datalayer-python.md` (client, remote connections), gotchas #39–#48.
+- `.app` packaging (2026-10-22): on-demand `tools/make-app.sh` (amd64 + arm64 snaps → one unsigned
+  `.app`, optional OEM signing via the SDK), skill `package-app`; `tools/ctrlx.py install` takes `.app`
+  files. One `.app` of ctrlx-core-monitor 0.1.2 installed and ran on COREvirtual and real CORE (gotchas #49).
 
-Findings: `docs/ctrlx/gotchas.md` #21–#47. Devices: `devices.toml` (git-ignored).
+Findings: `docs/ctrlx/gotchas.md` #21–#49. Devices: `devices.toml` (git-ignored).
 
 ## Delivery notes
 - The Claude Code config arrived as `_claude/` on Windows (the transfer tool can't write `.claude`).

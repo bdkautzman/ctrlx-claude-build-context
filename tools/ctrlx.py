@@ -20,10 +20,11 @@ Commands:
                                               eval "$(../../tools/ctrlx.py --device virtual env)"
     ctrlx.py packages                         list installed apps
     ctrlx.py state [SERVICE|SETUP|OPERATING]  show / set the device operating state
-    ctrlx.py install <file.snap> [--allow-unknown] [--service]
+    ctrlx.py install <file.snap|file.app> [--allow-unknown] [--service]
                                               upload + install/update, wait for the task
                                               (--service: switch to SERVICE state and back;
-                                              refuses a snap built for another architecture)
+                                              refuses a snap built for another architecture and
+                                              a .app without the device's architecture)
     ctrlx.py dl-read <path>                   read a Data Layer node (REST)
     ctrlx.py dl-browse <path>                 list child nodes
     ctrlx.py dl-write <path> <json-value> --type float64
@@ -41,10 +42,12 @@ import argparse
 import http.client
 import json
 import os
+import re
 import shlex
 import shutil
 import ssl
 import sys
+import tarfile
 import time
 import urllib.error
 import urllib.parse
@@ -114,6 +117,23 @@ def snap_arch(snap_file):
     """'arm64' for name_1.0.0_arm64.snap ('' if the name has no architecture)."""
     base = os.path.basename(snap_file)
     return base[:-5].rsplit("_", 1)[-1] if base.endswith(".snap") and base.count("_") >= 2 else ""
+
+
+APP_SNAP = re.compile(r"(?:\./)?public/snaps/([^/]+)/release/[^/]+\.snap$")
+
+
+def app_archs(app_file):
+    """Architectures in a .app package: an uncompressed tar with public/snaps/<arch>/release/<snap>_<ver>.snap
+    (tools/make-app.sh, SDK scripts/app-signing-tool.sh)."""
+    try:
+        with tarfile.open(app_file, "r:") as tar:
+            names = tar.getnames()
+    except (tarfile.TarError, OSError) as exc:
+        raise SystemExit("{} is not a .app package (uncompressed tar): {}".format(app_file, exc))
+    archs = sorted({m.group(1) for m in map(APP_SNAP.match, names) if m})
+    if not archs:
+        raise SystemExit("{} has no public/snaps/<arch>/release/*.snap - not a .app package".format(app_file))
+    return archs
 
 
 class Device:
@@ -225,11 +245,24 @@ def cmd_state(dev, args):
     print(_get_state(dev))
 
 
-def cmd_install(dev, args):
-    arch, want = snap_arch(args.snap), args.target["arch"]
+def check_arch(package, target):
+    """Refuse a package that has nothing for the device's architecture (devices.toml `arch`)."""
+    want, base = target["arch"], os.path.basename(package)
+    if package.endswith(".app"):
+        archs = app_archs(package)
+        print("{} contains {}".format(base, ", ".join(archs)))
+        if want and want not in archs:
+            raise SystemExit("{} contains only {}, but device '{}' is {} - package both architectures with "
+                             "tools/make-app.sh".format(base, ", ".join(archs), target["name"], want))
+        return
+    arch = snap_arch(package)
     if arch and want and arch != want:
         raise SystemExit("{} is built for {}, but device '{}' is {} - build with ./build-snap-{}.sh".format(
-            os.path.basename(args.snap), arch, args.target["name"], want, want))
+            base, arch, target["name"], want, want))
+
+
+def cmd_install(dev, args):
+    check_arch(args.snap, args.target)
     # ctrlX OS 4.6 rejects installs outside SERVICE with HTTP 409 "system must be in state 'SERVICE'"
     previous = _get_state(dev)
     if previous not in (None, "SERVICE"):
@@ -400,7 +433,7 @@ def main():
     p.add_argument("state", nargs="?", choices=["SERVICE", "SETUP", "OPERATING", "service", "setup", "operating"])
     p.set_defaults(fn=cmd_state)
     p = sub.add_parser("install")
-    p.add_argument("snap")
+    p.add_argument("snap", metavar="file", help="<snap>_<ver>_<arch>.snap or <snap>_<ver>.app (tools/make-app.sh)")
     p.add_argument("--allow-unknown", action="store_true")
     p.add_argument("--service", action="store_true",
                    help="switch the device to SERVICE for the install, then back to its previous state")

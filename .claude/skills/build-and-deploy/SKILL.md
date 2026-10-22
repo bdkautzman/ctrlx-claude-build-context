@@ -25,3 +25,5 @@ Read `docs/ctrlx/build-deploy-test.md` (and `docs/ctrlx/gotchas.md` when anythin
    `tools/ctrlx.py dl-read <snap>/status/heartbeat` twice (increasing), `tools/ctrlx.py appdata <snap>/settings.json`,
    `tools/ctrlx.py logs --snap <snap> --limit 30` (no errors), `tools/ctrlx.py ssh 'snap services <snap>'`. Then ask the user to click through the UI
    (sidebar entry, settings save, permissions) - list exactly what to check (build-deploy-test.md §4).
+7. Optional, only when the user asks for one file for both architectures (`.app`): the package-app skill
+   (`tools/make-app.sh <app>`). Normal builds and tests stay with the `.snap` files.

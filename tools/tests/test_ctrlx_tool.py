@@ -1,7 +1,10 @@
 """Self-test of tools/ctrlx.py device selection (no device needed):  python3 -m unittest discover -s tools/tests"""
 
+import contextlib
+import io
 import os
 import sys
+import tarfile
 import tempfile
 import unittest
 
@@ -67,6 +70,69 @@ class ResolveTargetTest(unittest.TestCase):
         self.assertEqual(ctrlx.snap_arch("x/ctrlx-acme-app_1.2.3_arm64.snap"), "arm64")
         self.assertEqual(ctrlx.snap_arch("ctrlx-acme-app_1.2.3_amd64.snap"), "amd64")
         self.assertEqual(ctrlx.snap_arch("odd.snap"), "")
+
+
+def write_app(path, archs, mode="w"):
+    """.app as written by tools/make-app.sh: tar with public/snaps/<arch>/release/<snap>_<ver>.snap"""
+    with tempfile.TemporaryDirectory() as tmp:
+        for arch in archs:
+            d = os.path.join(tmp, "public", "snaps", arch, "release")
+            os.makedirs(d)
+            with open(os.path.join(d, "ctrlx-acme-app_1.2.3.snap"), "wb") as f:
+                f.write(b"snap")
+        with tarfile.open(path, mode) as tar:
+            tar.add(os.path.join(tmp, "public"), "public")
+
+
+class PackageArchTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.app = os.path.join(self.tmp.name, "ctrlx-acme-app_1.2.3.app")
+
+    def target(self, name):
+        return ctrlx.resolve_target(DEVICES, {}, device=name)
+
+    def check_arch(self, package, device):
+        with contextlib.redirect_stdout(io.StringIO()):
+            ctrlx.check_arch(package, self.target(device))
+
+    def test_app_archs(self):
+        write_app(self.app, ["arm64", "amd64"])
+        self.assertEqual(ctrlx.app_archs(self.app), ["amd64", "arm64"])
+
+    def test_app_with_both_archs_fits_every_device(self):
+        write_app(self.app, ["amd64", "arm64"])
+        self.check_arch(self.app, "virtual")
+        self.check_arch(self.app, "core")
+
+    def test_app_without_device_arch_is_refused(self):
+        write_app(self.app, ["amd64"])
+        self.check_arch(self.app, "virtual")
+        with self.assertRaises(SystemExit) as ctx:
+            self.check_arch(self.app, "core")
+        self.assertIn("contains only amd64, but device 'core' is arm64", str(ctx.exception))
+
+    def test_not_an_app(self):
+        with open(self.app, "wb") as f:
+            f.write(b"no tar")
+        with self.assertRaises(SystemExit):
+            ctrlx.app_archs(self.app)
+        write_app(self.app, ["amd64"], mode="w:gz")  # compressed: the device expects a plain tar
+        with self.assertRaises(SystemExit):
+            ctrlx.app_archs(self.app)
+        with tarfile.open(self.app, "w") as tar:  # tar without snaps
+            tar.add(__file__, "readme.txt")
+        with self.assertRaises(SystemExit) as ctx:
+            ctrlx.app_archs(self.app)
+        self.assertIn("not a .app package", str(ctx.exception))
+
+    def test_snap_arch_check(self):
+        snap = os.path.join(self.tmp.name, "ctrlx-acme-app_1.2.3_arm64.snap")
+        self.check_arch(snap, "core")
+        with self.assertRaises(SystemExit) as ctx:
+            self.check_arch(snap, "virtual")
+        self.assertIn("build with ./build-snap-amd64.sh", str(ctx.exception))
 
 
 class DeviceRequestTest(unittest.TestCase):

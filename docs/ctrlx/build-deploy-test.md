@@ -50,6 +50,14 @@ build in that folder; force it with `--clean` for handed-over/release builds and
 SDK or the `ctrlx-datalayer` .deb. In an App Build Environment without hardware acceleration a full
 build takes ~20 min (gotchas #47).
 
+Optional, on demand (hand-over, "one file for both architectures"): package both snaps of the
+current version into one `.app` - not part of the normal build:
+```bash
+../../tools/make-app.sh .           # <name>_<ver>_{amd64,arm64}.snap -> <name>_<ver>.app (unsigned)
+../../tools/make-app.sh . --build   # first build missing/outdated architectures (--clean, run in the background)
+```
+Details: `release-and-validation.md` → "`.app` packages".
+
 ## 3. Deploy to ctrlX COREvirtual
 
 ctrlX WORKS → create/start a COREvirtual (port forwarding), log in once in the browser
@@ -64,6 +72,7 @@ pick another with `--device core` or `CTRLX_DEVICE=core`.
 ../../tools/ctrlx.py devices                                    # list (no passwords)
 ../../tools/ctrlx.py install <name>_<ver>_amd64.snap --service   # SERVICE -> install -> back
 ../../tools/ctrlx.py --device core install <name>_<ver>_arm64.snap --service   # real CORE (arm64)
+../../tools/ctrlx.py --device core install <name>_<ver>.app --service   # .app: same file on every device
 ../../tools/ctrlx.py ssh 'sudo snap logs -n 50 <name>'           # SSH with the devices.toml login
 ../../tools/ctrlx.py packages                                   # name, version, health
 ../../tools/ctrlx.py dl-read <name>/status/heartbeat

@@ -14,7 +14,7 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 ## Layout
 - `apps/<snap-name>/` – the apps (create with `python3 tools/new_app.py ...`, never by hand-copying)
 - `templates/python-webapp/` – reference implementation; keep it working, don't put app code in it
-- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
+- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
 - `docs/ctrlx/` – curated rules; start at `docs/ctrlx/README.md`; `upstream-sdk-4.6.0/` = verbatim SDK docs
 - `reference/` – read-only: Data Layer API source, SDK samples, REST specs, example apps (see `reference/README.md`)
 
@@ -53,6 +53,7 @@ cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  
 cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh; incremental, --clean for hand-over builds
 tools/ctrlx.py devices                         # test devices from devices.toml: virtual (amd64), core (arm64)
 tools/ctrlx.py [--device core] install apps/<app>/<snap>_<ver>_<arch>.snap --service   # --service: ask first
+tools/make-app.sh apps/<app> [--build] [--sign <oem-cert> <key>]   # optional, on request: one .app for amd64 + arm64
 tools/ctrlx.py [--device core] dl-read <snap>/status/heartbeat | appdata <snap>/settings.json | logs --snap <snap> | state
 tools/ctrlx.py [--device core] ssh 'sudo snap logs -n 50 <snap>'
 python3 -m unittest discover -s tools/tests    # self-test of the checker
