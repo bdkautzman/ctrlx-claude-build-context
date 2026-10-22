@@ -50,24 +50,29 @@ validation description, and justify it. Never add a plug just to make an error g
 ```yaml
 parts:
   app:
-    plugin: python               # core24: builds a venv into the snap from pyproject.toml
-    source: .
+    plugin: python               # core24: builds a venv into the snap from src/pyproject.toml
+    source: src                  # ONLY the Python package: other changes don't rebuild the venv
+    python-packages: []          # no pip/setuptools/wheel upgrade in the venv (~2 min per rebuild)
     stage-packages: [ctrlx-datalayer]   # native libcomm_datalayer; apt repo from the SDK
     prime: [...]                 # + override-prime: keep only the target arch's libcomm_datalayer.so*
                                  #   (full list in templates/python-webapp/snap/snapcraft.yaml)
-  wrapper:  {plugin: dump, source: ./wrapper,  organize: {run.sh: bin/run.sh}}
-  configs:  {plugin: dump, source: ./configs,  organize: {'package-assets/*': package-assets/${CRAFT_PROJECT_NAME}/}}
-  www:      {plugin: dump, source: ./www,      organize: {'*': www/}}
-  defaults: {plugin: dump, source: ./defaults, organize: {'*': defaults/}}
+  files:                         # everything else in ONE part (each part costs 30-60 s per step)
+    plugin: dump
+    source: .
+    organize: {wrapper/run.sh: bin/run.sh, 'configs/package-assets/*': package-assets/${CRAFT_PROJECT_NAME}/}
+    stage: [bin/run.sh, package-assets, www, defaults]
 lint:
   ignore:
     - library: [usr/lib/aarch64-linux-gnu/libcomm_datalayer.so.*, usr/lib/x86_64-linux-gnu/libcomm_datalayer.so.*]
 ```
 
+* Layout: Python package in `src/` (`src/pyproject.toml` + `src/app/`), everything else at the app
+  root. Builds are incremental (`tools/build-snap.sh`), so a UI change must not touch the Python
+  part's source - checks: `PART-PY-SOURCE`, gotchas #47.
 * Keep the template's `prime:` filter: without it the `ctrlx-datalayer` .deb adds ~100 MB
   (both architectures' libs, a static lib, headers, tools) - gotchas #32. If you add a
   stage-package, check `du -h --max-depth=3 prime/usr` after the build.
-* Every Python sub-package must be listed in `pyproject.toml` `[tool.setuptools] packages`
+* Every Python sub-package must be listed in `src/pyproject.toml` `[tool.setuptools] packages`
   (check: `PY-PACKAGES`), otherwise it is silently missing in the snap.
 * Pure-Python wheels only, if possible. Packages with C extensions must have manylinux
   wheels for **aarch64 and cp312** or the arm64 build fails/needs native build deps.

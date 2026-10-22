@@ -33,16 +33,22 @@ python3 -m unittest discover -s tests -t .        # unit tests (fake Data Layer)
 For the last one install the Python deps in a venv (`python3 -m venv .venv && . .venv/bin/activate
 && pip install ctrlx-datalayer'<=3.6' ctrlx-fbs`) – the native lib comes from the .deb.
 
-## 2. Check and build (minutes)
+## 2. Check and build
 
 ```bash
 ../../tools/check.sh .              # tests + ctrlX static checks; must be clean
-./build-snap-amd64.sh               # COREvirtual  -> <name>_<ver>_amd64.snap
+./build-snap-amd64.sh               # COREvirtual  -> <name>_<ver>_amd64.snap  (incremental)
 ./build-snap-arm64.sh               # CORE X3/X5/X7 -> <name>_<ver>_arm64.snap (cross build)
+./build-snap-amd64.sh --clean       # full clean build: builds you hand over / release
 python3 ../../tools/ctrlx_check.py . --snap <name>_<ver>_amd64.snap   # inspect the built snap
 python3 ../../tools/foss_from_prime.py . --write   # sync fossinfo versions with prime/
 ```
 Cross-build warnings "Unable to determine library dependencies" are expected (SDK quick start).
+Builds are **incremental by default** (`tools/build-snap.sh`): only parts whose sources changed are
+rebuilt. A full clean build runs automatically when the target architecture changed since the last
+build in that folder; force it with `--clean` for handed-over/release builds and after updating the
+SDK or the `ctrlx-datalayer` .deb. In an App Build Environment without hardware acceleration a full
+build takes ~20 min (gotchas #47).
 
 ## 3. Deploy to ctrlX COREvirtual
 

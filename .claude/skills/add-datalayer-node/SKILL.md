@@ -7,7 +7,7 @@ description: Add or change a ctrlX Data Layer node provided by an app (address, 
 
 Read `docs/ctrlx/datalayer-python.md` first.
 
-1. Define it in `app/datalayer_nodes.py::build_node_specs()`:
+1. Define it in `src/app/datalayer_nodes.py::build_node_specs()`:
    `NodeSpec("<group>/<name>", "<bool8|int64|uint64|float64|string>", initial, writable=..., minimum=..., maximum=...,
    max_length=..., description="...", unit="...", on_write=callback)`. Address: lowercase, `-` between words,
    below the app root (= snap name).

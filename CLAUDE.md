@@ -14,7 +14,7 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 ## Layout
 - `apps/<snap-name>/` – the apps (create with `python3 tools/new_app.py ...`, never by hand-copying)
 - `templates/python-webapp/` – reference implementation; keep it working, don't put app code in it
-- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
+- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
 - `docs/ctrlx/` – curated rules; start at `docs/ctrlx/README.md`; `upstream-sdk-4.6.0/` = verbatim SDK docs
 - `reference/` – read-only: Data Layer API source, SDK samples, REST specs, example apps (see `reference/README.md`)
 
@@ -22,7 +22,8 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 1. `tools/check.sh apps/<app>` → `RESULT: OK` (unit tests + 0 errors). Fix warnings or explain them.
 2. New behaviour has a unit test (`tests/`, runs without ctrlX; fake Data Layer in `tests/fakes/`).
 3. If you learned something non-obvious (build error, device behaviour): append it to `docs/ctrlx/gotchas.md`.
-4. Snap builds (`./build-snap-amd64.sh`) when snapcraft is available; say so if you could not build.
+4. Snap builds (`./build-snap-amd64.sh`, incremental) when snapcraft is available; say so if you could not build.
+   Builds you hand over are full builds (`--clean`).
 
 ## Hard rules
 - **Interfaces**: never add a plug/slot or open a port without asking. Check
@@ -33,13 +34,13 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 - **Web**: Unix socket only (`$SNAP_DATA/package-run/<snap>/web.sock`); all data endpoints under `/<snap>/api/` (restricted
   in the manifest) with `auth.require()`; static files hold no data; relative URLs; no CDNs.
 - **Settings**: only through `SettingsStore` (validated, atomic, app data). Structure in `defaults/settings.json`,
-  limits in `app/settings_rules.py`. Backward compatible forever (old configurations get loaded).
+  limits in `src/app/settings_rules.py`. Backward compatible forever (old configurations get loaded).
 - **Flash**: no log files, no cyclic disk writes (also not on Data Layer writes). Log to stdout via `logging`.
 - **Data Layer**: look up signatures in `reference/ctrlxdatalayer-api-3.6.0/` – never guess. Callbacks call `cb` exactly once.
-  Nodes are declared in `app/datalayer_nodes.py::build_node_specs`.
+  Nodes are declared in `src/app/datalayer_nodes.py::build_node_specs`.
 - **Secrets**: no credentials in snap code (`ipc://` needs none). Device credentials only in the git-ignored
   `devices.toml` (template `devices.example.toml`) or env vars for tools - never in committed files.
-- **Versions**: bump `version` (snapcraft.yaml + pyproject.toml) and CHANGELOG for every build you hand over.
+- **Versions**: bump `version` (snap/snapcraft.yaml + src/pyproject.toml) and CHANGELOG for every build you hand over.
 - **Files**: LF line endings, `wrapper/run.sh` executable. Don't edit `reference/` or `docs/ctrlx/upstream-*`.
 - Don't run `snap install`/`snapcraft` with sudo tricks, don't touch other snaps, don't change device settings
   (e.g. `--allow-unknown`) unless the human asked.
@@ -49,7 +50,7 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 python3 tools/new_app.py --name ctrlx-<company>-<app> --title "<Title>" --author "<Company>" --url <url>
 tools/check.sh apps/<app> [--release] [--pre-build] [--snap file.snap]
 cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  (no ctrlX needed)
-cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh
+cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh; incremental, --clean for hand-over builds
 tools/ctrlx.py devices                         # test devices from devices.toml: virtual (amd64), core (arm64)
 tools/ctrlx.py [--device core] install apps/<app>/<snap>_<ver>_<arch>.snap --service   # --service: ask first
 tools/ctrlx.py [--device core] dl-read <snap>/status/heartbeat | appdata <snap>/settings.json | logs --snap <snap> | state

@@ -79,9 +79,9 @@ python3 -m unittest discover -s tests -t .     # tests, any PC (fake Data Layer 
 
 | Path | What |
 |---|---|
-| `app/monitor.py` | remote naming/address, reconcile of `devices/remotes/cm-*`, polling, status |
-| `app/datalayer_service.py` | provider glue + `ClientAdapter` (read / create remote / remove) |
-| `app/settings_rules.py` | rules incl. the `cores` item rules (`items`, `pattern`, `secret`) |
-| `app/web_server.py` | routes incl. `/cores` |
+| `src/app/monitor.py` | remote naming/address, reconcile of `devices/remotes/cm-*`, polling, status |
+| `src/app/datalayer_service.py` | provider glue + `ClientAdapter` (read / create remote / remove) |
+| `src/app/settings_rules.py` | rules incl. the `cores` item rules (`items`, `pattern`, `secret`) |
+| `src/app/web_server.py` | routes incl. `/cores` |
 | `www/` | UI: core tiles, + dialog, generic settings form |
 | `tests/test_monitor.py` | monitor logic against a fake Data Layer client |

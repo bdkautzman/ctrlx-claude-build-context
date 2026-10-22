@@ -115,9 +115,15 @@ class CheckerTest(unittest.TestCase):
         self.assertIn("SRC-EXEC-BIT", codes(self.app))
 
     def test_unlisted_python_package(self):
-        os.makedirs(os.path.join(self.app, "app", "extra"))
-        open(os.path.join(self.app, "app", "extra", "__init__.py"), "w").close()
+        os.makedirs(os.path.join(self.app, "src", "app", "extra"))
+        open(os.path.join(self.app, "src", "app", "extra", "__init__.py"), "w").close()
         self.assertIn("PY-PACKAGES", codes(self.app))
+
+    def test_python_part_with_project_root_source(self):
+        # source "." rebuilds the venv on every change of the app folder (gotchas #47) - a warning
+        self.edit("snap/snapcraft.yaml", "    source: src\n", "    source: .\n")
+        self.assertIn("PART-PY-SOURCE", codes(self.app, level="items"))
+        self.assertNotIn("PART-PY-SOURCE", codes(self.app))
 
     def test_missing_datalayer_plug(self):
         self.edit("snap/snapcraft.yaml", "      - datalayer\n", "")
@@ -138,7 +144,7 @@ class CheckerTest(unittest.TestCase):
         self.assertIn("FOSS-TODO", codes(self.app, "--release"))
 
     def test_hardcoded_solutions_path(self):
-        self.edit("app/config.py", 'SOLUTIONS_DIR = os.path.join(SNAP_COMMON, "solutions")',
+        self.edit("src/app/config.py", 'SOLUTIONS_DIR = os.path.join(SNAP_COMMON, "solutions")',
                   'SOLUTIONS_DIR = "/var/snap/rexroth-solutions/common/solutions"')
         self.assertIn("SRC-SOLUTIONS-PATH", codes(self.app))
 

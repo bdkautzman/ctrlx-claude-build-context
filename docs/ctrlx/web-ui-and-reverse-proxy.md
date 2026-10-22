@@ -1,6 +1,6 @@
 # Web UI behind the ctrlX reverse proxy
 
-Implementation: `templates/python-webapp/app/web_server.py`, `app/auth.py`, `www/`.
+Implementation: `templates/python-webapp/src/app/web_server.py`, `src/app/auth.py`, `www/`.
 
 ## Request path
 

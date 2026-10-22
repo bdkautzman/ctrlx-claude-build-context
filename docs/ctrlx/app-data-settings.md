@@ -1,14 +1,14 @@
 # Settings in ctrlX app data (Solutions)
 
-Upstream spec: `upstream-sdk-4.6.0/persistdata.md`. Implementation: `app/settings_store.py`,
-`app/appdata_commands.py`, `app/settings_rules.py`, `defaults/settings.json`.
+Upstream spec: `upstream-sdk-4.6.0/persistdata.md`. Implementation: `src/app/settings_store.py`,
+`src/app/appdata_commands.py`, `src/app/settings_rules.py`, `defaults/settings.json`.
 
 ## Model
 
 | What | Where |
 |---|---|
 | defaults (structure + types) | `defaults/settings.json` → `$SNAP/defaults/settings.json` |
-| value rules (enum/min/max/labels/help/hidden) | `app/settings_rules.py` (`RULES`, dotted paths) |
+| value rules (enum/min/max/labels/help/hidden) | `src/app/settings_rules.py` (`RULES`, dotted paths) |
 | active settings | `$SNAP_COMMON/solutions/activeConfiguration/<name>/settings.json` |
 | archived configurations | managed by the Solutions app - never touch |
 
@@ -52,7 +52,7 @@ POST body `{"configurationPath": "...", "id": "282xy5", "phase": "..."}`, token 
 ## Adding a setting (checklist)
 
 1. Add key + default value (with the right JSON type: `1.0` for float, `1` for int) to `defaults/settings.json`.
-2. If it has limits/choices/label/help: add an entry in `app/settings_rules.py`.
+2. If it has limits/choices/label/help: add an entry in `src/app/settings_rules.py`.
 3. Apply it in a listener (`main.py` / `DataLayerService.on_settings_changed`).
 4. Incompatible change (rename, meaning change)? Bump `settingsVersion` and migrate old files
    in `SettingsStore.load_from_disk` before validation. Never break older files: configurations

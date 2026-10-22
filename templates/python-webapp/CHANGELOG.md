@@ -3,6 +3,14 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## 0.1.4
+
+- Layout: the Python package moved to `src/` (`src/pyproject.toml`, `src/app/`); the snap part
+  `app` builds only that folder, so UI/config changes no longer rebuild the venv.
+- The four dump parts (wrapper, configs, www, defaults) are one part `files` (same snap layout).
+- `python-packages: []`: the venv's pip/setuptools/wheel are no longer upgraded during the build.
+- Build scripts call `tools/build-snap.sh`: incremental by default, `--clean` for full builds.
+
 ## 0.1.3
 
 - Settings rules: `items` (arrays of objects), `maxItems`, `unique`, `pattern` and `secret`

@@ -20,11 +20,12 @@ was decided and what is still open. Rules for daily work are in `CLAUDE.md`.
 | Web server = Python stdlib `http.server` on a Unix socket | no extra FOSS deps; socket-only is the App Guide recommendation |
 | API under `/<snap>/api` listed as `restricted`; JWT scopes read without signature check | the reverse proxy validates tokens on restricted paths |
 | Token passed via menu link `?token=${bearertoken}`, stored in sessionStorage | documented ctrlX pattern (SDK webserver sample) |
-| Settings: `defaults/settings.json` (structure/types) + `app/settings_rules.py` (limits) | one generic validator + auto-generated settings form for every app |
+| Settings: `defaults/settings.json` (structure/types) + `src/app/settings_rules.py` (limits) | one generic validator + auto-generated settings form for every app |
 | `copyOnLoad: true`, `writeProtected: false`, file watched by mtime | users can also edit settings.json in "Manage app data" |
 | Data Layer writes are runtime-only, never persisted | PLCs may write cyclically → flash wear |
 | Logging to stdout with `<N>` syslog prefixes | journald levels without bundling cysystemd |
 | Menu target `_blank` (not `embedded`) | Bosch recommends `_blank` for 3rd-party UIs |
+| Python package in `src/`, one `files` dump part, incremental builds (2026-10-22, template 0.1.4) | the build VM runs emulated (TCG): full builds take ~20 min, every snapcraft part costs 30-60 s per step; only Python changes should rebuild the venv (gotchas #47) |
 | No CI workflow (2026-10-21) | build locally for now (amd64 + arm64 in the build VM); the untested GitHub Actions template was removed |
 | No ctrlX licensing (2026-10-21) | unofficial, unlicensed apps for now; licensing snippet and docs removed |
 | No `menus.settings` entry (2026-10-21) | the ctrlX Settings page can't open `_blank` tiles; settings live in the app UI |
@@ -58,9 +59,9 @@ Verified in a cloud sandbox (no snapcraft, no device available there):
 - `ctrlx-core-monitor` 0.1.1 (2026-10-22): monitors other cores via Data Layer remote connections;
   verified amd64 (COREvirtual) and arm64 (real CORE), targets ctrlX OS 4.6 and 3.6.
   Brought back into the template (0.1.3): settings rules `items`/`pattern`/`secret`, read-only-first
-  write errors; docs: `datalayer-python.md` (client, remote connections), gotchas #39–#46.
+  write errors; docs: `datalayer-python.md` (client, remote connections), gotchas #39–#47.
 
-Findings: `docs/ctrlx/gotchas.md` #21–#46. Devices: `devices.toml` (git-ignored).
+Findings: `docs/ctrlx/gotchas.md` #21–#47. Devices: `devices.toml` (git-ignored).
 
 ## Delivery notes
 - The Claude Code config arrived as `_claude/` on Windows (the transfer tool can't write `.claude`).

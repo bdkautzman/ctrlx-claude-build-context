@@ -14,4 +14,5 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export APP_DEV_NO_AUTH=1
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"   # the package is in src/
 exec python3 -m app.main

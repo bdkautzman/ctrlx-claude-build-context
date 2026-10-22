@@ -84,7 +84,7 @@ def main():
 
     # a new app starts at 0.1.0, whatever version the template itself is at
     for rel, pattern, rep in (("snap/snapcraft.yaml", r"(?m)^version: .*$", "version: 0.1.0"),
-                              ("pyproject.toml", r'(?m)^version = ".*"$', 'version = "0.1.0"')):
+                              ("src/pyproject.toml", r'(?m)^version = ".*"$', 'version = "0.1.0"')):
         p = os.path.join(dest, rel)
         with open(p, "r", encoding="utf-8", newline="") as f:
             text = f.read()
@@ -98,7 +98,7 @@ def main():
     print("Created", dest)
     print("Running checks ...")
     rc = subprocess.call([os.path.join(HERE, "check.sh"), dest])
-    print("\nNext: edit defaults/settings.json, app/settings_rules.py, app/datalayer_nodes.py, www/;\n"
+    print("\nNext: edit defaults/settings.json, src/app/settings_rules.py, src/app/datalayer_nodes.py, www/;\n"
           "then ./run-local.sh, ../../tools/check.sh ., ./build-snap-amd64.sh")
     return rc
 

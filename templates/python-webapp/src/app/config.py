@@ -29,8 +29,8 @@ SCOPE_ADMIN = "rexroth-device.all.rwx"  # built-in ctrlX admin scope: always ful
 # Environment
 # ---------------------------------------------------------------------------
 IN_SNAP = "SNAP" in os.environ
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(_HERE)
+_HERE = os.path.dirname(os.path.abspath(__file__))              # <project>/src/app
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(_HERE))         # <project>
 
 if IN_SNAP:
     SNAP_DIR = os.environ["SNAP"]                  # read-only squashfs

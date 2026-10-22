@@ -2,6 +2,12 @@
 
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 
+## 0.1.2
+
+- Template 0.1.4 layout: Python package in `src/`, one `files` part, incremental builds
+  and `python-packages: []` (same snap content and behaviour). Builds: UI change 4.6 min
+  instead of 12.8, Python change 13.3 instead of ~20, full 16.7 instead of ~20.
+
 ## 0.1.1
 
 - ctrlX OS version also for ctrlX OS 3.6 devices (no `system/info/ctrlxOsVersion` there: taken

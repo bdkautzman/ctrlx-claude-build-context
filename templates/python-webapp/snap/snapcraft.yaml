@@ -12,7 +12,7 @@
 
 name: ctrlx-acme-template
 title: Template App
-version: 0.1.3
+version: 0.1.4
 summary: ctrlX OS app template with web UI, Data Layer nodes and app-data settings
 description: |
   <!--
@@ -52,7 +52,11 @@ apps:
 parts:
   app:
     plugin: python
-    source: .
+    # only the Python package: changes elsewhere (UI, configs, ...) do not rebuild the venv
+    source: src
+    # don't upgrade pip/setuptools/wheel in the venv (default ["pip", "setuptools", "wheel"]): saves
+    # ~2 min per Python rebuild in the App Build Environment, and they are primed out anyway
+    python-packages: []
     stage-packages:
       - ctrlx-datalayer
     # The ctrlx-datalayer .deb ships build tools, headers, a static lib and the shared libs of BOTH
@@ -86,29 +90,19 @@ parts:
         fi
       done
 
-  wrapper:
+  # Everything that is not Python in ONE dump part - in the App Build Environment every part costs
+  # 30-60 s per step (gotchas #47). Resulting layout: bin/run.sh, package-assets/<snap>/, www/, defaults/
+  files:
     plugin: dump
-    source: ./wrapper
+    source: .
     organize:
-      run.sh: bin/run.sh
-
-  configs:
-    plugin: dump
-    source: ./configs
-    organize:
-      'package-assets/*': package-assets/${CRAFT_PROJECT_NAME}/
-
-  www:
-    plugin: dump
-    source: ./www
-    organize:
-      '*': www/
-
-  defaults:
-    plugin: dump
-    source: ./defaults
-    organize:
-      '*': defaults/
+      wrapper/run.sh: bin/run.sh
+      'configs/package-assets/*': package-assets/${CRAFT_PROJECT_NAME}/
+    stage:
+      - bin/run.sh
+      - package-assets
+      - www
+      - defaults
 
 slots:
   package-assets:

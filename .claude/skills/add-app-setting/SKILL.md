@@ -9,7 +9,7 @@ Read `docs/ctrlx/app-data-settings.md` first.
 
 1. `defaults/settings.json`: add the key with a default of the right JSON type (`1.0` float, `1` int,
    `true`, `"text"`, nested objects for groups). This defines structure and type.
-2. `app/settings_rules.py`: `"group.key": {"label": "...", "help": "...", "enum": [...] | "min"/"max" | "minLength"/"maxLength", "hidden": bool}`.
+2. `src/app/settings_rules.py`: `"group.key": {"label": "...", "help": "...", "enum": [...] | "min"/"max" | "minLength"/"maxLength", "hidden": bool}`.
 3. Apply it: in a listener (`store.add_listener(fn)` in `main.py` or `DataLayerService.on_settings_changed`)
    - never re-read the file elsewhere. Settings changes must be cheap and safe at runtime.
 4. Compatibility: old `settings.json` files without the key still load (defaults fill it). Renames or

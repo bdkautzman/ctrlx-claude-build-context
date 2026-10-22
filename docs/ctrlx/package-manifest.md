@@ -22,7 +22,7 @@ Template: `templates/python-webapp/configs/package-assets/ctrlx-acme-template.pa
 ```
 Scope id pattern `<id>.<service>.<scope_name>.<access>` with access `r|w|rw|x`. The admin scope
 `rexroth-device.all.rwx` must always grant full access. The app **must enforce** scopes itself
-(`app/auth.py`). Don't copy scope ids from samples (`rexroth-python-webserver.web…` appears in
+(`src/app/auth.py`). Don't copy scope ids from samples (`rexroth-python-webserver.web…` appears in
 real apps that were copied from the SDK sample - check `MANIFEST-SCOPES`).
 
 ### `services.proxyMapping` (reverse proxy)

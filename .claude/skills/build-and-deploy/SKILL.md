@@ -10,8 +10,10 @@ Read `docs/ctrlx/build-deploy-test.md` (and `docs/ctrlx/gotchas.md` when anythin
 
 1. `tools/check.sh <app> --pre-build` → must be OK (also checks the apt repo for `ctrlx-datalayer` and snapcraft).
    If ENV-* errors: explain the one-time setup steps to the user; don't try to install system packages without asking.
-2. Bump the version if this build will be handed over (snapcraft.yaml + pyproject.toml + CHANGELOG).
-3. `cd <app> && ./build-snap-amd64.sh` (COREvirtual) and/or `./build-snap-arm64.sh` (hardware).
+2. Bump the version if this build will be handed over (snap/snapcraft.yaml + src/pyproject.toml + CHANGELOG).
+3. `cd <app> && ./build-snap-amd64.sh` (COREvirtual) and/or `./build-snap-arm64.sh` (hardware). Incremental by default;
+   add `--clean` when this build is handed over (step 2) or after an SDK / ctrlx-datalayer update. Run builds in the
+   background: a full build takes ~20 min in the App Build Environment (no hardware acceleration).
    On failure: read the full snapcraft output, fix the cause, record new knowledge in `docs/ctrlx/gotchas.md`.
 4. `python3 tools/ctrlx_check.py <app> --snap <file>.snap` and `python3 tools/foss_from_prime.py <app> --write`.
 5. Deploy only if the user agreed. Devices come from `devices.toml` (`tools/ctrlx.py devices`): `virtual`

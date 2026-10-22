@@ -193,3 +193,21 @@ App `ctrlx-core-monitor` (Data Layer remote connections), 2026-10-21:
     install task** of an app *update* (the app itself was installed fine) → the reverse proxy
     reloads during the update and drops the connection; only `URLError` was handled. Fixed: such
     errors become a clean error and the task polling retries.
+47. **Snap builds take ~20 min in the App Build Environment** → the VM runs as QEMU **TCG** (software
+    emulation, CPU "QEMU TCG CPU"; `systemd-detect-virt` = qemu, not kvm): pure-Python work is
+    ~30-50x slower (10 M loop 26 s, `python3 -m venv` 96 s). Hardware acceleration was disabled on
+    purpose (problems running Claude Code inside the VM with it). More RAM/cores barely help:
+    snapcraft runs single-threaded (one core at ~100 %, 2.8 GB of 3.9 GB free).
+    Measured with ctrlx-core-monitor (amd64): full build 19 min (clean 1 min, venv + pip ~8 min,
+    30-60 s of snapcraft overhead per step for each of the 4 tiny dump parts, xz ~1 min);
+    incremental build after touching only `www/style.css`: 12.8 min; incremental after editing
+    files that most parts depend on: 21.9 min (slower than clean: re-running a step first cleans
+    its old output). Why incremental helps so little: the `app` part's `source: .` is the whole
+    app folder, so ANY change rebuilds the Python venv. Fast inner loop: `run-local.sh` against the
+    device's Data Layer (seconds, see build-deploy-test.md §1); build snaps to integrate/hand over.
+    **Fix (template 0.1.4, measured 2026-10-22 with ctrlx-core-monitor 0.1.2, amd64):** Python package
+    in `src/` (part `app`: `source: src`), one dump part `files` instead of four, `python-packages: []`
+    (no pip/setuptools/wheel upgrade in the venv, ~2 min), incremental `tools/build-snap.sh`:
+    full build 16.7 min (was ~20), nothing changed 3.0 min, UI change 4.6 min (was 12.8),
+    Python change 13.3 min (was ~20). A Python rebuild is still dominated by venv + pip (~5 min) and
+    re-staging thousands of files (~4 min). Snap content is identical to the old layout.

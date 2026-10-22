@@ -298,9 +298,13 @@ def check_snapcraft(app_dir, rep, ctx, release):
         reads = [str(p) for p in as_list((pa["attrs"].get("source") or {}).get("read"))]
         if not any(re.fullmatch(r"\$SNAP/package-assets/\$\{(CRAFT|SNAPCRAFT)_PROJECT_NAME\}", p) for p in reads):
             rep.error("IFACE-PACKAGE-ASSETS", "slot package-assets source.read must be $SNAP/package-assets/${CRAFT_PROJECT_NAME}", where)
-    if "'package-assets/*': package-assets/${" not in raw.replace('"', "'") and \
-            "package-assets/*: package-assets/${" not in raw:
-        rep.warn("PART-CONFIGS", "no dump part organizing 'package-assets/*' -> package-assets/${CRAFT_PROJECT_NAME}/ found", where)
+    def organizes_assets(part):
+        org = (part or {}).get("organize") or {}
+        return any(re.fullmatch(r"(.+/)?package-assets/\*", str(k)) and
+                   re.match(r"package-assets/\$\{(CRAFT|SNAPCRAFT)_PROJECT_NAME\}/?$", str(v)) for k, v in org.items())
+    if not any(organizes_assets(p) for p in (snap.get("parts") or {}).values()):
+        rep.warn("PART-CONFIGS", "no dump part organizing '[configs/]package-assets/*' -> "
+                 "package-assets/${CRAFT_PROJECT_NAME}/ found", where)
 
     ctx["has_plug"] = lambda n, content=None: (("plugs", n) in interfaces and
                                                (content is None or interfaces[("plugs", n)]["attrs"].get("content") == content))
@@ -311,6 +315,11 @@ def check_snapcraft(app_dir, rep, ctx, release):
     parts = snap.get("parts") or {}
     ctx["stage_packages"] = [p for part in parts.values() for p in as_list((part or {}).get("stage-packages"))]
     ctx["python_part"] = any((part or {}).get("plugin") == "python" for part in parts.values())
+    for pname, part in parts.items():
+        if (part or {}).get("plugin") == "python" and str(part.get("source", ".")).rstrip("/") in (".", ""):
+            rep.warn("PART-PY-SOURCE", "python part '{}' has source '.': every change in the app folder rebuilds the "
+                     "venv (~8 min in the App Build Environment). Put pyproject.toml + app/ into src/ and use "
+                     "'source: src' (docs/ctrlx/gotchas.md #47)".format(pname), where)
     return snap
 
 
@@ -650,16 +659,17 @@ def check_sources(app_dir, rep, ctx):
             rep.error("PART-DATALAYER", "code imports ctrlxdatalayer but stage-packages lacks 'ctrlx-datalayer' "
                       "(native libcomm_datalayer)", "snap/snapcraft.yaml")
 
-    # pyproject consistency
-    pp = os.path.join(app_dir, "pyproject.toml")
+    # pyproject consistency (layout: src/pyproject.toml + src/app/; older apps: in the app root)
+    py_root = os.path.join(app_dir, "src") if os.path.isfile(os.path.join(app_dir, "src", "pyproject.toml")) else app_dir
+    pp = os.path.join(py_root, "pyproject.toml")
     if os.path.isfile(pp):
         txt = read_text(pp)
         m = re.search(r'^name\s*=\s*"([^"]+)"', txt, re.M)
         if m and name and m.group(1) != name:
-            rep.warn("PY-NAME", "pyproject name '{}' differs from snap name '{}'".format(m.group(1), name), "pyproject.toml")
+            rep.warn("PY-NAME", "pyproject name '{}' differs from snap name '{}'".format(m.group(1), name), rel(pp, app_dir))
         m = re.search(r'^version\s*=\s*"([^"]+)"', txt, re.M)
         if m and ctx.get("version") and m.group(1) != ctx["version"]:
-            rep.warn("PY-VERSION", "pyproject version {} != snap version {}".format(m.group(1), ctx["version"]), "pyproject.toml")
+            rep.warn("PY-VERSION", "pyproject version {} != snap version {}".format(m.group(1), ctx["version"]), rel(pp, app_dir))
         deps_block = re.search(r"dependencies\s*=\s*\[(.*?)\]", txt, re.S)
         if deps_block:
             ctx["py_deps"] = [re.split(r"[<>=!~;\[ ]", d.strip().strip('"').strip("'"))[0]
@@ -667,11 +677,11 @@ def check_sources(app_dir, rep, ctx):
         pk = re.search(r"packages\s*=\s*\[(.*?)\]", txt, re.S)
         if pk:
             declared = set(re.findall(r"[\"']([^\"']+)[\"']", pk.group(1)))
-            for init in glob.glob(os.path.join(app_dir, "app", "**", "__init__.py"), recursive=True):
-                pkg = os.path.relpath(os.path.dirname(init), app_dir).replace(os.sep, ".")
+            for init in glob.glob(os.path.join(py_root, "app", "**", "__init__.py"), recursive=True):
+                pkg = os.path.relpath(os.path.dirname(init), py_root).replace(os.sep, ".")
                 if pkg not in declared:
                     rep.error("PY-PACKAGES", "package '{}' is not listed in pyproject [tool.setuptools] packages - "
-                              "it will be missing in the snap".format(pkg), "pyproject.toml")
+                              "it will be missing in the snap".format(pkg), rel(pp, app_dir))
 
     # wrapper / shell scripts: exec bit + LF line endings (Windows checkouts break both)
     for cmd in ctx.get("commands", []):

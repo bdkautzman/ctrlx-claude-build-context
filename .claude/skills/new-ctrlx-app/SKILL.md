@@ -15,14 +15,14 @@ Goal from the user: $ARGUMENTS
 2. Create it: `python3 tools/new_app.py --name ... --title "..." --author "..." --url ...` → `apps/<name>/`.
    It must end with `RESULT: OK`.
 3. Read `docs/ctrlx/README.md`, then implement in this order, running `tools/check.sh apps/<name>` after each step:
-   1. `defaults/settings.json` + `app/settings_rules.py` (see skill `add-app-setting`)
-   2. `app/datalayer_nodes.py::build_node_specs` (see skill `add-datalayer-node`); replace the example nodes
-   3. business logic in a new module under `app/` (add it to `pyproject.toml` packages if it is a sub-package),
-      wired from `app/main.py`; settings changes via `store.add_listener`
+   1. `defaults/settings.json` + `src/app/settings_rules.py` (see skill `add-app-setting`)
+   2. `src/app/datalayer_nodes.py::build_node_specs` (see skill `add-datalayer-node`); replace the example nodes
+   3. business logic in a new module under `src/app/` (add it to `src/pyproject.toml` packages if it is a sub-package),
+      wired from `src/app/main.py`; settings changes via `store.add_listener`
    4. `www/` UI (keep the token handling in `app.js`; relative URLs; no CDN)
    5. manifest: titles, icons, menu texts, scope names/descriptions
    6. `README.md` of the app, `CHANGELOG.md`
-4. New Python dependencies: prefer the standard library. Each dependency → `pyproject.toml` + `fossinfo.json`;
+4. New Python dependencies: prefer the standard library. Each dependency → `src/pyproject.toml` + `fossinfo.json`;
    C-extension packages need aarch64/cp312 wheels. Ask before adding.
 5. New plugs/slots/ports: **stop and ask** (docs/ctrlx/reserved-interfaces-and-ports.md).
 6. Finish: unit tests for the new logic, `tools/check.sh apps/<name>` clean, `./run-local.sh` smoke test

@@ -6,7 +6,7 @@ validation artifacts below are mandatory (`upstream-sdk-4.6.0/appdevguide.md` §
 
 ## Release checklist (`tools/check.sh <app> --release` automates the marked items)
 
-- [x] `version` increased (semver), CHANGELOG entry, `pyproject.toml` version equal
+- [x] `version` increased (semver), CHANGELOG entry, `src/pyproject.toml` version equal
 - [x] `grade: stable`, `confinement: strict`, `base: core24`, restart-delay ≥ 5s
 - [x] description with `<!-- author/url -->`
 - [x] fossinfo complete, no TODO (run `tools/foss_from_prime.py --write` after the build)

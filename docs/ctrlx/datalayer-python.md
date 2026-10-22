@@ -7,11 +7,11 @@ do not guess signatures.** SDK samples: `reference/sdk-4.6.0-samples-python/data
 
 ## Template structure
 
-* `app/datalayer_nodes.py` – **edit here**: `build_node_specs()` returns `NodeSpec`s
+* `src/app/datalayer_nodes.py` – **edit here**: `build_node_specs()` returns `NodeSpec`s
   (`name`, `vtype` ∈ bool8/int64/uint64/float64/string, `initial`, `writable`, `minimum`,
   `maximum`, `max_length`, `description`, `unit`, `on_write`). `NodeRegistry` holds values,
   validates writes. Pure Python → unit-testable.
-* `app/datalayer_service.py` – glue to `ctrlxdatalayer` (lazy import), provider lifecycle,
+* `src/app/datalayer_service.py` – glue to `ctrlxdatalayer` (lazy import), provider lifecycle,
   automatic reconnect every 5 s, heartbeat. Rarely needs changes.
 * `tests/fakes/ctrlxdatalayer` – minimal fake used by `tests/test_datalayer_glue.py`.
 
