@@ -10,7 +10,8 @@ into and loaded from ctrlX configurations ("Manage app data", backup/restore of 
 Rules implemented here (see docs/ctrlx/app-data-settings.md):
   * Structure and types come from the defaults file. Missing keys are filled from the
     defaults, unknown keys are kept (forward compatibility), wrong types are rejected.
-  * Value rules (enum/min/max/...) come from app/settings_rules.py.
+  * Value rules (enum/min/max/pattern/...) come from app/settings_rules.py, including arrays
+    of objects (`items`) and `secret` values that are masked for the UI and the Data Layer.
   * Writes are atomic (write *.tmp, fsync, rename) and only happen on a real change
     (user action, Solutions save). Never write cyclically: flash wear.
   * The file may be edited externally (writeProtected=false: WebDAV, "Manage app data"),
@@ -24,6 +25,7 @@ import json
 import logging
 import math
 import os
+import re
 import threading
 import time
 
@@ -33,6 +35,8 @@ LOAD_OPERATION_TIMEOUT_S = 600
 # After "query" Solutions sends nothing (no abort) if another participant refuses the load, so the
 # pause started there must expire soon; "prepare" follows within seconds when the load goes ahead.
 LOAD_QUERY_TIMEOUT_S = 60
+# Shown instead of `secret` values; sent back unchanged by the UI = keep the stored value.
+SECRET_MASK = "********"
 
 
 class SettingsError(Exception):
@@ -135,24 +139,113 @@ def get_path(obj, dotted):
     return obj
 
 
+def set_path(obj, dotted, value):
+    parts = dotted.split(".")
+    for part in parts[:-1]:
+        obj = obj[part]
+    obj[parts[-1]] = value
+
+
+def _check_value(value, rule, where, errors):
+    if "enum" in rule and value not in rule["enum"]:
+        errors.append("{}: must be one of {}".format(where, rule["enum"]))
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if "min" in rule and value < rule["min"]:
+            errors.append("{}: must be >= {}".format(where, rule["min"]))
+        if "max" in rule and value > rule["max"]:
+            errors.append("{}: must be <= {}".format(where, rule["max"]))
+    if isinstance(value, str):
+        if "minLength" in rule and len(value) < rule["minLength"]:
+            errors.append("{}: must have at least {} characters".format(where, rule["minLength"]))
+        if "maxLength" in rule and len(value) > rule["maxLength"]:
+            errors.append("{}: must have at most {} characters".format(where, rule["maxLength"]))
+        if "pattern" in rule and not re.fullmatch(rule["pattern"], value):
+            errors.append("{}: invalid format".format(where))
+    if isinstance(value, list) and "maxItems" in rule and len(value) > rule["maxItems"]:
+        errors.append("{}: at most {} entries".format(where, rule["maxItems"]))
+
+
+def _normalize_items(value, rule, where, errors):
+    """Normalize every element of an array of objects against rule["items"]."""
+    template, item_rules = rule["items"].get("template", {}), rule["items"].get("rules", {})
+    result, seen, unique = [], set(), rule.get("unique")
+    for i, item in enumerate(value):
+        item_where = "{}[{}]".format(where, i)
+        item = _normalize(item, template, item_where, errors)
+        for key, item_rule in item_rules.items():
+            if key in item:
+                _check_value(item[key], item_rule, item_where + "." + key, errors)
+        if unique and isinstance(item, dict):
+            key = item.get(unique)
+            if key in seen:
+                errors.append("{}.{}: duplicate value {!r}".format(item_where, unique, key))
+            seen.add(key)
+        result.append(item)
+    return result
+
+
 def _apply_rules(settings, rules, errors):
     for dotted, rule in rules.items():
         try:
             value = get_path(settings, dotted)
         except KeyError:
             continue
-        if "enum" in rule and value not in rule["enum"]:
-            errors.append("{}: must be one of {}".format(dotted, rule["enum"]))
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            if "min" in rule and value < rule["min"]:
-                errors.append("{}: must be >= {}".format(dotted, rule["min"]))
-            if "max" in rule and value > rule["max"]:
-                errors.append("{}: must be <= {}".format(dotted, rule["max"]))
-        if isinstance(value, str):
-            if "minLength" in rule and len(value) < rule["minLength"]:
-                errors.append("{}: must have at least {} characters".format(dotted, rule["minLength"]))
-            if "maxLength" in rule and len(value) > rule["maxLength"]:
-                errors.append("{}: must have at most {} characters".format(dotted, rule["maxLength"]))
+        _check_value(value, rule, dotted, errors)
+        if "items" in rule and isinstance(value, list):
+            set_path(settings, dotted, _normalize_items(value, rule, dotted, errors))
+
+
+def _secret_fields(rule):
+    return [k for k, r in rule.get("items", {}).get("rules", {}).items() if r.get("secret")]
+
+
+def redact(settings, rules):
+    """Copy of settings with every `secret` value replaced by SECRET_MASK (empty stays empty)."""
+    result = copy.deepcopy(settings)
+    for dotted, rule in rules.items():
+        try:
+            value = get_path(result, dotted)
+        except KeyError:
+            continue
+        if rule.get("secret") and value:
+            set_path(result, dotted, SECRET_MASK)
+        for field in _secret_fields(rule) if isinstance(value, list) else []:
+            for item in value:
+                if isinstance(item, dict) and item.get(field):
+                    item[field] = SECRET_MASK
+    return result
+
+
+def restore_secrets(candidate, current, rules):
+    """Replace SECRET_MASK in candidate by the stored value (array elements are matched by
+    rule["unique"]). A mask without a stored value becomes "" so validation rejects it."""
+    if not isinstance(candidate, dict):
+        return candidate
+    result = copy.deepcopy(candidate)
+    for dotted, rule in rules.items():
+        try:
+            value = get_path(result, dotted)
+        except KeyError:
+            continue
+        if rule.get("secret") and value == SECRET_MASK:
+            try:
+                set_path(result, dotted, get_path(current, dotted))
+            except KeyError:
+                set_path(result, dotted, "")
+        fields, unique = _secret_fields(rule), rule.get("unique")
+        if not fields or not isinstance(value, list):
+            continue
+        try:
+            stored = {i.get(unique): i for i in get_path(current, dotted) if isinstance(i, dict)} if unique else {}
+        except KeyError:
+            stored = {}
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            for field in fields:
+                if item.get(field) == SECRET_MASK:
+                    item[field] = stored.get(item.get(unique), {}).get(field, "")
+    return result
 
 
 def validate(candidate, defaults, rules):
@@ -194,6 +287,10 @@ class SettingsStore:
         with self._lock:
             return copy.deepcopy(self._current)
 
+    def get_redacted(self):
+        """Settings for the outside world (web API, Data Layer): `secret` values masked."""
+        return redact(self.get(), self._rules)
+
     def defaults(self):
         return copy.deepcopy(self._defaults)
 
@@ -220,7 +317,9 @@ class SettingsStore:
 
     # -- changes -----------------------------------------------------------
     def update(self, candidate):
-        """Validate, persist and apply new settings. Raises SettingsError."""
+        """Validate, persist and apply new settings. Raises SettingsError.
+        Masked `secret` values in candidate keep their stored value."""
+        candidate = restore_secrets(candidate, self.get(), self._rules)
         normalized, errors = validate(candidate, self._defaults, self._rules)
         if errors:
             raise SettingsError(errors)

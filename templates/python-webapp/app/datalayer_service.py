@@ -205,6 +205,8 @@ class _ProviderNode:
     def _on_write(self, userdata, address, data, cb):
         from ctrlxdatalayer.variant import Result
         try:
+            if not self.spec.writable:  # report read-only before a type mismatch
+                raise NodeWriteError("readonly", self.spec.name + " is read-only")
             value = self.registry.write(self.spec.name, self._from_variant(data))
             with self._to_variant(value) as variant:
                 cb(Result.OK, variant)

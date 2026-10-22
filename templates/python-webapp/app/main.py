@@ -66,8 +66,9 @@ def main():
     logsetup.set_level(settings["general"]["logLevel"])
     store.add_listener(lambda s: logsetup.set_level(s["general"]["logLevel"]))
 
-    datalayer = DataLayerService(settings, config.app_version())
-    store.add_listener(datalayer.on_settings_changed)
+    # the Data Layer node settings/active gets redacted settings (`secret` rules masked)
+    datalayer = DataLayerService(store.get_redacted(), config.app_version())
+    store.add_listener(lambda _s: datalayer.on_settings_changed(store.get_redacted()))
     datalayer.start()
 
     web = WebServer(store, datalayer)

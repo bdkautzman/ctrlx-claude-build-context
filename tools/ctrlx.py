@@ -38,6 +38,7 @@ device version, fix it here and note it in docs/ctrlx/gotchas.md.
 """
 
 import argparse
+import http.client
 import json
 import os
 import shlex
@@ -155,6 +156,9 @@ class Device:
             raise SystemExit("HTTP {} {} {}\n{}".format(exc.code, method, path, detail[:2000]))
         except urllib.error.URLError as exc:
             raise SystemExit("Cannot reach {}: {} (CTRLX_HOST correct? COREvirtual running?)".format(url, exc.reason))
+        except (http.client.HTTPException, ConnectionError, TimeoutError) as exc:
+            # e.g. RemoteDisconnected while the reverse proxy reloads during an app install
+            raise SystemExit("Connection to {} lost: {}".format(url, exc or type(exc).__name__))
 
     def token(self):
         if self._token is None:
@@ -266,7 +270,12 @@ def _install(dev, args):
     task_path = loc if loc.startswith("/package-manager") else "/package-manager/api/v1" + (loc if loc.startswith("/") else "/" + loc)
     last = None
     for _ in range(600):
-        _, _, task = dev.request("GET", task_path)
+        try:
+            _, _, task = dev.request("GET", task_path)
+        except SystemExit as exc:  # the proxy reloads while the app is installed: retry
+            print("  (retrying: {})".format(str(exc).splitlines()[0][:120]))
+            time.sleep(2)
+            continue
         state = task.get("state")
         line = "{} {}%".format(state, task.get("progress", ""))
         if line != last:

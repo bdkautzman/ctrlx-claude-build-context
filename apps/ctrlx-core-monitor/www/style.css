@@ -1,0 +1,119 @@
+/* Neutral styling close to the ctrlX OS look. No external fonts/CDNs: the device may be offline. */
+:root {
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --text: #1f2328;
+  --muted: #6a737d;
+  --line: #e1e4e8;
+  --accent: #007bc0;
+  --accent-ink: #ffffff;
+  --ok: #00884a;
+  --warn: #c76b00;
+  --err: #c8102e;
+  --radius: 6px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+h1 { font-size: 18px; margin: 0; font-weight: 600; }
+h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+.muted { color: var(--muted); }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand-mark { width: 10px; height: 18px; background: var(--accent); border-radius: 2px; align-self: center; }
+
+.pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); white-space: nowrap; }
+.pill-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, white); }
+.pill-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, white); }
+.pill-unknown { color: var(--muted); }
+
+.banner { margin: 12px 20px 0; padding: 10px 14px; border-radius: var(--radius);
+  background: #fff4f4; border: 1px solid #f3c2c9; color: var(--err); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 16px 20px 32px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
+.card-wide { grid-column: 1 / -1; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+table.values { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.values th, .values td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.values th { font-weight: 500; color: var(--muted); font-size: 12px; }
+.values th:nth-child(2) { width: 70px; }
+.values th:nth-child(4) { width: 64px; }
+.values td.addr { font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.values td.val { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.values input { width: 100%; }
+
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px 20px; }
+fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px 12px; margin: 0; grid-column: 1 / -1; }
+fieldset > .fields { margin-top: 4px; }
+legend { font-weight: 600; padding: 0 6px; }
+.field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.field .help { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.field.invalid input, .field.invalid select { border-color: var(--err); }
+
+input[type=text], input[type=number], select {
+  width: 100%; padding: 6px 8px; border: 1px solid #c9ced4; border-radius: 4px; font: inherit; background: #fff; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 50%, white); outline-offset: 1px; }
+input:disabled, select:disabled { background: #f6f8fa; color: var(--muted); }
+.checkbox { display: flex; align-items: center; gap: 8px; padding-top: 18px; }
+
+.actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.btn { padding: 6px 14px; border-radius: 4px; border: 1px solid #c9ced4; background: #fff; font: inherit; cursor: pointer; }
+.btn:hover { background: #f6f8fa; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, black); }
+.btn-ghost { border-color: transparent; color: var(--muted); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn-small { padding: 3px 8px; font-size: 12px; }
+
+.error { color: var(--err); }
+.error-list { color: var(--err); margin: 12px 0 0; padding-left: 18px; }
+
+/* ---- cores ------------------------------------------------------------- */
+.small { font-size: 12px; }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin: 4px 0 8px; }
+.tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: var(--card);
+        display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tile-connected { border-left: 4px solid var(--ok); }
+.tile-error, .tile-offline { border-left: 4px solid var(--warn); }
+.tile-connecting { border-left: 4px solid var(--line); }
+.tile-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.tile-head h3 { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.tile .kv { font-size: 13px; }
+.tile .actions { margin-top: 0; justify-content: flex-end; }
+.meter-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.meter-head .num { font-variant-numeric: tabular-nums; color: var(--text); }
+.meter-track { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--line) 70%, white); overflow: hidden; }
+.meter-bar { height: 100%; background: var(--accent); transition: width .4s; }
+.meter-high { background: var(--err); }
+
+/* ---- add dialog -------------------------------------------------------- */
+dialog { border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; width: min(520px, calc(100vw - 40px)); }
+dialog::backdrop { background: rgb(0 0 0 / .35); }
+.fields-dialog { grid-template-columns: 1fr 1fr; }
+.fields-dialog .field input:not([type=checkbox]) { width: 100%; box-sizing: border-box; }
+/* the checkbox label sits next to its box (".field label" would make it a block) */
+.field label.checkbox { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); margin: 0; }
+input[type=password] { padding: 6px 8px; border: 1px solid #c9ced4; border-radius: 4px; font: inherit; }
+.field.invalid input[type=password] { border-color: var(--err); }
+@media (max-width: 520px) { .fields-dialog { grid-template-columns: 1fr; } }
+
+/* ---- info tooltips: <span class="info" tabindex="0" data-tip="..."> ------------------- */
+.info { display: inline-flex; align-items: center; justify-content: center; position: relative;
+        width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted);
+        font: italic 600 10px/1 Georgia, serif; cursor: help; vertical-align: middle; margin-left: 4px; }
+.info::before { content: "i"; }
+.info:hover, .info:focus { color: var(--accent); border-color: var(--accent); outline: none; }
+.info::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
+               width: max-content; max-width: 260px; padding: 6px 8px; border-radius: 4px; background: #1f2328; color: #fff;
+               font: 400 12px/1.35 system-ui, sans-serif; text-align: left; white-space: normal;
+               opacity: 0; visibility: hidden; transition: opacity .12s; z-index: 10; pointer-events: none; }
+.info:hover::after, .info:focus::after { opacity: 1; visibility: visible; }

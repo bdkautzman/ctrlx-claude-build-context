@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 # keep in sync with snap/snapcraft.yaml (name, version) - tools/check.sh verifies the name
 name = "ctrlx-acme-template"
-version = "0.1.2"
+version = "0.1.3"
 description = "ctrlX OS app template with web UI, Data Layer nodes and app-data settings"
 requires-python = ">=3.10"
 # Same pins as the ctrlX AUTOMATION SDK 4.6.0 Python samples.

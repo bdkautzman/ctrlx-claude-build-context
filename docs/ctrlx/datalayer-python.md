@@ -56,6 +56,35 @@ Client (reading other nodes) – same system, `system.factory().create_client("i
   or a JSON string node (simple, used by community apps; consumers must parse it).
 * Node names in Data Layer UI: Settings → Data Layer → `<name>/`.
 
+## Client (reading other nodes) - verified 2026-10-21, see `apps/ctrlx-core-monitor`
+
+* Same `System` as the provider: `client = system.factory().create_client("ipc://")`; close it
+  before `system.stop()`. Wrap it in a small adapter (read / create / remove that raise an
+  exception with the result name) so the app logic is testable with a fake.
+* `result, data = client.read_sync(addr)` → `with data:` → getter by type:
+  `getattr(data, "get_" + data.get_type().name.lower())()` for simple types.
+* Object nodes (`VariantType.FLATBUFFERS`): `client.read_json_sync(system.json_converter(), addr, 0)`
+  → JSON string (unwrap `{"type", "value"}` if present).
+* Creating object nodes: build the flatbuffer with the generated classes of `ctrlx-fbs`
+  (e.g. `comm.datalayer.remote.ConfigItem`) → `Variant.set_flatbuffers(builder.Output())` →
+  `client.create_sync(parent, variant)`. Types: read `types/...` via REST to see the schema.
+* No per-request timeout in the Python API (`TimeoutSetting`: IDLE, PING, Reconnect only).
+
+## Remote connections to other devices (`devices/remotes`) - verified on ctrlX OS 4.6
+
+* Create `{"name": N, "address": "tcp://<user>:<pw>@<ip>?sslport=443&NoCheckCertificate=true"}`
+  under `devices/remotes` (type `types/datalayer/remoteconfig`); the other device's whole Data
+  Layer appears at `devices/remotes/N/...` for every app on this device. Delete the node to remove it.
+* `NoCheckCertificate=true` is required for devices with self-signed certificates (else
+  `DL_SEC_UNAUTHORIZED`; gotchas #40). Reading the config back masks credentials (`tcp://***:***@`).
+* The Data Layer persists remotes itself (`hasSave: datalayer/admin/cfg/save`, part of configurations).
+* `datalayer/reverse-connections` is the opposite direction: *this* device's Data Layer appears on
+  the remote device under the given name.
+* Useful nodes on any device: `system/info/{hostname,ctrlxOsVersion,architecture,uptime}`,
+  `framework/metrics/system/{cpu-utilisation-percent,memused-percent,memused-mb,memtotal-mb}`,
+  `system/apps/installed/<snap>` (object, `release.version`). ctrlX OS 3.6 differs: no
+  `system/info/ctrlxOsVersion`, app nodes named `snap_<snap>` (gotchas #44).
+
 ## Rules
 
 * **Never persist on every Data Layer write** (a PLC may write cyclically → flash wear).

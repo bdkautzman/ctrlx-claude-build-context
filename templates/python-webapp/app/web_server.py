@@ -218,15 +218,15 @@ def _make_handler(store, datalayer):
 
             if route == "/settings" and method == "GET":
                 auth.require(self.headers, write=False)
-                return self._send_json(200, store.get())
+                return self._send_json(200, store.get_redacted())
             if route == "/settings" and method == "PUT":
                 auth.require(self.headers, write=True)
                 try:
-                    applied = store.update(self._read_json())
+                    store.update(self._read_json())
                 except SettingsError as exc:
                     return self._problem(400, "Invalid settings", errors=exc.errors)
                 log.info("Settings changed via web UI")
-                return self._send_json(200, applied)
+                return self._send_json(200, store.get_redacted())
             if route == "/settings/meta" and method == "GET":
                 auth.require(self.headers, write=False)
                 return self._send_json(200, {"defaults": store.defaults(), "rules": store.rules(),
@@ -234,7 +234,7 @@ def _make_handler(store, datalayer):
             if route == "/settings/reset" and method == "POST":
                 auth.require(self.headers, write=True)
                 store.reset_to_defaults(persist=True)
-                return self._send_json(200, store.get())
+                return self._send_json(200, store.get_redacted())
 
             if route == "/values" and method == "GET":
                 auth.require(self.headers, write=False)

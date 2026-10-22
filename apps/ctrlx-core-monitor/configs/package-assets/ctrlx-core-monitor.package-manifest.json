@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/package-manifest/package-manifest.v1.7.schema.json",
+  "version": "1.0.0",
+  "id": "ctrlx-core-monitor",
+  "scopes-declaration": [
+    {
+      "identifier": "ctrlx-core-monitor.web",
+      "name": "Core Monitor",
+      "description": "Permissions for the Core Monitor",
+      "scopes": [
+        {
+          "identifier": "ctrlx-core-monitor.web.all.r",
+          "name": "View Core Monitor",
+          "description": "View the monitored ctrlX COREs and the app settings"
+        },
+        {
+          "identifier": "ctrlx-core-monitor.web.all.rw",
+          "name": "Manage Core Monitor",
+          "description": "Add and remove core connections and change the app settings"
+        }
+      ]
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "ctrlx-core-monitor.web",
+        "url": "/ctrlx-core-monitor",
+        "binding": "unix://{$SNAP_DATA}/package-run/ctrlx-core-monitor/web.sock",
+        "restricted": [
+          "/ctrlx-core-monitor/api"
+        ]
+      }
+    ]
+  },
+  "menus": {
+    "sidebar": [
+      {
+        "id": "ctrlx-core-monitor",
+        "title": "Core Monitor",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-core-monitor/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-core-monitor.web.all.r",
+          "ctrlx-core-monitor.web.all.rw"
+        ],
+        "items": []
+      }
+    ],
+    "overview": [
+      {
+        "id": "ctrlx-core-monitor-overview",
+        "title": "Core Monitor",
+        "description": "Status and metrics of other ctrlX COREs on the network",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-core-monitor/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-core-monitor.web.all.r",
+          "ctrlx-core-monitor.web.all.rw"
+        ],
+        "items": []
+      }
+    ]
+  },
+  "commands": {
+    "activeConfiguration": {
+      "save": [
+        {
+          "id": "ctrlx-core-monitor",
+          "subject": "Core Monitor settings",
+          "url": "/ctrlx-core-monitor/api/v1/appdata/save"
+        }
+      ],
+      "load": [
+        {
+          "id": "ctrlx-core-monitor",
+          "subject": "Core Monitor settings",
+          "url": "/ctrlx-core-monitor/api/v1/appdata/load"
+        }
+      ]
+    }
+  },
+  "configuration": {
+    "appDirectories": [
+      {
+        "name": "ctrlx-core-monitor",
+        "description": "Core Monitor connections and settings",
+        "icon": "bosch-ic-components",
+        "copyOnLoad": true,
+        "writeProtected": false
+      }
+    ],
+    "appPrivateFiles": [
+      "^ctrlx-core-monitor/.*\\.tmp$"
+    ]
+  }
+}

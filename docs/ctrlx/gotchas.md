@@ -157,3 +157,39 @@ Real ctrlX CORE (arm64, ctrlX OS 4.6, rexroth-arch01-*), 2026-10-21 (template 0.
     Check: `sudo journalctl | grep "Failed to load caddy config"`. Fix: restart
     `rexroth-deviceadmin.proxy` (+ `.proxy-monitor`) or reboot - it's the user's device, ask first.
     Confirmed: after a reboot the socket was back and the app's route worked (no reinstall needed).
+
+App `ctrlx-core-monitor` (Data Layer remote connections), 2026-10-21:
+
+39. **"Shared Data Layer" between devices = Data Layer remote connection** (`devices/remotes/<name>`),
+    not `datalayer/reverse-connections` (that one publishes *this* device on the other one). Details
+    and verified nodes: `datalayer-python.md` → "Remote connections".
+40. **Remote connection never comes up, Logbook: "Data layer remote connection could not be
+    established - Connect error: DL_SEC_UNAUTHORIZED"**, although the same user/password works
+    for REST and for a direct client from a PC; the other device logs no login at all → the TLS
+    check of its self-signed certificate fails. Fix: append `NoCheckCertificate=true` to the
+    address (`...?sslport=443&NoCheckCertificate=true`). Not mentioned in the type description
+    (`types/datalayer/remoteconfig`), only in Bosch's how-to "Data exchange between controls".
+41. **A remote to the device itself (`tcp://...@127.0.0.1`) failed the same way** - tested only
+    without `NoCheckCertificate`; use a second device for tests.
+42. **Settings with credentials**: the template's generic rules now support `items` (arrays of
+    objects, validated per element), `pattern` (regex) and `secret` (masked in every API response
+    and Data Layer node; the masked value sent back by the settings form keeps the stored one).
+    Never put a default login into the rules (`SRC-CREDENTIALS` also flags a default user name).
+43. **Wrong-typed write to a read-only node answered `DL_TYPE_MISMATCH`** - the provider glue
+    checked the type first. Now read-only is reported first (`DL_PERMISSION_DENIED`).
+44. **Version info missing for a ctrlX OS 3.6 device** (read through a remote connection) → node
+    layout differs: 3.6 has no `system/info/ctrlxOsVersion` (`osVersion` = Ubuntu Core "22") and
+    names installed apps `system/apps/installed/snap_<name>` (4.6: `<name>`). Read the OS version
+    from `ctrlxOsVersion`, else from major.minor of the Device Admin version
+    (`.../snap_rexroth-deviceadmin` → `release.version`, e.g. 3.6.8). Metrics and
+    `system/info/{hostname,architecture,uptime}` exist on both.
+45. **Watching the COREvirtual from a real device on the LAN**: address the Windows host
+    (e.g. 192.168.1.211) with `sslport=8443`; ctrlX WORKS' port forwarding also passes the Data
+    Layer ports 2069/2070 unchanged, so `tcp://<user>:<pw>@<windows-ip>?sslport=8443&NoCheckCertificate=true`
+    works (verified 2026-10-22 from the real CORE). A CORE that was powered off came back with its
+    clock 14 h behind (`timedatectl`: NTP inactive, not synchronized); remote connections in both
+    directions still worked, but its Logbook timestamps are wrong - set time/NTP in Settings → Date & Time.
+46. **`tools/ctrlx.py install` crashed with `http.client.RemoteDisconnected` while polling the
+    install task** of an app *update* (the app itself was installed fine) → the reverse proxy
+    reloads during the update and drops the connection; only `URLError` was handled. Fixed: such
+    errors become a clean error and the task polling retries.

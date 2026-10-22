@@ -3,6 +3,14 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## 0.1.3
+
+- Settings rules: `items` (arrays of objects), `maxItems`, `unique`, `pattern` and `secret`
+  (masked in API responses and the Data Layer node `settings/active`; a masked value sent back
+  keeps the stored one). From apps/ctrlx-core-monitor.
+- Data Layer: a wrong-typed write to a read-only node answers `DL_PERMISSION_DENIED`
+  (was `DL_TYPE_MISMATCH`).
+
 ## 0.1.2
 
 - Web UI: clicking "Set" after editing a Data Layer value wrote the old value back (the Edit

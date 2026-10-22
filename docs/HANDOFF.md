@@ -54,7 +54,13 @@ Verified in a cloud sandbox (no snapcraft, no device available there):
 6. ✅ arm64 build (2026-10-21) on the real CORE (192.168.1.7): install, Data Layer, reverse proxy +
    token checks, settings → app data, restart and reboot all pass. A device-side reverse-proxy
    problem (gotchas #38) needed a reboot of the CORE first.
-Findings: `docs/ctrlx/gotchas.md` #21–#38. Devices: `devices.toml` (git-ignored).
+**Apps built with the kit** (each adds checks/tests/context back into the kit; list: `apps/README.md`):
+- `ctrlx-core-monitor` 0.1.1 (2026-10-22): monitors other cores via Data Layer remote connections;
+  verified amd64 (COREvirtual) and arm64 (real CORE), targets ctrlX OS 4.6 and 3.6.
+  Brought back into the template (0.1.3): settings rules `items`/`pattern`/`secret`, read-only-first
+  write errors; docs: `datalayer-python.md` (client, remote connections), gotchas #39–#46.
+
+Findings: `docs/ctrlx/gotchas.md` #21–#46. Devices: `devices.toml` (git-ignored).
 
 ## Delivery notes
 - The Claude Code config arrived as `_claude/` on Windows (the transfer tool can't write `.claude`).

@@ -9,7 +9,8 @@ from unittest import mock
 
 from app import appdata_commands
 from app.settings_rules import RULES
-from app.settings_store import LOAD_QUERY_TIMEOUT_S, SettingsError, SettingsStore, validate
+from app.settings_store import (LOAD_QUERY_TIMEOUT_S, SECRET_MASK, SettingsError, SettingsStore, redact,
+                                restore_secrets, validate)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULTS_FILE = os.path.join(HERE, "..", "defaults", "settings.json")
@@ -62,6 +63,37 @@ class ValidateTest(unittest.TestCase):
     def test_root_must_be_object(self):
         _, errors = validate([1, 2], load_defaults(), RULES)
         self.assertTrue(errors)
+
+
+class ItemsPatternSecretRulesTest(unittest.TestCase):
+    """Generic rule keys (used e.g. by apps/ctrlx-core-monitor for its list of connections)."""
+    DEFAULTS = {"token": "", "peers": []}
+    RULES = {
+        "token": {"secret": True},
+        "peers": {"maxItems": 2, "unique": "name", "items": {
+            "template": {"name": "", "port": 443, "password": ""},
+            "rules": {"name": {"pattern": r"[a-z]+"}, "port": {"min": 1, "max": 65535},
+                      "password": {"secret": True, "minLength": 1}}}},
+    }
+
+    def test_items_pattern_unique_max(self):
+        ok, errors = validate({"peers": [{"name": "a", "password": "x"}]}, self.DEFAULTS, self.RULES)
+        self.assertEqual(errors, [])
+        self.assertEqual(ok["peers"][0]["port"], 443)  # filled from the item template
+        _, errors = validate({"peers": [{"name": "A1", "password": "x", "port": 0}, {"name": "A1"}, {"name": "c"}]},
+                             self.DEFAULTS, self.RULES)
+        for expected in ("peers: at most 2 entries", "peers[0].name: invalid format", "peers[0].port: must be >= 1",
+                         "peers[1].name: duplicate value 'A1'", "peers[1].password: must have at least 1 characters"):
+            self.assertIn(expected, errors)
+
+    def test_secrets_masked_and_restored(self):
+        current = {"token": "t0p", "peers": [{"name": "a", "port": 443, "password": "pa"}]}
+        shown = redact(current, self.RULES)
+        self.assertEqual((shown["token"], shown["peers"][0]["password"]), (SECRET_MASK, SECRET_MASK))
+        back = restore_secrets(shown, current, self.RULES)
+        self.assertEqual((back["token"], back["peers"][0]["password"]), ("t0p", "pa"))
+        fresh = restore_secrets({"peers": [{"name": "new", "password": SECRET_MASK}]}, current, self.RULES)
+        self.assertEqual(fresh["peers"][0]["password"], "")  # never store the mask itself
 
 
 class StoreTest(unittest.TestCase):

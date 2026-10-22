@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/validation/portlist-description/portlist-description.v1.schema.json",
+  "$id": "https://boschrexroth.com/app-validation/portlist-description.v1.json",
+  "type": "object",
+  "title": "Port Description",
+  "description": "The app opens no TCP/UDP server ports. The web server uses a Unix socket behind the ctrlX reverse proxy.",
+  "ports": []
+}

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Core Monitor</title>
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1 id="app-title">Core Monitor</h1>
+      <span id="app-version" class="muted"></span>
+    </div>
+    <div id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="grid">
+    <section class="card card-wide" aria-labelledby="cores-h">
+      <div class="card-head">
+        <h2 id="cores-h">Cores <span id="cores-count" class="muted"></span>
+          <span class="info" tabindex="0" role="img" aria-label="About connections"
+                data-tip="Connections are ctrlX Data Layer remote connections (devices/remotes/cm-<name>) and are stored in the app data of this device."></span></h2>
+        <button type="button" id="btn-add" class="btn btn-primary" title="Add a connection to another ctrlX CORE">+ Add core</button>
+      </div>
+      <div id="cores" class="cores"><p class="muted">Loading…</p></div>
+    </section>
+
+    <section class="card" aria-labelledby="status-h">
+      <h2 id="status-h">This app</h2>
+      <dl class="kv" id="status-list">
+        <dt>Uptime</dt><dd id="st-uptime">–</dd>
+        <dt>Settings source</dt><dd id="st-source">–</dd>
+        <dt>Settings persisted</dt><dd id="st-persisted">–</dd>
+        <dt>Data Layer nodes</dt><dd id="st-nodes">–</dd>
+      </dl>
+      <p id="st-error" class="error" hidden></p>
+    </section>
+
+    <section class="card" id="settings" aria-labelledby="settings-h">
+      <div class="card-head">
+        <h2 id="settings-h">Settings</h2>
+        <span class="muted">Stored in ctrlX app data</span>
+      </div>
+      <form id="settings-form" novalidate>
+        <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
+        <ul id="settings-errors" class="error-list" hidden></ul>
+        <div class="actions">
+          <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+          <button type="button" id="btn-revert" class="btn">Revert</button>
+          <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
+          <span id="save-state" class="muted" aria-live="polite"></span>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <dialog id="add-dialog" aria-labelledby="add-h">
+    <form id="add-form" method="dialog" novalidate>
+      <h2 id="add-h">Add core</h2>
+      <div class="fields fields-dialog">
+        <div class="field"><label for="a-name">Name
+            <span class="info" tabindex="0" role="img" aria-label="Name format"
+                  data-tip="Lowercase letters, digits and '-', max. 24 characters."></span></label>
+          <input id="a-name" name="name" type="text" maxlength="24" required placeholder="e.g. line-1" autocomplete="off"></div>
+        <div class="field"><label for="a-host">IP address / host name</label>
+          <input id="a-host" name="host" type="text" required placeholder="192.168.1.7" autocomplete="off"></div>
+        <div class="field"><label for="a-user">User</label>
+          <input id="a-user" name="user" type="text" required value="boschrexroth" autocomplete="off"></div>
+        <div class="field"><label for="a-password">Password
+            <span class="info" tabindex="0" role="img" aria-label="Password storage"
+                  data-tip="The password is stored in this device's app data (settings.json) and is never shown again."></span></label>
+          <input id="a-password" name="password" type="password" required autocomplete="new-password"></div>
+        <div class="field"><label for="a-sslPort">HTTPS port</label>
+          <input id="a-sslPort" name="sslPort" type="number" min="1" max="65535" step="1" value="443"></div>
+        <div class="field"><label class="checkbox" for="a-skipCertificateCheck">
+          <input id="a-skipCertificateCheck" name="skipCertificateCheck" type="checkbox" checked>
+          Skip certificate check</label></div>
+      </div>
+      <ul id="add-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-add-ok" class="btn btn-primary" value="add">Add</button>
+        <button type="button" id="btn-add-cancel" class="btn">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

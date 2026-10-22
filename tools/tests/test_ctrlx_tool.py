@@ -69,5 +69,21 @@ class ResolveTargetTest(unittest.TestCase):
         self.assertEqual(ctrlx.snap_arch("odd.snap"), "")
 
 
+class DeviceRequestTest(unittest.TestCase):
+    def test_dropped_connection_becomes_systemexit(self):
+        # seen during an app update: the proxy reloads and closes the connection without a response
+        import http.client
+        dev = ctrlx.Device("127.0.0.1:1", "u", "p", False)
+        dev._token = "t"
+
+        class Opener:
+            def open(self, req, timeout):
+                raise http.client.RemoteDisconnected("Remote end closed connection without response")
+        dev.opener = Opener()
+        with self.assertRaises(SystemExit) as ctx:
+            dev.request("GET", "/package-manager/api/v1/tasks/x")
+        self.assertIn("Connection to", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

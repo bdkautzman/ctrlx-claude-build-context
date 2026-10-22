@@ -75,6 +75,9 @@ class GlueTest(unittest.TestCase):
         ro = Variant()
         ro.set_string("x")
         self.assertEqual(self.provider.write(self.root + "/status/state", ro)[0], Result.PERMISSION_DENIED)
+        ro_wrong_type = Variant()
+        ro_wrong_type.set_float64(1.0)  # read-only wins over the type mismatch
+        self.assertEqual(self.provider.write(self.root + "/status/state", ro_wrong_type)[0], Result.PERMISSION_DENIED)
 
     def test_heartbeat_and_reconnect(self):
         hb1 = self.svc.registry.get("status/heartbeat")
