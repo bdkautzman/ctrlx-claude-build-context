@@ -14,7 +14,7 @@ and a settings JSON in ctrlX app data.
 | `.claude/settings.json` | permissions (checks/tests allowed, device installs ask, reference read-only) + a hook that re-checks an app after edits to its snapcraft/manifest/validation files |
 | `docs/ctrlx/` | curated rules (start at `docs/ctrlx/README.md`), `gotchas.md` (grows over time), verbatim SDK 4.6.0 docs in `upstream-sdk-4.6.0/` |
 | `templates/python-webapp/` | known-good template app (web UI + Data Layer provider + app-data settings, 28 unit tests, fake Data Layer) |
-| `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/logs/ssh on a test device from `devices.toml`), `foss_from_prime.py` |
+| `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/logs/ssh on a test device from `devices.toml`), `ui_check.py` + `setup-ui-test.sh` (web UI in headless Chromium with screenshots, locally or on a device), `foss_from_prime.py` |
 | `reference/` | read-only: Python Data Layer API source 3.6.0, SDK 4.6.0 Python samples, ctrlX REST OpenAPI specs, example apps with notes |
 | `apps/` | your apps go here |
 
@@ -31,6 +31,9 @@ and a settings JSON in ctrlX app data.
    ctrlx-datalayer apt repo, `python3-yaml python3-jsonschema squashfs-tools`).
 4. Verify: `tools/check.sh templates/python-webapp --pre-build` → `RESULT: OK`
    and `python3 -m unittest discover -s tools/tests` → OK.
+   Optional, so Claude can check web UIs in a real browser and look at screenshots: `tools/setup-ui-test.sh`
+   (no root; prints one `sudo apt-get install` line for missing libraries/fonts, ~42 MB), then
+   `python3 tools/ui_check.py templates/python-webapp` → `UI CHECK: OK`.
 5. First real build: `cd templates/python-webapp && ./build-snap-amd64.sh`, install it on the
    COREvirtual (`tools/ctrlx.py install …`), click through. Whatever breaks → `docs/ctrlx/gotchas.md`.
    This one-time shakedown validates the parts of the kit that could not be tested without a device

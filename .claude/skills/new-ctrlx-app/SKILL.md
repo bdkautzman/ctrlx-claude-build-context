@@ -27,3 +27,6 @@ Goal from the user: $ARGUMENTS
 5. New plugs/slots/ports: **stop and ask** (docs/ctrlx/reserved-interfaces-and-ports.md).
 6. Finish: unit tests for the new logic, `tools/check.sh apps/<name>` clean, `./run-local.sh` smoke test
    (curl the API with APP_DEV_NO_AUTH=1), build if snapcraft is available. Report what was verified and what wasn't.
+7. UI: adapt `tests/ui_scenario.py` to the new page (click the real buttons, name the screenshots), keep the
+   `data-ui-ready` marker working (`www/index.html` + `app.js`), run `python3 tools/ui_check.py apps/<name> --narrow`
+   and look at the screenshots. If `tools/setup-ui-test.sh --check` fails, tell the user the UI was not seen.

@@ -64,6 +64,16 @@ class NodeRegistryTest(unittest.TestCase):
                 self.reg.write(name, value)
             self.assertEqual(ctx.exception.reason, reason, (name, value))
 
+    def test_on_write_can_reject(self):
+        def reject_odd(value):
+            if value % 2:
+                raise NodeWriteError("invalid", "odd")
+        reg = NodeRegistry("root", [NodeSpec("a/even", "uint64", 0, writable=True, on_write=reject_odd)])
+        self.assertEqual(reg.write("a/even", 4), 4)
+        with self.assertRaises(NodeWriteError):
+            reg.write("a/even", 5)
+        self.assertEqual(reg.get("a/even"), 4)  # a rejected value is not stored
+
     def test_template_specs_are_valid(self):
         with open(DEFAULTS_FILE, encoding="utf-8") as f:
             settings = json.load(f)

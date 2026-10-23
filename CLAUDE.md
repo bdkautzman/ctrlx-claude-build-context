@@ -9,12 +9,13 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 - base `core24`, snapcraft 8.x, ctrlX AUTOMATION SDK 4.6.0, `ctrlx-datalayer<=3.6` + `ctrlx-fbs`
 - package-manifest schema v1.7, Python 3.12 in the snap, stdlib-only web server
 - Unofficial, unlicensed apps: no ctrlX license check (`licensing-service`, manifest `licenses`)
+- Optional UI tests: Playwright 1.64.1 + its headless Chromium (`tools/setup-ui-test.sh`, in `~/.cache`)
 - Details: `docs/ctrlx/platform-baseline.md`
 
 ## Layout
 - `apps/<snap-name>/` – the apps (create with `python3 tools/new_app.py ...`, never by hand-copying)
 - `templates/python-webapp/` – reference implementation; keep it working, don't put app code in it
-- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
+- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `ui_check.py` (web UI in headless Chromium, screenshots; setup once: `setup-ui-test.sh`), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
 - `docs/ctrlx/` – curated rules; start at `docs/ctrlx/README.md`; `upstream-sdk-4.6.0/` = verbatim SDK docs
 - `reference/` – read-only: Data Layer API source, SDK samples, REST specs, example apps (see `reference/README.md`)
 
@@ -24,6 +25,8 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 3. If you learned something non-obvious (build error, device behaviour): append it to `docs/ctrlx/gotchas.md`.
 4. Snap builds (`./build-snap-amd64.sh`, incremental) when snapcraft is available; say so if you could not build.
    Builds you hand over are full builds (`--clean`).
+5. UI changed: `python3 tools/ui_check.py apps/<app>` → `UI CHECK: OK`, and **look at the screenshots** it lists;
+   keep `tests/ui_scenario.py` in step with the UI. Not set up (`tools/setup-ui-test.sh --check` fails): say so.
 
 ## Hard rules
 - **Interfaces**: never add a plug/slot or open a port without asking. Check
@@ -50,6 +53,7 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 python3 tools/new_app.py --name ctrlx-<company>-<app> --title "<Title>" --author "<Company>" --url <url>
 tools/check.sh apps/<app> [--release] [--pre-build] [--snap file.snap]
 cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  (no ctrlX needed)
+python3 tools/ui_check.py apps/<app> [--narrow] [--device [NAME]]   # headless Chromium + screenshots (~1 min)
 cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh; incremental, --clean for hand-over builds
 tools/ctrlx.py devices                         # test devices from devices.toml: virtual (amd64), core (arm64)
 tools/ctrlx.py [--device core] install apps/<app>/<snap>_<ver>_<arch>.snap --service   # --service: ask first

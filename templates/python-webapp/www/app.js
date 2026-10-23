@@ -264,6 +264,7 @@
     await refreshStatus();
     await loadSettings();
     await refreshValues();
+    document.body.dataset.uiReady = "true";  // for tools/ui_check.py (screenshots wait for it)
     if (location.hash === "#settings") $("settings").scrollIntoView();
     setInterval(refreshStatus, 5000);
     setInterval(refreshValues, 2000);

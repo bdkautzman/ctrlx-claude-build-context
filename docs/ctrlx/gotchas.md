@@ -229,3 +229,42 @@ Packaging, 2026-10-22:
     extracts the matching snap and installs it (`snap changes`: `Install "<snap>" snap from file
     "upload<random>.snap"`; a plain `.snap` upload shows `"upload.snap"`). The whole file is uploaded,
     so a `.app` costs both snaps' upload time.
+
+App `ctrlx-amr-fleet` (AMR positions as a JSON string node, map view), 2026-10-22:
+
+50. **A Data Layer write that the app rejected in `on_write` still changed the node value** (a read
+    returned the invalid JSON) → the template's `NodeRegistry.write` stored the value first and called
+    `on_write` afterwards, so `on_write` could only react, not veto. Fixed in template 0.1.5: `on_write`
+    runs before storing; raising `NodeWriteError` rejects the write (`DL_INVALID_VALUE`) and keeps the
+    old value. Apps created earlier (`ctrlx-core-monitor`) keep the old order - fine as long as their
+    `on_write` never rejects. Test: `test_on_write_can_reject`.
+51. **No browser to test a web UI in the App Build Environment** (no Chrome/Firefox; Playwright's
+    Chromium needs atk, cups, gbm, pango, cairo, ... = system packages via sudo apt; Claude in Chrome
+    may not be connected). Workaround without system changes: run `www/app.js` in QuickJS
+    (`pip install quickjs` in a throw-away venv) with DOM/canvas stubs against the real web server -
+    `apps/ctrlx-amr-fleet/tests/ui/`. Caught no layout problems, but every script path ran
+    (pan, pinch, lock, settings form). Pitfall: a canvas page that only redraws on change shows no
+    draw calls on a virtual clock once the animation has finished - collect them while data arrives.
+    **Update 2026-10-23:** replaced by a real headless browser (#52); the QuickJS harness was removed.
+    The library list above was a guess - the headless shell only lacks the nine libraries in #52.
+
+UI tests with Playwright, 2026-10-23 (decision: real browser instead of QuickJS, screenshots Claude can read):
+
+52. **Headless Chromium in the App Build Environment** - `tools/setup-ui-test.sh` + `tools/ui_check.py`.
+    * Playwright 1.64.1 from PyPI in a venv (`~/.cache/ctrlx-kit/uivenv`, no root), only the headless shell
+      (`playwright install --only-shell chromium`, 278 MB in `~/.cache/ms-playwright`, 1.5 min download).
+    * `ldd` showed nine missing libraries: libXcomposite, libXdamage, libXfixes, libXrandr, libasound,
+      libatk, libatk-bridge, libatspi, libgbm - and the VM had **no fonts** (text = boxes). One
+      `sudo apt-get install --no-install-recommends` of ten Ubuntu 24.04 packages (`t64` names!) = 25 packages,
+      42 MB. Playwright's own `install-deps chromium` wants 74 packages incl. an X server: not needed headless.
+    * Speed (emulated CPU, #47): browser start ~12 s, page load to data 9 s locally / 18 s on the COREvirtual
+      through the reverse proxy, one screenshot 4-10 s, a whole scenario ~45-75 s. Too slow for every
+      `check.sh` run -> `check.sh --ui` and an explicit step after UI changes.
+    * `wait_for_load_state("networkidle")` returned before the map tiles were loaded: a page that polls
+      every 250 ms is never idle for 500 ms. Fix: `<body data-ui-ready>` set by the page itself
+      (web-ui-and-reverse-proxy.md); `ui_check.py` waits two animation frames, then for "true".
+    * A venv's `bin/python` is a symlink to the system interpreter: a "re-exec with the venv's Python"
+      guard must compare `sys.prefix` with the venv, not `realpath(sys.executable)` (that never re-executed).
+    * Device mode works with the token from the identity manager in the URL (`/<snap>/?token=...`, like the
+      menu link) and `ignore_https_errors` for the self-signed certificate; `--no-proxy-server` because the
+      VM sets `http(s)_proxy` (#21).

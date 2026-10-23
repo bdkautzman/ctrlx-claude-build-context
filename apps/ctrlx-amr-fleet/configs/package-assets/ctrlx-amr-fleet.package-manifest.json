@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/package-manifest/package-manifest.v1.7.schema.json",
+  "version": "1.0.0",
+  "id": "ctrlx-amr-fleet",
+  "scopes-declaration": [
+    {
+      "identifier": "ctrlx-amr-fleet.web",
+      "name": "AMR Fleet View",
+      "description": "Permissions for the AMR Fleet View",
+      "scopes": [
+        {
+          "identifier": "ctrlx-amr-fleet.web.all.r",
+          "name": "View the AMR fleet",
+          "description": "View the AMR map, the fleet data and the settings"
+        },
+        {
+          "identifier": "ctrlx-amr-fleet.web.all.rw",
+          "name": "Manage the AMR fleet view",
+          "description": "View the AMR map and change the settings and the fleet data node"
+        }
+      ]
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "ctrlx-amr-fleet.web",
+        "url": "/ctrlx-amr-fleet",
+        "binding": "unix://{$SNAP_DATA}/package-run/ctrlx-amr-fleet/web.sock",
+        "restricted": [
+          "/ctrlx-amr-fleet/api"
+        ]
+      }
+    ]
+  },
+  "menus": {
+    "sidebar": [
+      {
+        "id": "ctrlx-amr-fleet",
+        "title": "AMR Fleet View",
+        "icon": "bosch-ic-robot",
+        "link": "/ctrlx-amr-fleet/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-amr-fleet.web.all.r",
+          "ctrlx-amr-fleet.web.all.rw"
+        ],
+        "items": []
+      }
+    ],
+    "overview": [
+      {
+        "id": "ctrlx-amr-fleet-overview",
+        "title": "AMR Fleet View",
+        "description": "Live map of the AMR positions",
+        "icon": "bosch-ic-robot",
+        "link": "/ctrlx-amr-fleet/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-amr-fleet.web.all.r",
+          "ctrlx-amr-fleet.web.all.rw"
+        ],
+        "items": []
+      }
+    ]
+  },
+  "commands": {
+    "activeConfiguration": {
+      "save": [
+        {
+          "id": "ctrlx-amr-fleet",
+          "subject": "AMR Fleet View settings",
+          "url": "/ctrlx-amr-fleet/api/v1/appdata/save"
+        }
+      ],
+      "load": [
+        {
+          "id": "ctrlx-amr-fleet",
+          "subject": "AMR Fleet View settings",
+          "url": "/ctrlx-amr-fleet/api/v1/appdata/load"
+        }
+      ]
+    }
+  },
+  "configuration": {
+    "appDirectories": [
+      {
+        "name": "ctrlx-amr-fleet",
+        "description": "AMR Fleet View",
+        "icon": "bosch-ic-robot",
+        "copyOnLoad": true,
+        "writeProtected": false
+      }
+    ],
+    "appPrivateFiles": [
+      "^ctrlx-amr-fleet/.*\\.tmp$"
+    ]
+  }
+}

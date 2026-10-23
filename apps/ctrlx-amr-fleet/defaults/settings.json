@@ -1,0 +1,26 @@
+{
+  "settingsVersion": 1,
+  "general": {
+    "logLevel": "INFO",
+    "heartbeatIntervalMs": 1000
+  },
+  "map": {
+    "file": "HMI_Map.txt",
+    "resolution": 0.0,
+    "unitsPerMeter": 1000.0
+  },
+  "fleet": {
+    "rotationUnit": "deg",
+    "staleAfterMs": 5000,
+    "amrLengthM": 1.0,
+    "amrWidthM": 0.7
+  },
+  "display": {
+    "refreshIntervalMs": 250
+  },
+  "simulation": {
+    "enabled": false,
+    "amrCount": 4,
+    "speedMps": 0.8
+  }
+}

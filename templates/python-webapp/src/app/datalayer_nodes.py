@@ -30,6 +30,7 @@ class NodeSpec:
     minimum: Optional[float] = None
     maximum: Optional[float] = None
     max_length: Optional[int] = None
+    # called with the validated value BEFORE it is stored; raise NodeWriteError to reject it
     on_write: Optional[Callable[[Any], None]] = field(default=None, repr=False)
 
 
@@ -118,10 +119,10 @@ class NodeRegistry:
             raise NodeWriteError("range", "{} must be <= {}".format(name, spec.maximum))
         if spec.max_length is not None and isinstance(value, str) and len(value) > spec.max_length:
             raise NodeWriteError("range", "{} longer than {} characters".format(name, spec.max_length))
+        if spec.on_write:
+            spec.on_write(value)  # may reject the value by raising NodeWriteError
         with self._lock:
             self._values[name] = value
-        if spec.on_write:
-            spec.on_write(value)
         return value
 
     def snapshot(self):

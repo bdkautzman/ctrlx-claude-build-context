@@ -42,6 +42,9 @@ Client (reading other nodes) – same system, `system.factory().create_client("i
   thread → protect shared state with a lock, return quickly (no blocking I/O).
 * `on_write`: check `data.get_type()` against the node type (→ `Result.TYPE_MISMATCH`),
   validate range (→ `Result.INVALID_VALUE`), read-only → `Result.PERMISSION_DENIED`.
+* Template: `NodeSpec(on_write=fn)` runs **before** the value is stored (template ≥ 0.1.5); raise
+  `NodeWriteError("invalid", msg)` there to reject a value that type/range checks can't judge (e.g.
+  JSON content) → the writer gets `DL_INVALID_VALUE` and the node keeps its old value.
 * Metadata: `MetadataBuilder.create_metadata(name, description, unit, description_url,
   NodeClass.NodeClass.Variable, read_allowed, write_allowed, create_allowed, delete_allowed,
   browse_allowed, type_path="types/datalayer/<type>")` (import `NodeClass` from `comm.datalayer`).
@@ -55,6 +58,18 @@ Client (reading other nodes) – same system, `system.factory().create_client("i
   Complex data: flatbuffers (`register_type(address, bfbs_path)`, see sample `datalayer.provider`)
   or a JSON string node (simple, used by community apps; consumers must parse it).
 * Node names in Data Layer UI: Settings → Data Layer → `<name>/`.
+
+## JSON string input node (structured data from a PLC) - see `apps/ctrlx-amr-fleet`
+
+When a PLC/fleet manager sends a whole list at once (e.g. all AMR positions), one writable `string`
+node with JSON is the simplest contract (no flatbuffers schema to share). Pattern that worked:
+* Validate the whole document in `on_write` (pure-Python parser → unit tests); reject it as a whole
+  with a message that names the element (`amrs[2].rotation: missing`); keep the last good value.
+* Publish the reason in a read-only `.../last-error` node (empty after the next good write) plus
+  counters (`updates`, `rejected`) - PLC programmers can't see the app's log.
+* `max_length` on the node (e.g. 1 MiB), a maximum element count, unknown keys ignored (lets the
+  format grow), `null` = optional field not set. Keep it in memory only (cyclic writes).
+* Document the format in the node description (shown in the Data Layer browser) and the app README.
 
 ## Client (reading other nodes) - verified 2026-10-21, see `apps/ctrlx-core-monitor`
 

@@ -13,3 +13,5 @@ prime/
 stage/
 squashfs-root/
 .craft/
+# tools/ui_check.py screenshots
+.ui-check/

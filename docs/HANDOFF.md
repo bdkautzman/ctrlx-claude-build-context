@@ -31,6 +31,7 @@ was decided and what is still open. Rules for daily work are in `CLAUDE.md`.
 | No `menus.settings` entry (2026-10-21) | the ctrlX Settings page can't open `_blank` tiles; settings live in the app UI |
 | Package-manifest schema v1.7 | released with ctrlX OS 4.4, superset of the v1.6 the samples use |
 | `boschrexroth/ctrlx-actions` not used | last updated 2022, not suitable for core24 |
+| UI tests in headless Chromium via Playwright, pinned, optional (2026-10-23) | Claude can look at screenshots and test on the device through the reverse proxy; QuickJS + DOM stubs (tried first) found script errors but no layout problems and needed stubs per app. Cost: one `sudo apt` line, ~1 min per run in the emulated VM, so not in every `check.sh` |
 
 ## Status
 Verified in a cloud sandbox (no snapcraft, no device available there):
@@ -64,7 +65,16 @@ Verified in a cloud sandbox (no snapcraft, no device available there):
   `.app`, optional OEM signing via the SDK), skill `package-app`; `tools/ctrlx.py install` takes `.app`
   files. One `.app` of ctrlx-core-monitor 0.1.2 installed and ran on COREvirtual and real CORE (gotchas #49).
 
-Findings: `docs/ctrlx/gotchas.md` #21–#49. Devices: `devices.toml` (git-ignored).
+- `ctrlx-amr-fleet` 0.1.0 (2026-10-22): AMR fleet view - one JSON string node in, live canvas map out
+  (tiles per zoom level, pan/zoom/pinch, lock + heading-up, minimap, simulation). Built (amd64), not yet
+  on a device. Brought back into the template (0.1.5): `on_write` can reject a value. Docs: JSON input
+  nodes (`datalayer-python.md`), images from the API / fast polling (`web-ui-and-reverse-proxy.md`),
+  gotchas #50–#51. 0.1.0 installed on the COREvirtual 2026-10-23, looked at by the user.
+- UI checks in a real browser (2026-10-23): `tools/setup-ui-test.sh`, `tools/ui_check.py` (local and
+  `--device`, screenshots), `check.sh --ui`, template 0.1.6 with `tests/ui_scenario.py` and the
+  `data-ui-ready` marker. Verified on the template, both apps (local) and the COREvirtual. Gotcha #52.
+
+Findings: `docs/ctrlx/gotchas.md` #21–#52. Devices: `devices.toml` (git-ignored).
 
 ## Delivery notes
 - The Claude Code config arrived as `_claude/` on Windows (the transfer tool can't write `.claude`).

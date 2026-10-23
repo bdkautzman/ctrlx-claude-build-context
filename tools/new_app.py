@@ -49,7 +49,7 @@ def main():
     dest = os.path.join(args.dest, name)
     if os.path.exists(dest):
         sys.exit("already exists: " + dest)
-    common = shutil.ignore_patterns(".dev", "__pycache__", "*.pyc", "*.snap")
+    common = shutil.ignore_patterns(".dev", ".ui-check", "__pycache__", "*.pyc", "*.snap")
 
     def ignore(directory, names):
         skip = set(common(directory, names))

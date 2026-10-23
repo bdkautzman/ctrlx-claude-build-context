@@ -22,6 +22,12 @@ Verify: `apt-cache policy ctrlx-datalayer` shows a candidate; `snap list snapcra
 `python3 tools/ctrlx_check.py templates/python-webapp --pre-build` has no `ENV-*` errors.
 Put the kit on the VM with git (preferred) or scp; keep LF line endings (see gotchas).
 
+Optional, for UI checks in a real browser (`tools/ui_check.py`, §1): `tools/setup-ui-test.sh`. It installs,
+without root, a venv with a pinned Playwright (`~/.cache/ctrlx-kit/uivenv`) and its headless Chromium
+(`~/.cache/ms-playwright`, ~280 MB) and prints one `sudo apt-get install ...` line for the shared libraries
+and fonts the VM lacks (~25 packages, ~42 MB). Run it again afterwards: it ends with `READY`.
+Everything else in the kit works without it.
+
 ## 1. Inner loop (no snap, seconds)
 
 ```bash
@@ -32,6 +38,18 @@ python3 -m unittest discover -s tests -t .        # unit tests (fake Data Layer)
 ```
 For the last one install the Python deps in a venv (`python3 -m venv .venv && . .venv/bin/activate
 && pip install ctrlx-datalayer'<=3.6' ctrlx-fbs`) – the native lib comes from the .deb.
+
+**UI check in a real browser** (after UI changes, before hand-over; setup: §0):
+```bash
+python3 ../../tools/ui_check.py .              # starts the app from a temp copy, headless Chromium, screenshots
+python3 ../../tools/ui_check.py . --narrow     # + a 390 px wide (phone/HMI) screenshot
+../../tools/check.sh . --ui                    # unit tests + ctrlX checks + UI check
+```
+It opens the page, waits for `<body data-ui-ready="true">` (set by `www/app.js` once the data is shown),
+runs the app's `tests/ui_scenario.py` (clicks, named screenshots; template: Edit -> Set on a value, valid
+and invalid settings) and fails on JavaScript/console errors and HTTP errors. Screenshots land in
+`<app>/.ui-check/` (git-ignored) - **look at them**: layout problems don't fail the run. About 1 min per
+run in the emulated build VM (browser start ~12 s), so it is not part of every `check.sh`.
 
 ## 2. Check and build
 
@@ -91,6 +109,10 @@ The COREvirtual's license is the 4-hour engineering license; it shuts down after
 
 1. App appears in Apps with the right version, state "running"; no errors in Logbook.
 2. Sidebar/overview entry opens the UI in a new tab; values update; settings save.
+   `python3 ../../tools/ui_check.py . --device [NAME]` does the opening part: logs in with the
+   devices.toml credentials, opens `/<name>/?token=...` through the reverse proxy like the menu link and
+   takes screenshots (scenarios change nothing on a device unless written to). The user still clicks
+   through once per release (sidebar entry, permissions).
 3. Users & Permissions: a user with only `.r` sees read-only UI; without scopes the API returns 403.
 4. Settings → Data Layer: `<name>/…` nodes readable; writable ones accept/reject correctly.
 5. Manage app data: `<name>/settings.json` exists; save a configuration, change a setting,

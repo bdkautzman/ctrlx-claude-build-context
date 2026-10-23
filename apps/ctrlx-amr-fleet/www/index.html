@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AMR Fleet View</title>
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<!-- data-ui-ready: app.js sets "true" when map and AMRs are shown; tools/ui_check.py waits for it -->
+<body data-ui-ready="false">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></symbol>
+    <symbol id="i-mini" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="12" y="12" width="6" height="6"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand">
+      <button type="button" id="btn-panel" class="tool tool-bare" title="Show/hide the AMR list" aria-label="Show/hide the AMR list">
+        <svg class="ic"><use href="#i-list"/></svg>
+      </button>
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1 id="app-title">AMR Fleet View</h1>
+      <span id="app-version" class="muted"></span>
+    </div>
+    <div class="topbar-right">
+      <span id="sim-badge" class="pill pill-sim" hidden title="AMRs come from the built-in simulation (settings)">Simulation</span>
+      <span id="fleet-pill" class="pill pill-unknown" title="Fleet data">Fleet: …</span>
+      <span id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</span>
+      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon"><svg class="ic"><use href="#i-sliders"/></svg>Settings</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <div class="layout">
+    <aside class="panel" id="panel" aria-labelledby="list-h">
+      <div class="panel-head">
+        <h2 id="list-h">AMRs <span id="amr-count" class="muted"></span></h2>
+        <input type="search" id="amr-filter" placeholder="Filter by id, name, state" aria-label="Filter AMRs">
+      </div>
+      <ul id="amr-list" class="amr-list"></ul>
+      <p id="amr-empty" class="panel-note muted" hidden></p>
+      <p id="fleet-error" class="panel-note error" hidden></p>
+    </aside>
+
+    <main class="mapwrap" id="mapwrap">
+      <canvas id="map" tabindex="0" aria-label="Map with the AMR positions. Drag to pan, wheel or pinch to zoom."></canvas>
+      <div id="map-msg" class="map-msg" hidden></div>
+
+      <div id="followbar" class="followbar" hidden>
+        <svg class="ic"><use href="#i-lock"/></svg>
+        <span>Following <b id="follow-name"></b> <span id="follow-note" class="muted"></span></span>
+        <label class="checkbox-inline"><input type="checkbox" id="heading-up"> Rotate map with AMR</label>
+        <button type="button" id="btn-unfollow" class="btn btn-small">Unlock</button>
+      </div>
+
+      <div class="tools">
+        <div class="tool-group">
+          <button type="button" id="btn-zoom-in" class="tool" title="Zoom in (+)" aria-label="Zoom in">+</button>
+          <button type="button" id="btn-zoom-out" class="tool" title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
+          <button type="button" id="btn-fit" class="tool" title="Show the whole map (F)" aria-label="Show the whole map"><svg class="ic"><use href="#i-fit"/></svg></button>
+          <button type="button" id="btn-north" class="tool" title="North up (N)" aria-label="Reset rotation">
+            <svg class="ic compass" id="compass" viewBox="0 0 24 24"><path class="needle-n" d="M12 3l4 9H8z"/><path d="M12 21l-4-9h8z"/></svg>
+          </button>
+        </div>
+        <div class="tool-group">
+          <button type="button" id="btn-labels" class="tool" title="Show AMR names" aria-label="Show AMR names" aria-pressed="true"><svg class="ic"><use href="#i-tag"/></svg></button>
+          <button type="button" id="btn-minimap" class="tool" title="Show overview map" aria-label="Show overview map" aria-pressed="true"><svg class="ic"><use href="#i-mini"/></svg></button>
+        </div>
+      </div>
+
+      <div class="hud">
+        <div class="scalebar"><span id="scale-bar" class="scale-line"></span><span id="scale-label"></span></div>
+        <div id="cursor-pos" class="muted"></div>
+      </div>
+      <canvas id="minimap" class="minimap" hidden aria-label="Overview map - click to move the view"></canvas>
+    </main>
+  </div>
+
+  <div id="drawer" class="drawer" hidden role="dialog" aria-labelledby="settings-h">
+    <div class="card-head drawer-head">
+      <h2 id="settings-h">Settings</h2>
+      <button type="button" id="btn-close-settings" class="tool tool-bare" title="Close" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="muted drawer-note">Stored in ctrlX app data · saved and loaded with configurations</p>
+    <form id="settings-form" novalidate>
+      <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
+      <ul id="settings-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+        <button type="button" id="btn-revert" class="btn">Revert</button>
+        <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
+        <span id="save-state" class="muted" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

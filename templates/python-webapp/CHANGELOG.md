@@ -3,6 +3,20 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## 0.1.6
+
+- UI check in a real browser: `tests/ui_scenario.py` (run by `tools/ui_check.py`, headless Chromium via
+  Playwright; one-time setup `tools/setup-ui-test.sh`) clicks Edit -> Set on a Data Layer value and
+  saves a valid and an invalid setting. `index.html` starts with `<body data-ui-ready="false">`,
+  `app.js` sets it to "true" once the data is shown - screenshots wait for it.
+- `.ui-check/` (screenshots) is git-ignored.
+
+## 0.1.5
+
+- Data Layer: `NodeSpec.on_write` runs before the value is stored and can reject it by raising
+  `NodeWriteError` (the write then fails with e.g. `DL_INVALID_VALUE` and the node keeps its old
+  value). Before, a rejected value stayed in the node. From apps/ctrlx-amr-fleet (JSON input node).
+
 ## 0.1.4
 
 - Layout: the Python package moved to `src/` (`src/pyproject.toml`, `src/app/`); the snap part

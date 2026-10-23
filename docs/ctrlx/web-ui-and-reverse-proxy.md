@@ -46,7 +46,20 @@ the proxy pass decoded claims as headers (format not verified in this kit - see 
   them in `fossinfo.json`.
 * Keep it light (ctrlX CORE X3 is a small ARM CPU). Poll ≥ 1–2 s or use the ctrlX Data Layer
   REST/SSE APIs from the browser if you need live data at higher rates.
+  Live views (`apps/ctrlx-amr-fleet`, 250 ms): poll with a revision (`GET /fleet?since=<rev>`) and
+  answer only a few status bytes when nothing changed; interpolate in the browser between updates;
+  slow down to ≥ 2 s while `document.hidden`. (CPU load on a real CORE: not measured yet.)
+* **Images/binary data from the API**: `<img src="api/...">` can't send the `Authorization` header
+  (→ 401 on restricted paths). Use `fetch()` with the header → `res.blob()` → `createImageBitmap()`
+  (canvas) or `URL.createObjectURL()` (`<img>`). Content-addressed URLs (hash in the path) can be
+  cached: `Cache-Control: private, max-age=...`.
+* Large pictures (maps, layouts): serve tiles per zoom level and load only the visible ones -
+  `apps/ctrlx-amr-fleet/src/app/occupancy_map.py` (1-bit palette PNG with stdlib `zlib`) and the
+  tile cache in its `www/app.js`.
 * Show permission state: disable inputs when the user lacks the write scope (`/status` returns `canWrite`).
+* `<body data-ui-ready="false">` in `index.html`; `app.js` sets `"true"` once the data is shown (and
+  `"false"` while it loads more, e.g. map tiles). `tools/ui_check.py` waits for it before screenshots -
+  Playwright's "network idle" never happens on a page that polls.
 * Errors from the API are RFC 7807 Problem JSON: `{"type","title","status","detail", "errors"?}`.
 
 ## Adding an endpoint (checklist)

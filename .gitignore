@@ -8,5 +8,7 @@ apps/*/stage/
 apps/*/prime/
 apps/*/*.snap
 apps/*/*.app
+# tools/ui_check.py screenshots
+.ui-check/
 # device credentials for tools/ctrlx.py (template: devices.example.toml)
 /devices.toml

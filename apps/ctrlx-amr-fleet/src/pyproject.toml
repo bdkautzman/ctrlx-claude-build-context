@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# keep in sync with snap/snapcraft.yaml (name, version) - tools/check.sh verifies the name
+name = "ctrlx-amr-fleet"
+version = "0.1.1"
+description = "Live map of AMR positions from a JSON Data Layer node, with pan, zoom and follow"
+requires-python = ">=3.10"
+# Same pins as the ctrlX AUTOMATION SDK 4.6.0 Python samples.
+# Every runtime dependency must also be listed in configs/package-assets/*.fossinfo.json.
+dependencies = [
+    "ctrlx-datalayer<=3.6",
+    "ctrlx-fbs",
+]
+
+[tool.setuptools]
+packages = ["app"]
