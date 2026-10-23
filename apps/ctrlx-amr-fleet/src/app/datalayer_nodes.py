@@ -165,7 +165,7 @@ def build_node_specs(settings, version, on_fleet_write=None):
                  on_write=fleet_write,
                  description='All AMRs as one JSON string, e.g. {"amrs":[{"id":"AMR-01","x":1250,'
                              '"y":30480,"rotation":90}]}: x/y in map units, rotation counter-clockwise '
-                             'from +x in fleet.rotationUnit; optional name, state, battery. '
+                             'from +x in fleet.rotationUnit; optional name, state, battery, info (object). '
                              'Invalid JSON is rejected. Runtime only (not persisted).'),
         NodeSpec("fleet/count", "uint64", 0, description="Number of AMRs in the last accepted fleet JSON"),
         NodeSpec("fleet/updates", "uint64", 0, description="Accepted writes to fleet/amrs since the app started"),

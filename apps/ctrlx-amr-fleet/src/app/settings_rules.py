@@ -15,7 +15,9 @@ Supported rule keys:
   hidden:   true -> not shown in the web UI (value is preserved)
   items:    for arrays of objects: {"template": {...}, "rules": {field: rule}} - every element
             is normalized against the template (types, missing keys) and checked with the rules
-  maxItems: maximum array length
+  maxItems/minItems: maximum/minimum array length
+  itemPattern: arrays of strings - regular expression every element must match
+  format:   "color" -> the web UI shows a color picker + hex field (strings and arrays of strings)
   unique:   field name that must be unique within an array of objects (also used to match
             elements when restoring secrets)
   Example with all of them: apps/ctrlx-core-monitor/app/settings_rules.py ("cores").
@@ -23,6 +25,9 @@ Supported rule keys:
 The web UI fetches these rules from GET <api>/settings/meta and renders matching inputs.
 When you add a setting: add it to defaults/settings.json AND (if it has limits) here.
 """
+
+HEX_COLOR = r"#[0-9a-fA-F]{6}"
+COLOR = {"pattern": HEX_COLOR, "format": "color"}
 
 RULES = {
     # Format version of settings.json. Increase it (and migrate in settings_store) when you make
@@ -79,6 +84,18 @@ RULES = {
         "max": 10000,
         "help": "How often the web page fetches the AMR positions (movement is interpolated).",
     },
+    "style": {"label": "Styling"},
+    "style.accent": dict(COLOR, label="Accent", help="Buttons, selection, the locked AMR, the overview frame."),
+    "style.panel": dict(COLOR, label="Panels", help="Top bar, AMR list, tool buttons, settings. Page "
+                                                     "background, lines and secondary text are derived."),
+    "style.text": dict(COLOR, label="Text"),
+    "style.mapBackground": dict(COLOR, label="Outside the map"),
+    "style.mapFloor": dict(COLOR, label="Map floor"),
+    "style.mapWalls": dict(COLOR, label="Map walls and obstacles"),
+    "style.mapGrid": dict(COLOR, label="Grid lines"),
+    "style.staleAmr": dict(COLOR, label="AMRs without current data"),
+    "style.amrColors": {"label": "AMR colors", "format": "color", "itemPattern": HEX_COLOR, "minItems": 1,
+                        "maxItems": 16, "help": "Each AMR gets one of these colors (always the same one for an id)."},
     "simulation": {"label": "Simulation"},
     "simulation.enabled": {
         "label": "Simulate AMRs",

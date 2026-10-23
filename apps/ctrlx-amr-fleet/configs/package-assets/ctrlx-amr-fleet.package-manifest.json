@@ -95,5 +95,36 @@
     "appPrivateFiles": [
       "^ctrlx-amr-fleet/.*\\.tmp$"
     ]
+  },
+  "uiExtensions": {
+    "dashboard": [
+      {
+        "order": 100,
+        "src": "/ctrlx-amr-fleet/widgets.js",
+        "tag": "ctrlx-amr-fleet-widget",
+        "title": "AMR Fleet",
+        "description": "Available AMRs with name, state and battery",
+        "image": "/ctrlx-amr-fleet/widget.svg",
+        "initialSize": {
+          "cols": 4,
+          "rows": 3
+        },
+        "minSize": {
+          "cols": 3,
+          "rows": 2
+        },
+        "maxSize": {
+          "cols": 8,
+          "rows": 8
+        },
+        "permissions": [
+          "ctrlx-amr-fleet.web.all.r",
+          "ctrlx-amr-fleet.web.all.rw"
+        ],
+        "categories": [
+          "AMR"
+        ]
+      }
+    ]
   }
 }

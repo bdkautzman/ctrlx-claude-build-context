@@ -43,6 +43,7 @@ For the last one install the Python deps in a venv (`python3 -m venv .venv && . 
 ```bash
 python3 ../../tools/ui_check.py .              # starts the app from a temp copy, headless Chromium, screenshots
 python3 ../../tools/ui_check.py . --narrow     # + a 390 px wide (phone/HMI) screenshot
+python3 ../../tools/ui_check.py . --role reader   # as a user with only <snap>.web.all.r (auth on)
 ../../tools/check.sh . --ui                    # unit tests + ctrlX checks + UI check
 ```
 It opens the page, waits for `<body data-ui-ready="true">` (set by `www/app.js` once the data is shown),

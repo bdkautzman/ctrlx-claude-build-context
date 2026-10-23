@@ -11,12 +11,13 @@ Routes
   GET  /<snap>/                      index.html (static, unrestricted, no data!)
   GET  /<snap>/<file>                static assets from www/
   GET  /<snap>/api/v1/status         read
-  GET  /<snap>/api/v1/settings       read
-  GET  /<snap>/api/v1/settings/meta  read   (defaults + rules for the UI)
+  GET  /<snap>/api/v1/settings       write  (read-only users get no settings, only /view-config)
+  GET  /<snap>/api/v1/settings/meta  write  (defaults + rules for the UI)
   PUT  /<snap>/api/v1/settings       write  (validate, persist to app data, apply)
   POST /<snap>/api/v1/settings/reset write
-  GET  /<snap>/api/v1/values         read   (Data Layer nodes of this app)
+  GET  /<snap>/api/v1/values         write  (Data Layer nodes of this app, incl. settings/active)
   PUT  /<snap>/api/v1/values/<name>  write  body {"value": ...}
+  GET  /<snap>/api/v1/view-config    read   what the map view needs: style colors, units, AMR size, refresh
   GET  /<snap>/api/v1/fleet[?since=<revision>]   read  AMRs; only status if the revision is unchanged
   GET  /<snap>/api/v1/map            read   active map: file, error, cell size, extent, tile levels
   GET  /<snap>/api/v1/map/tiles/<map id>/<level>/<x>/<y>.png[?color=rrggbb]   read  map tile
@@ -238,8 +239,10 @@ def _make_handler(store, datalayer, fleet, maps):
                     "canWrite": auth.can_write(scopes),
                 })
 
+            # settings (and the raw node list with settings/active) only for users who may change them:
+            # read-only users don't see the settings at all; the view gets what it needs from /view-config
             if route == "/settings" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, write=True)
                 return self._send_json(200, store.get_redacted())
             if route == "/settings" and method == "PUT":
                 auth.require(self.headers, write=True)
@@ -250,7 +253,7 @@ def _make_handler(store, datalayer, fleet, maps):
                 log.info("Settings changed via web UI")
                 return self._send_json(200, store.get_redacted())
             if route == "/settings/meta" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, write=True)
                 return self._send_json(200, {"defaults": store.defaults(), "rules": store.rules(),
                                                  "types": store.types()})
             if route == "/settings/reset" and method == "POST":
@@ -259,7 +262,7 @@ def _make_handler(store, datalayer, fleet, maps):
                 return self._send_json(200, store.get_redacted())
 
             if route == "/values" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, write=True)
                 return self._send_json(200, datalayer.registry.snapshot())
             if route.startswith("/values/") and method == "PUT":
                 auth.require(self.headers, write=True)
@@ -274,6 +277,17 @@ def _make_handler(store, datalayer, fleet, maps):
                     return self._problem(status, "Write rejected", str(exc))
                 return self._send_json(200, {"name": name, "value": value})
 
+            if route == "/view-config" and method == "GET":
+                auth.require(self.headers, write=False)
+                settings = store.get()
+                return self._send_json(200, {
+                    "style": settings["style"],
+                    "unitsPerMeter": settings["map"]["unitsPerMeter"],
+                    "amrLengthM": settings["fleet"]["amrLengthM"],
+                    "amrWidthM": settings["fleet"]["amrWidthM"],
+                    "staleAfterMs": settings["fleet"]["staleAfterMs"],
+                    "refreshIntervalMs": settings["display"]["refreshIntervalMs"],
+                })
             if route == "/fleet" and method == "GET":
                 auth.require(self.headers, write=False)
                 stale_after_s = store.get()["fleet"]["staleAfterMs"] / 1000.0

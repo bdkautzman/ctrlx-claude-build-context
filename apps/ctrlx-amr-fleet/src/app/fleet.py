@@ -8,8 +8,12 @@ Input (Data Layer node <snap>/fleet/amrs, or the built-in simulation), the whole
   id        string or integer, unique, 1..64 characters
   x, y      position in map units (the coordinates of the map file)
   rotation  heading, counter-clockwise from the +x axis; degrees or radians (fleet.rotationUnit)
-  optional: name (string), state (string), battery (number 0..100); null = not set.
+  optional: name (string), state (string), battery (number 0..100), info (object with up to 16
+            more fields for the detail view, e.g. {"task": "T-4711", "load": "pallet", "errors": 0}:
+            keys 1..32 characters, values string (<= 64), number or boolean); null = not set.
   Other keys are ignored (room for later extensions).
+
+The app adds `speed` (map units per second) from the change of position between accepted updates.
 
 A write that is not valid is rejected as a whole (the Data Layer write fails with
 DL_INVALID_VALUE) and the reason goes to <snap>/fleet/last-error; the previous fleet stays.
@@ -26,6 +30,10 @@ log = logging.getLogger("fleet")
 
 MAX_AMRS = 1000
 MAX_TEXT = 64
+MAX_INFO = 16
+MAX_INFO_KEY = 32
+SPEED_SMOOTHING = 0.5     # weight of the newest measurement
+MIN_SPEED_DT_S = 0.02     # ignore updates closer together than this for the speed
 
 
 class FleetError(ValueError):
@@ -50,6 +58,27 @@ def _text(item, key, where):
     if not isinstance(value, str) or len(value) > MAX_TEXT:
         raise FleetError("{}.{}: must be a string of at most {} characters".format(where, key, MAX_TEXT))
     return value
+
+
+def _info(item, where):
+    value = item.get("info")
+    if value is None:
+        return None
+    if not isinstance(value, dict) or len(value) > MAX_INFO:
+        raise FleetError("{}.info: must be an object with at most {} fields".format(where, MAX_INFO))
+    info = {}
+    for key, v in value.items():
+        if not 1 <= len(key) <= MAX_INFO_KEY:
+            raise FleetError("{}.info: keys must have 1..{} characters".format(where, MAX_INFO_KEY))
+        if v is None:
+            continue
+        ok = (isinstance(v, bool) or (isinstance(v, str) and len(v) <= MAX_TEXT)
+              or (isinstance(v, (int, float)) and math.isfinite(v)))
+        if not ok:
+            raise FleetError("{}.info.{}: must be a string (<= {} characters), a finite number or a boolean"
+                             .format(where, key, MAX_TEXT))
+        info[key] = v
+    return info
 
 
 def parse_fleet(text, rotation_unit="deg"):
@@ -91,6 +120,9 @@ def parse_fleet(text, rotation_unit="deg"):
             if not 0 <= battery <= 100:
                 raise FleetError(where + ".battery: must be 0..100")
             amr["battery"] = battery
+        info = _info(item, where)
+        if info:
+            amr["info"] = info
         amrs.append(amr)
     return amrs
 
@@ -108,6 +140,7 @@ class FleetState:
         self._received_at = None    # wall clock of the last accepted update
         self._source = ""
         self._error = ""
+        self._motion = {}           # id -> (x, y, clock, speed) for the speed estimate
         self._listeners = []
 
     def configure(self, rotation_unit):
@@ -131,14 +164,36 @@ class FleetState:
             self._notify()
             raise
         with self._lock:
+            now = self._clock()
+            self._add_speed(amrs, now)
             self._amrs = amrs
             self._revision += 1
-            self._updated = self._clock()
+            self._updated = now
             self._received_at = self._wallclock()
             self._source = source
             self._error = ""
         self._notify()
         return amrs
+
+    def _add_speed(self, amrs, now):
+        """speed = smoothed distance per second between accepted updates (needs two updates)."""
+        motion = {}
+        for amr in amrs:
+            prev = self._motion.get(amr["id"])
+            speed = None
+            if prev is not None:
+                px, py, pt, pspeed = prev
+                dt = now - pt
+                if dt < MIN_SPEED_DT_S:
+                    motion[amr["id"]] = prev
+                    if pspeed is not None:
+                        amr["speed"] = round(pspeed, 3)
+                    continue
+                measured = math.hypot(amr["x"] - px, amr["y"] - py) / dt
+                speed = measured if pspeed is None else SPEED_SMOOTHING * measured + (1 - SPEED_SMOOTHING) * pspeed
+                amr["speed"] = round(speed, 3)
+            motion[amr["id"]] = (amr["x"], amr["y"], now, speed)
+        self._motion = motion
 
     def snapshot(self, stale_after_s=None, include_amrs=True):
         with self._lock:
@@ -154,7 +209,7 @@ class FleetState:
                 "stale": age is None or (stale_after_s is not None and age > stale_after_s),
             }
             if include_amrs:
-                snap["amrs"] = [dict(a) for a in self._amrs]
+                snap["amrs"] = [dict(a, info=dict(a["info"])) if "info" in a else dict(a) for a in self._amrs]
         return snap
 
     def _notify(self):

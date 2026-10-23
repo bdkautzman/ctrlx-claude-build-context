@@ -163,6 +163,12 @@ def _check_value(value, rule, where, errors):
             errors.append("{}: invalid format".format(where))
     if isinstance(value, list) and "maxItems" in rule and len(value) > rule["maxItems"]:
         errors.append("{}: at most {} entries".format(where, rule["maxItems"]))
+    if isinstance(value, list) and "minItems" in rule and len(value) < rule["minItems"]:
+        errors.append("{}: at least {} entries".format(where, rule["minItems"]))
+    if isinstance(value, list) and "itemPattern" in rule:   # arrays of strings, e.g. colors
+        for i, item in enumerate(value):
+            if not isinstance(item, str) or not re.fullmatch(rule["itemPattern"], item):
+                errors.append("{}[{}]: invalid format".format(where, i))
 
 
 def _normalize_items(value, rule, where, errors):

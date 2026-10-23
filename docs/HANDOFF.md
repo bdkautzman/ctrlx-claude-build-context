@@ -73,8 +73,15 @@ Verified in a cloud sandbox (no snapcraft, no device available there):
 - UI checks in a real browser (2026-10-23): `tools/setup-ui-test.sh`, `tools/ui_check.py` (local and
   `--device`, screenshots), `check.sh --ui`, template 0.1.6 with `tests/ui_scenario.py` and the
   `data-ui-ready` marker. Verified on the template, both apps (local) and the COREvirtual. Gotcha #52.
+- `ctrlx-amr-fleet` 0.2.0 (2026-10-23): detail tiles, styling settings (color picker + hex, live preview),
+  read-only users without settings (`/view-config`), home screen widget, label placement, simulator
+  collision avoidance. `ui_check.py --role reader|writer`, `ui.new_page()`, element screenshots.
+  Candidates for the template (not done): settings rules `minItems`/`itemPattern`/`format: "color"` and
+  the color fields of the settings form; the "settings only for writers" option. Gotchas #53–#57.
+  0.2.0 installed on the COREvirtual 2026-10-23: widget appeared on the home screen by itself and works
+  (token, Open); found a simulator deadlock in narrow free space → 0.2.1, installed and verified the same day.
 
-Findings: `docs/ctrlx/gotchas.md` #21–#52. Devices: `devices.toml` (git-ignored).
+Findings: `docs/ctrlx/gotchas.md` #21–#57. Devices: `devices.toml` (git-ignored).
 
 ## Delivery notes
 - The Claude Code config arrived as `_claude/` on Windows (the transfer tool can't write `.claude`).

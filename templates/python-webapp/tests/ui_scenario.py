@@ -8,7 +8,10 @@ and calls run(ui). Any JavaScript error, console error or HTTP error >= 400 fail
   ui.page          Playwright page, sync API (https://playwright.dev/python/docs/api/class-page)
   ui.shot(name)    wait until the page is ready, save <app>/.ui-check/<local|device>-<name>.png
   ui.wait_ready()  after an action: let the page react, wait for <body data-ui-ready="true">
-  ui.api(method, path, body)   call this app's API (/api/v1 + path) - e.g. settings for a test setup
+  ui.api(method, path, body[, as_admin=True])   call this app's API (/api/v1 + path) as the page's user;
+                   as_admin (local only) e.g. to set up a test that runs with --role reader
+  ui.shot(name, locator)       screenshot of one element instead of the page
+  ui.role          "admin" (default, auth off), "writer" or "reader" (tools/ui_check.py --role)
   ui.allow_http(400)           before provoking an expected HTTP error
   ui.local         False with --device: don't change anything on a device unless the user asked
 Click the real buttons (gotchas #35: "Set" wrote the old value back, Enter worked).

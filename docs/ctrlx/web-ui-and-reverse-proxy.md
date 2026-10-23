@@ -68,3 +68,32 @@ the proxy pass decoded claims as headers (format not verified in this kit - see 
 2. Path below `/api/v1` (already restricted). Validate input; return Problem JSON on errors.
 3. Unit test in `tests/test_web_and_nodes.py` (incl. 401/403 cases).
 4. If it changes settings → go through `SettingsStore.update()` (persists + notifies).
+
+## Home screen widgets (`uiExtensions.dashboard`) - verified on ctrlX OS 4.6 (COREvirtual, 2026-10-23), see `apps/ctrlx-amr-fleet`
+
+* A widget is a **Web Component** in a JS file the app serves as a static file (e.g. `/<snap>/widgets.js`,
+  unrestricted like other static files - it holds no data). The manifest entry names `src`, `tag`
+  (custom element name - prefix it with the snap name), `title`, `description`, `image` (catalog picture,
+  served by the app), `initialSize`/`minSize`/`maxSize` (`{"cols", "rows"}` of the home grid; the Bosch
+  widgets use 3x3 ... 6x3) and `permissions` (scope ids; users without one don't see it in the catalog).
+  Optional `settingsTag` (a second component for the widget's settings), `categories`, `i18n`.
+  Upstream: `upstream-sdk-4.6.0/package-assets.md` "uiExtensions"; installed ones: GET
+  `/package-manager/api/v1/manifests` → `uiExtensions`.
+* It runs **inside the ctrlX UI page** (same origin as `/<snap>/api`, no CORS). The ctrlX UI keeps the
+  user's bearer token in **`sessionStorage["idm_token"]`** (plus `"loggedIn": "true"`); its own widgets
+  (motion, OPC UA, Data Layer watchlist) read it there and send `Authorization: Bearer <token>`. A widget
+  does the same for the app's restricted API. The ctrlX UI also accepts `/?token=<jwt>` and stores it there.
+* **After the install the widget is already on the home screen** (ctrlX OS 4.6 creates new widgets
+  initially for the users who may see them) - set `"noInitialCreation": true` in the manifest entry if
+  users should add it themselves from the catalog. Users remove it in the home screen's edit mode.
+* Use Shadow DOM (`attachShadow`) so the ctrlX UI's CSS and yours don't mix; inherit the font; poll
+  slowly (≥ 2 s) and only while `connectedCallback` .. `disconnectedCallback`; guard
+  `customElements.define` with `customElements.get` (the file may be loaded twice). Rebuild DOM only
+  when something visible changed: the home screen is already a heavy page, and churning elements
+  every poll also breaks hover/selection (and Playwright's waits).
+* Opening the full app from a widget: `window.open("/<snap>/?token=" + idm_token, "_blank")` - the same
+  as the menu link's `${bearertoken}`.
+* Test without the ctrlX UI: serve a small HTML page with the tag on the app's origin and put the token
+  into `sessionStorage` first - `apps/ctrlx-amr-fleet/tests/ui_scenario.py` `widget()` (Playwright
+  `page.route` + `add_init_script`).
+

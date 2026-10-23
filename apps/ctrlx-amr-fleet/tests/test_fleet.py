@@ -19,6 +19,20 @@ class ParseFleetTest(unittest.TestCase):
         self.assertEqual(parse_fleet('[{"id": 7, "x": 0, "y": 0, "rotation": 0, "name": null}]'),
                          [{"id": "7", "x": 0.0, "y": 0.0, "rotation": 0.0}])
 
+    def test_info(self):
+        item = {"id": "a", "x": 0, "y": 0, "rotation": 0,
+                "info": {"task": "T-4711", "load": 12.5, "error": False, "note": None}}
+        self.assertEqual(parse_fleet(json.dumps([item]))[0]["info"], {"task": "T-4711", "load": 12.5, "error": False})
+        self.assertNotIn("info", parse_fleet(json.dumps([dict(item, info={})]))[0])
+        for info, message in [([1], "must be an object"), ({"k{}".format(i): 1 for i in range(17)}, "at most 16"),
+                              ({"": 1}, "keys must have"), ({"x" * 33: 1}, "keys must have"),
+                              ({"t": "x" * 65}, "info.t: must be a string"), ({"t": [1]}, "info.t: must be")]:
+            with self.assertRaises(FleetError, msg=str(info)[:40]) as ctx:
+                parse_fleet(json.dumps([dict(item, info=info)]))
+            self.assertIn(message, str(ctx.exception))
+        with self.assertRaises(FleetError):   # 1e999 parses to infinity
+            parse_fleet('[{"id": "a", "x": 0, "y": 0, "rotation": 0, "info": {"t": 1e999}}]')
+
     def test_rotation_units(self):
         rot = lambda value, unit: parse_fleet(json.dumps([{"id": "a", "x": 0, "y": 0, "rotation": value}]), unit)[0]["rotation"]  # noqa: E731
         self.assertAlmostEqual(rot(math.pi / 2, "rad"), 90.0)
@@ -74,6 +88,22 @@ class FleetStateTest(unittest.TestCase):
         fleet.receive("[]")
         self.assertEqual(fleet.snapshot()["lastError"], "")  # cleared by the next accepted write
         self.assertEqual([s["revision"] for s in seen], [1, 1, 2])
+
+    def test_speed(self):
+        now = [0.0]
+        fleet = FleetState(clock=lambda: now[0])
+        fleet.receive('[{"id": "a", "x": 0, "y": 0, "rotation": 0}, {"id": "b", "x": 5, "y": 5, "rotation": 0}]')
+        self.assertNotIn("speed", fleet.snapshot()["amrs"][0])           # needs two updates
+        now[0] = 0.5
+        fleet.receive('[{"id": "a", "x": 300, "y": 400, "rotation": 0}, {"id": "b", "x": 5, "y": 5, "rotation": 0}]')
+        a, b = fleet.snapshot()["amrs"]
+        self.assertEqual((a["speed"], b["speed"]), (1000.0, 0.0))        # 500 units in 0.5 s
+        now[0] = 1.0
+        fleet.receive('[{"id": "a", "x": 300, "y": 400, "rotation": 0}]')
+        self.assertEqual(fleet.snapshot()["amrs"][0]["speed"], 500.0)   # smoothed: (0 + 1000) / 2
+        now[0] = 1.005
+        fleet.receive('[{"id": "a", "x": 900, "y": 400, "rotation": 0}]')
+        self.assertEqual(fleet.snapshot()["amrs"][0]["speed"], 500.0)   # too close in time: kept
 
     def test_rotation_unit_applies_to_next_update(self):
         fleet = FleetState("deg")

@@ -18,6 +18,28 @@
   "display": {
     "refreshIntervalMs": 250
   },
+  "style": {
+    "accent": "#007bc0",
+    "panel": "#ffffff",
+    "text": "#1f2328",
+    "mapBackground": "#dde2e8",
+    "mapFloor": "#ffffff",
+    "mapWalls": "#333d4a",
+    "mapGrid": "#e9ecef",
+    "staleAmr": "#9aa3ad",
+    "amrColors": [
+      "#1f6feb",
+      "#d1242f",
+      "#1a7f37",
+      "#bf8700",
+      "#8250df",
+      "#0a8a9a",
+      "#cf2a93",
+      "#57801c",
+      "#d4570a",
+      "#3e4bd1"
+    ]
+  },
   "simulation": {
     "enabled": false,
     "amrCount": 4,

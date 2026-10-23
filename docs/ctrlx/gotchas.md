@@ -268,3 +268,37 @@ UI tests with Playwright, 2026-10-23 (decision: real browser instead of QuickJS,
     * Device mode works with the token from the identity manager in the URL (`/<snap>/?token=...`, like the
       menu link) and `ignore_https_errors` for the self-signed certificate; `--no-proxy-server` because the
       VM sets `http(s)_proxy` (#21).
+
+App `ctrlx-amr-fleet` 0.2.0 (styling, read-only users, home screen widget), 2026-10-23:
+
+53. **How does a home screen widget authenticate?** Not in the SDK docs. The ctrlX UI (rexroth-deviceadmin
+    4.6) stores the login token in `sessionStorage["idm_token"]`; Bosch's widget bundles
+    (`/automationcore/widgets.js`, `/motion/widgets.js`, `/opcua-client/widgets.js`) read it there and send
+    `Authorization: Bearer`. Widgets share the ctrlX UI's origin, so the app's restricted `/api` works
+    directly. Details: web-ui-and-reverse-proxy.md → "Home screen widgets". (Found by reading the bundles;
+    the widget itself is not yet seen on a real home screen - see HANDOFF.)
+54. **UI test pitfalls with a second page in the same tab**: Playwright `page.set_content()` replaces the
+    document but keeps the window - the old page's `setInterval`/`requestAnimationFrame` keep running and
+    throw "Cannot read properties of null" on the new document. An SVG document can't be rewritten at
+    all ("Only HTML documents support open()"). Use another tab (`ui.new_page()`) and serve the test page
+    on the app's origin with `page.route(url, route.fulfill(...))`.
+55. **Read-only users and settings**: the template lets `.r` users read `/settings` (shown disabled). An
+    app that must hide settings from them also has to close `/settings/meta` and `/values` (the latter
+    contains `settings/active`) and give the page what it needs through its own endpoint
+    (`ctrlx-amr-fleet`: `/view-config`). The Data Layer node `settings/active` follows the ctrlX user's
+    Data Layer permissions, not the app's scopes.
+
+56. **`ui_check.py` failed with "Page.goto: Timeout 30000ms exceeded"** while a snap build ran in the
+    background (emulated CPU, #47, both single-threaded on one core) - the same run passed before and after.
+    Playwright's default timeout is 30 s; `ui_check.py` now uses 90 s and reports any browser step failure as
+    a problem with a `-failure.png` screenshot instead of a traceback.
+57. **Home screen widget verified on the COREvirtual (2026-10-23, ctrlx-amr-fleet 0.2.0)**: right after the
+    install the widget was already on the user's home screen - ctrlX OS creates new widgets initially
+    (manifest `noInitialCreation: true` prevents it). In the widget, `sessionStorage["idm_token"]` was
+    set and the API answered; "Open" (`window.open("/<snap>/?token=" + idm_token)`) started the app
+    logged in. Testing the real home screen headless in the emulated build VM: the ctrlX UI is a heavy
+    Angular page - screenshots need `animations="disabled"` and minutes of timeout, and a widget that
+    replaces its rows every poll made Playwright's `locator.wait_for` time out (element detached
+    between checks) - wait with `page.wait_for_function` instead, and don't churn the DOM (fixed in
+    the widget: rows are rebuilt only when something visible changed).
+

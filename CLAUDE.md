@@ -53,7 +53,7 @@ First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open ve
 python3 tools/new_app.py --name ctrlx-<company>-<app> --title "<Title>" --author "<Company>" --url <url>
 tools/check.sh apps/<app> [--release] [--pre-build] [--snap file.snap]
 cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  (no ctrlX needed)
-python3 tools/ui_check.py apps/<app> [--narrow] [--device [NAME]]   # headless Chromium + screenshots (~1 min)
+python3 tools/ui_check.py apps/<app> [--narrow] [--role reader] [--device [NAME]]   # headless Chromium + screenshots (~1-2 min)
 cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh; incremental, --clean for hand-over builds
 tools/ctrlx.py devices                         # test devices from devices.toml: virtual (amd64), core (arm64)
 tools/ctrlx.py [--device core] install apps/<app>/<snap>_<ver>_<arch>.snap --service   # --service: ask first

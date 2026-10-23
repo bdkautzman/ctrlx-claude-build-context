@@ -83,7 +83,10 @@
     return svg;
   }
   function showBanner(msg) { const b = $("banner"); b.textContent = msg; b.hidden = !msg; }
-  function humanize(key) { return key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()); }
+  function humanize(key) {   // "toGoal" -> "To goal"
+    return key.replace(/([a-z0-9])([A-Z])/g, (m, a, b) => a + " " + b.toLowerCase()).replace(/[_-]+/g, " ")
+      .replace(/^./, (c) => c.toUpperCase());
+  }
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   function wrapDeg(d) { return ((d % 360) + 540) % 360 - 180; }    // -> [-180, 180)
@@ -119,7 +122,8 @@
     for (const k of ["map-bg", "map-floor", "map-wall", "map-grid", "amr-stale", "accent", "text", "card"]) colors[k] = cssVar("--" + k);
   }
   readColors();
-  const AMR_PALETTE = ["#1f6feb", "#d1242f", "#1a7f37", "#bf8700", "#8250df", "#0a8a9a", "#cf2a93", "#57801c", "#d4570a", "#3e4bd1"];
+  let amrPalette = ["#1f6feb", "#d1242f", "#1a7f37", "#bf8700", "#8250df", "#0a8a9a", "#cf2a93", "#57801c", "#d4570a", "#3e4bd1"];
+  let viewConfigJson = "";   // last applied GET /view-config (style + view settings)
 
   const cfg = { unitsPerMeter: 1000, amrLength: 1000, amrWidth: 700, refreshMs: 250 };
   let mapInfo = null;      // GET /map, only when a map is loaded
@@ -140,6 +144,7 @@
   let dirty = true;
   let firstFleetAnswer = false;  // for data-ui-ready
   let canWrite = false;
+  const MAX_DETAIL_INFO = 16;
 
   // ---- view transforms -----------------------------------------------------------
   function worldToScreen(x, y) {
@@ -271,6 +276,13 @@
     overview = null;
   }
 
+  function loadOverview() {
+    const top = mapInfo.levels - 1, id = mapInfo.id, color = wallHex;
+    apiImage(tilePath(top, 0, 0)).then((img) => {
+      if (mapInfo && mapInfo.id === id && wallHex === color) { overview = img; dirty = true; }
+    }).catch(() => {});
+  }
+
   let mapLoading = false;
   async function loadMap() {
     if (mapLoading) return;
@@ -282,10 +294,7 @@
       if (changed) resetTiles();
       mapInfo = info.loaded ? info : null;
       mapError = info.error || "";
-      if (mapInfo && changed) {
-        const top = mapInfo.levels - 1, id = mapInfo.id;
-        apiImage(tilePath(top, 0, 0)).then((img) => { if (mapInfo && mapInfo.id === id) { overview = img; dirty = true; } }).catch(() => {});
-      }
+      if (mapInfo && changed) loadOverview();
       // a changed map (file updated while the app runs) keeps the view, unless it is out of sight
       if (mapInfo && changed && (!viewReady || (!follow && !mapInView()))) fitView();
     } catch (e) {
@@ -300,11 +309,12 @@
   }
 
   // ---- AMR state -----------------------------------------------------------------
-  function colorFor(id) {
+  function hashId(id) {   // FNV-1a; the widget uses the same, so an AMR has one color everywhere
     let h = 2166136261;
     for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return AMR_PALETTE[(h >>> 0) % AMR_PALETTE.length];
+    return h >>> 0;
   }
+  function amrColor(a) { return amrPalette[a.hash % amrPalette.length]; }
   function poseAt(a, now) {
     const t = a.dur > 0 ? clamp((now - a.t0) / a.dur, 0, 1) : 1;
     return {
@@ -329,7 +339,7 @@
       const target = { x: item.x, y: item.y, r: item.rotation };
       let a = amrs.get(item.id);
       if (!a) {
-        a = { from: target, to: target, t0: now, dur: 0, color: colorFor(item.id) };
+        a = { from: target, to: target, t0: now, dur: 0, hash: hashId(item.id) };
         amrs.set(item.id, a);
         membership = true;
       } else {
@@ -352,7 +362,6 @@
   function setFollow(id) {
     follow = id;
     if (id && amrs.has(id)) {
-      selected = id;
       const p = poseAt(amrs.get(id), performance.now());
       view.cx = p.x; view.cy = p.y;
       const minZoom = 40 / cfg.amrLength;  // make the AMR at least ~40 px long
@@ -481,7 +490,7 @@
         roundRect(-L / 2 - 4, -W / 2 - 4, L + 8, W + 8, 6);
         ctx.stroke();
       }
-      ctx.fillStyle = stale ? colors["amr-stale"] : a.color;
+      ctx.fillStyle = stale ? colors["amr-stale"] : amrColor(a);
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 1.5;
       roundRect(-L / 2, -W / 2, L, W, Math.min(4, W / 4));
@@ -495,20 +504,44 @@
       ctx.lineTo(L / 2 - Math.max(9, L * 0.38), W * 0.3);
       ctx.closePath();
       ctx.fill();
-      if (showLabels || id === selected || id === follow) labels.push([id, a, sx, sy + radius + 4]);
+      if (showLabels || id === selected || id === follow) {
+        labels.push({ id, a, x: sx, y: sy, r: radius, body: hitList.length - 1,
+          prio: id === follow ? 2 : id === selected ? 1 : 0 });
+      }
     }
+    drawLabels(labels);
+  }
+
+  // Labels go below their AMR, else above / right / left - wherever they cover neither another label
+  // nor another AMR. A label without a free spot is left out (the list still shows the AMR); the
+  // selected and the locked AMR always get theirs (placed first).
+  function drawLabels(labels) {
+    const labelInk = inkFor(colors["map-floor"] || "#ffffff");
     ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
     ctx.font = "600 12px system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.lineJoin = "round";
-    for (const [id, a, x, y] of labels) {
-      const text = a.data && a.data.name ? id + " · " + a.data.name : id;
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    const overlaps = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+    const bodies = hitList.map((h) => ({ x0: h.x - h.r + 6, y0: h.y - h.r + 6, x1: h.x + h.r - 6, y1: h.y + h.r - 6 }));
+    const placed = [];
+    labels.sort((a, b) => b.prio - a.prio);
+    for (const lab of labels) {
+      const text = lab.a.data && lab.a.data.name ? lab.id + " · " + lab.a.data.name : lab.id;
+      const w = ctx.measureText(text).width + 6, h = 15, gap = lab.r - 2;
+      const spots = [[lab.x - w / 2, lab.y + gap], [lab.x - w / 2, lab.y - gap - h],
+        [lab.x + gap, lab.y - h / 2], [lab.x - gap - w, lab.y - h / 2]]
+        .map(([x, y]) => ({ x0: x, y0: y, x1: x + w, y1: y + h }));
+      let spot = spots.find((box) => !placed.some((b) => overlaps(b, box))
+        && !bodies.some((b, i) => i !== lab.body && overlaps(b, box)));
+      if (!spot && lab.prio > 0) spot = spots[0];
+      if (!spot) continue;
+      placed.push(spot);
+      ctx.strokeStyle = colors["map-floor"];        // labels sit on the map: colors from the floor
       ctx.lineWidth = 4;
-      ctx.strokeText(text, x, y);
-      ctx.fillStyle = colors.text;
-      ctx.fillText(text, x, y);
+      ctx.strokeText(text, (spot.x0 + spot.x1) / 2, spot.y0 + 1);
+      ctx.fillStyle = labelInk;
+      ctx.fillText(text, (spot.x0 + spot.x1) / 2, spot.y0 + 1);
     }
   }
   function roundRect(x, y, w, h, r) {
@@ -540,7 +573,9 @@
     mini.hidden = !show;
     $("btn-minimap").setAttribute("aria-pressed", String(showMinimap));
     if (!show) return;
-    const maxW = Math.min(220, size.w * 0.3), maxH = Math.min(220, size.h * 0.35);
+    const narrow = size.w < 600;   // phone / small HMI: keep most of the map visible
+    const maxW = narrow ? Math.min(110, size.w * 0.28) : Math.min(220, size.w * 0.3);
+    const maxH = narrow ? Math.min(130, size.h * 0.25) : Math.min(220, size.h * 0.35);
     miniGeo.s = Math.min(maxW / mapInfo.width, maxH / mapInfo.height);  // minimap px per map cell
     miniGeo.w = Math.max(40, Math.round(mapInfo.width * miniGeo.s));
     miniGeo.h = Math.max(40, Math.round(mapInfo.height * miniGeo.s));
@@ -565,19 +600,21 @@
     for (const a of amrs.values()) {
       const p = poseAt(a, now);
       const [x, y] = miniPoint(p.x, p.y);
-      mctx.fillStyle = isStale() ? colors["amr-stale"] : a.color;
+      mctx.fillStyle = isStale() ? colors["amr-stale"] : amrColor(a);
       mctx.beginPath();
       mctx.arc(x, y, 3, 0, 2 * Math.PI);
       mctx.fill();
     }
     const corners = [[0, 0], [size.w, 0], [size.w, size.h], [0, size.h]].map(([sx, sy]) => miniPoint(...screenToWorld(sx, sy)));
     mctx.strokeStyle = colors.accent;
-    mctx.fillStyle = "rgba(0, 123, 192, 0.10)";
+    mctx.fillStyle = colors.accent;
     mctx.lineWidth = 1.5;
     mctx.beginPath();
     corners.forEach(([x, y], i) => (i ? mctx.lineTo(x, y) : mctx.moveTo(x, y)));
     mctx.closePath();
+    mctx.globalAlpha = 0.12;
     mctx.fill();
+    mctx.globalAlpha = 1;
     mctx.stroke();
   }
 
@@ -622,6 +659,13 @@
     const d = a.data || {};
     return [id, d.name, d.state].some((v) => v && String(v).toLowerCase().includes(f));
   }
+  // A tile per AMR: click (or Enter) on its head expands/collapses the details - only one is open,
+  // and it is the "selected" AMR (ring on the map). Only the crosshair moves the map, the lock follows.
+  function toggleSelected(id) {
+    selected = selected === id ? null : id;
+    updateList();
+    dirty = true;
+  }
   function rebuildList() {
     const list = $("amr-list");
     const f = filterText();
@@ -632,21 +676,24 @@
       const a = amrs.get(id);
       if (!matches(id, a, f)) continue;
       const followBtn = el("button", { type: "button", class: "btn-icon", title: "Lock the view to this AMR", "aria-label": "Follow " + id }, icon("lock"));
-      const centerBtn = el("button", { type: "button", class: "btn-icon", title: "Center on this AMR", "aria-label": "Center on " + id }, icon("target"));
+      const centerBtn = el("button", { type: "button", class: "btn-icon", title: "Show this AMR on the map", "aria-label": "Center on " + id }, icon("target"));
       const parts = {
         swatch: el("span", { class: "swatch" }),
         title: el("div", { class: "amr-title" }),
         sub: el("div", { class: "amr-sub" }),
         battery: el("div", { class: "battery", title: "Battery" }, el("span")),
+        details: el("dl", { class: "amr-details", hidden: true }),
         followBtn,
       };
-      parts.swatch.style.background = a.color;
-      const li = el("li", { class: "amr", "data-id": id }, parts.swatch,
-        el("div", { class: "amr-main" }, parts.title, parts.sub), parts.battery,
-        el("div", { class: "amr-actions" }, centerBtn, followBtn));
-      li.addEventListener("click", () => { selected = id; centerOn(id); updateList(); });
-      li.addEventListener("dblclick", () => setFollow(id));
-      centerBtn.addEventListener("click", (ev) => { ev.stopPropagation(); selected = id; centerOn(id); updateList(); });
+      parts.head = el("div", { class: "amr-head", role: "button", tabindex: "0", "aria-expanded": "false",
+        title: "Show / hide details" }, parts.swatch, el("div", { class: "amr-main" }, parts.title, parts.sub),
+        parts.battery, el("div", { class: "amr-actions" }, centerBtn, followBtn));
+      const li = el("li", { class: "amr", "data-id": id }, parts.head, parts.details);
+      parts.head.addEventListener("click", () => toggleSelected(id));
+      parts.head.addEventListener("keydown", (ev) => {
+        if (ev.target === parts.head && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); toggleSelected(id); }
+      });
+      centerBtn.addEventListener("click", (ev) => { ev.stopPropagation(); centerOn(id); });
       followBtn.addEventListener("click", (ev) => { ev.stopPropagation(); setFollow(follow === id ? null : id); });
       parts.li = li;
       rows.set(id, parts);
@@ -654,6 +701,23 @@
     }
     listIds = ids.join("\n") + "|" + f;
     updateList();
+  }
+  function fmtValue(v) {
+    if (typeof v === "boolean") return v ? "yes" : "no";
+    if (typeof v === "number") return Number.isInteger(v) ? String(v) : String(Math.round(v * 1000) / 1000);
+    return String(v);
+  }
+  function fillDetails(dl, id, d) {
+    const items = [];
+    if (d.name) items.push(["Name", d.name]);
+    items.push(["State", d.state || "–"]);
+    if (typeof d.battery === "number") items.push(["Battery", Math.round(d.battery) + " %"]);
+    items.push(["Position", "x " + fmtNum(d.x) + "   y " + fmtNum(d.y)]);
+    items.push(["Heading", (Math.round(d.rotation * 10) / 10) + "°"]);
+    if (typeof d.speed === "number") items.push(["Speed", (d.speed / cfg.unitsPerMeter).toFixed(2) + " m/s"]);
+    if (fleetStatus && fleetStatus.ageMs != null) items.push(["Updated", (fleetStatus.ageMs / 1000).toFixed(1) + " s ago"]);
+    for (const [k, v] of Object.entries(d.info || {}).slice(0, MAX_DETAIL_INFO)) items.push([humanize(k), fmtValue(v)]);
+    dl.replaceChildren(...items.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]));
   }
   function updateList() {
     const f = filterText();
@@ -663,15 +727,20 @@
     for (const [id, r] of rows) {
       const a = amrs.get(id);
       const d = a.data || {};
+      r.swatch.style.background = amrColor(a);
       r.title.replaceChildren(document.createTextNode(id), d.name ? el("span", { class: "muted", text: " · " + d.name }) : "");
-      r.sub.textContent = (d.state ? d.state + " · " : "") + "x " + fmtNum(d.x) + "  y " + fmtNum(d.y) + "  " + Math.round(d.rotation) + "°";
+      r.sub.textContent = (d.state || "–") + (typeof d.battery === "number" ? " · " + Math.round(d.battery) + " %" : "");
       r.battery.hidden = typeof d.battery !== "number";
       if (typeof d.battery === "number") {
         r.battery.firstChild.style.width = clamp(d.battery, 0, 100) + "%";
         r.battery.className = "battery" + (d.battery < 20 ? " low" : d.battery < 40 ? " mid" : "");
         r.battery.title = "Battery " + Math.round(d.battery) + " %";
       }
-      r.li.classList.toggle("selected", id === selected);
+      const open = id === selected;
+      r.li.classList.toggle("selected", open);
+      r.head.setAttribute("aria-expanded", String(open));
+      r.details.hidden = !open;
+      if (open) fillDetails(r.details, id, d);
       r.li.classList.toggle("stale", stale);
       r.followBtn.classList.toggle("on", id === follow);
       r.followBtn.setAttribute("aria-pressed", String(id === follow));
@@ -681,7 +750,7 @@
     if (!amrs.size) {
       empty.replaceChildren(document.createTextNode("No AMRs. Write the fleet JSON to the Data Layer node "),
         el("code", { text: PREFIX.slice(1) + "/fleet/amrs" }),
-        document.createTextNode(" or switch on the simulation in the settings."));
+        document.createTextNode(canWrite ? " or switch on the simulation in the settings." : "."));
     } else if (!rows.size) {
       empty.textContent = "No AMR matches the filter.";
     }
@@ -737,6 +806,8 @@
     try {
       const s = await api("GET", "/status");
       canWrite = !!s.canWrite;
+      $("btn-settings").hidden = !canWrite;          // read-only users get no settings at all
+      if (!canWrite && !$("drawer").hidden) closeSettings();
       document.title = s.title;
       $("app-title").textContent = s.title;
       $("app-version").textContent = /^\d/.test(s.version) ? "v" + s.version : s.version;
@@ -750,11 +821,62 @@
     }
   }
 
-  function applySettings(s) {
-    cfg.unitsPerMeter = s.map.unitsPerMeter;
-    cfg.amrLength = s.fleet.amrLengthM * s.map.unitsPerMeter;
-    cfg.amrWidth = s.fleet.amrWidthM * s.map.unitsPerMeter;
-    cfg.refreshMs = s.display.refreshIntervalMs;
+  // What the view needs (GET /view-config, also for read-only users): units, AMR size, colors.
+  function applyViewConfig(v) {
+    cfg.unitsPerMeter = v.unitsPerMeter;
+    cfg.amrLength = v.amrLengthM * v.unitsPerMeter;
+    cfg.amrWidth = v.amrWidthM * v.unitsPerMeter;
+    cfg.refreshMs = v.refreshIntervalMs;
+    applyStyle(v.style);
+    dirty = true;
+  }
+  function viewConfigFrom(s) {   // the same from full settings (after saving them)
+    return { style: s.style, unitsPerMeter: s.map.unitsPerMeter, amrLengthM: s.fleet.amrLengthM,
+      amrWidthM: s.fleet.amrWidthM, staleAfterMs: s.fleet.staleAfterMs, refreshIntervalMs: s.display.refreshIntervalMs };
+  }
+  async function loadViewConfig() {
+    try {
+      const v = await api("GET", "/view-config");
+      const json = JSON.stringify(v);
+      if (json !== viewConfigJson && $("drawer").hidden) {   // don't disturb a preview in the settings
+        viewConfigJson = json;
+        applyViewConfig(v);
+      }
+    } catch (e) { /* keep the current one; refreshStatus reports connection problems */ }
+  }
+
+  // Styling (settings "style"): the three base colors set the page chrome - background, lines and
+  // secondary text are derived in style.css with color-mix(); the map colors go to the canvas.
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+  function inkFor(hex) {   // readable text on a colored button: dark on light colors, white on dark
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#1f2328" : "#ffffff";
+  }
+  function applyStyle(style) {
+    if (!style) return;
+    const root = document.documentElement.style;
+    const set = (name, value) => { if (HEX.test(value || "")) { root.setProperty("--" + name, value); colors[name] = value; } };
+    set("accent", style.accent);
+    set("card", style.panel);
+    set("text", style.text);
+    set("map-bg", style.mapBackground);
+    set("map-floor", style.mapFloor);
+    set("map-grid", style.mapGrid);
+    set("amr-stale", style.staleAmr);
+    if (HEX.test(style.accent || "")) root.setProperty("--accent-ink", inkFor(style.accent));
+    const palette = (style.amrColors || []).filter((c) => HEX.test(c));
+    if (palette.length) amrPalette = palette;
+    if (HEX.test(style.mapWalls || "")) {
+      root.setProperty("--map-wall", style.mapWalls);
+      colors["map-wall"] = style.mapWalls;
+      const hex = style.mapWalls.slice(1).toLowerCase();
+      if (hex !== wallHex) {            // tiles are drawn by the server in the wall color: fetch again
+        wallHex = hex;
+        if (mapInfo) { resetTiles(); loadOverview(); }
+      }
+    }
+    updateList();
     dirty = true;
   }
 
@@ -930,6 +1052,10 @@
         continue;
       }
       const id = "f-" + full.replace(/\./g, "-");
+      if (rule.format === "color") {
+        container.append(colorField(id, full, label, rule, Array.isArray(def)));
+        continue;
+      }
       let input;
       if (Array.isArray(rule.enum)) {
         input = el("select", { id });
@@ -954,6 +1080,75 @@
     }
   }
 
+  // A color: picker + hex text field kept in step; the text field carries data-path (it is the value).
+  function colorInput(value, onChange) {
+    const picker = el("input", { type: "color", class: "color-picker", "aria-label": "Pick a color" });
+    const text = el("input", { type: "text", class: "color-hex", maxlength: "7", spellcheck: "false", placeholder: "#rrggbb" });
+    const sync = (v) => { text.value = v; if (HEX.test(v)) picker.value = v.toLowerCase(); };
+    picker.addEventListener("input", () => { text.value = picker.value; onChange(); });
+    text.addEventListener("input", () => { if (HEX.test(text.value)) picker.value = text.value.toLowerCase(); onChange(); });
+    sync(value || "#000000");
+    return { node: el("span", { class: "color-input" }, picker, text), picker, text, sync };
+  }
+  function colorField(id, path, label, rule, isList) {
+    const field = el("div", { class: "field" + (isList ? " field-wide" : "") });
+    if (!isList) {
+      const c = colorInput("#000000", previewStyle);
+      c.text.id = id;
+      c.text.dataset.path = path;
+      c.text.dataset.kind = "string";
+      c.text.syncColor = c.sync;
+      field.append(el("label", { for: id, text: label }), c.node);
+    } else {
+      const box = el("div", { class: "color-list", id });
+      box.dataset.path = path;
+      box.dataset.kind = "colors";
+      box.dataset.max = rule.maxItems || 16;
+      box.dataset.min = rule.minItems || 1;
+      field.append(el("label", { text: label }), box);
+    }
+    if (rule.help) field.append(el("div", { class: "help", text: rule.help }));
+    return field;
+  }
+  function fillColorList(box, values) {
+    const items = values.map((v) => {
+      const c = colorInput(v, previewStyle);
+      const remove = el("button", { type: "button", class: "btn-icon btn-remove", title: "Remove this color", "aria-label": "Remove color" }, icon("close"));
+      remove.addEventListener("click", () => {
+        if (box.querySelectorAll(".color-item").length > Number(box.dataset.min)) { item.remove(); previewStyle(); updateColorListButtons(box); }
+      });
+      const item = el("span", { class: "color-item" }, c.node, remove);
+      return item;
+    });
+    const add = el("button", { type: "button", class: "btn btn-small btn-add", text: "+ Color" });
+    add.addEventListener("click", () => {
+      const current = readColorList(box);
+      const defaults = (meta && meta.defaults.style.amrColors) || ["#888888"];
+      fillColorList(box, current.concat([defaults[current.length % defaults.length]]));
+      previewStyle();
+    });
+    box.replaceChildren(...items, add);
+    updateColorListButtons(box);
+  }
+  function updateColorListButtons(box) {
+    const n = box.querySelectorAll(".color-item").length;
+    for (const b of box.querySelectorAll(".btn-remove")) b.disabled = !canWrite || n <= Number(box.dataset.min);
+    const add = box.querySelector(".btn-add");
+    if (add) add.disabled = !canWrite || n >= Number(box.dataset.max);
+  }
+  function readColorList(box) { return [...box.querySelectorAll(".color-hex")].map((t) => t.value.trim()); }
+  function previewStyle() {   // live preview while editing; Revert / closing restores the saved one
+    if (!loaded) return;
+    applyStyle(readForm().style);
+  }
+  function defaultColors() {
+    const style = meta.defaults.style;
+    const current = readForm();
+    current.style = JSON.parse(JSON.stringify(style));
+    fillForm(current, true);
+    previewStyle();
+  }
+
   function getAt(obj, path) { return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj); }
   function setAt(obj, path, value) {
     const parts = path.split("."); let o = obj;
@@ -961,15 +1156,18 @@
     o[parts[parts.length - 1]] = value;
   }
 
-  function fillForm(settings) {
+  function fillForm(settings, keepErrors) {
     for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
       const v = getAt(settings, input.dataset.path);
-      if (input.type === "checkbox") input.checked = !!v;
+      if (input.dataset.kind === "colors") fillColorList(input, Array.isArray(v) ? v : []);
+      else if (input.type === "checkbox") input.checked = !!v;
       else if (input.dataset.kind === "array") input.value = JSON.stringify(v ?? []);
+      else if (input.syncColor) input.syncColor(v ?? "");
       else input.value = v ?? "";
       input.disabled = !canWrite;
-      input.closest(".field").classList.remove("invalid");
+      if (!keepErrors) input.closest(".field").classList.remove("invalid");
     }
+    for (const b of document.querySelectorAll("#settings-fields .color-picker, #settings-fields .color-hex")) b.disabled = !canWrite;
     for (const id of ["btn-save", "btn-revert", "btn-defaults"]) $(id).disabled = !canWrite;
   }
 
@@ -980,7 +1178,8 @@
       if (input.type === "checkbox") v = input.checked;
       else if (input.dataset.kind === "number") v = input.value === "" ? NaN : Number(input.value);
       else if (input.dataset.kind === "array") { try { v = JSON.parse(input.value || "[]"); } catch (e) { v = input.value; } }
-      else v = input.value;
+      else if (input.dataset.kind === "colors") v = readColorList(input);
+      else v = input.value.trim();
       setAt(result, input.dataset.path, v);
     }
     return result;
@@ -991,7 +1190,7 @@
     list.replaceChildren(...(errors || []).map((m) => el("li", { text: m })));
     list.hidden = !errors || !errors.length;
     for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      const bad = (errors || []).some((m) => m.startsWith(input.dataset.path + ":"));
+      const bad = (errors || []).some((m) => m.startsWith(input.dataset.path + ":") || m.startsWith(input.dataset.path + "["));
       input.closest(".field").classList.toggle("invalid", bad);
     }
   }
@@ -1003,9 +1202,15 @@
         const container = $("settings-fields");
         container.replaceChildren();
         buildFields(container, meta.defaults, "");
+        const styleSet = $("f-style-accent") && $("f-style-accent").closest("fieldset");
+        if (styleSet) {
+          const btn = el("button", { type: "button", class: "btn btn-small", id: "btn-default-colors", text: "Default colors" });
+          btn.addEventListener("click", defaultColors);
+          styleSet.querySelector("legend").after(el("div", { class: "fieldset-tools" }, btn,
+            el("span", { class: "muted", text: "Changes show right away; Save keeps them for everyone." })));
+        }
       }
       loaded = await api("GET", "/settings");
-      applySettings(loaded);
       fillForm(loaded);
       showErrors([]);
     } catch (e) {
@@ -1018,7 +1223,8 @@
     $("save-state").textContent = "Saving…";
     try {
       loaded = await api("PUT", "/settings", readForm());
-      applySettings(loaded);
+      viewConfigJson = "";
+      applyViewConfig(viewConfigFrom(loaded));
       fillForm(loaded);
       showErrors([]);
       $("save-state").textContent = "Saved " + new Date().toLocaleTimeString();
@@ -1033,17 +1239,27 @@
     if (!confirm("Reset all settings to their defaults?")) return;
     try {
       loaded = await api("POST", "/settings/reset");
-      applySettings(loaded); fillForm(loaded); showErrors([]);
+      viewConfigJson = "";
+      applyViewConfig(viewConfigFrom(loaded)); fillForm(loaded); showErrors([]);
       $("save-state").textContent = "Defaults restored";
       loadMap();
     } catch (e) { showErrors([e.message]); }
   }
 
-  function openSettings() { $("drawer").hidden = false; $("save-state").textContent = ""; loadSettings(); }
-  function closeSettings() { $("drawer").hidden = true; canvas.focus({ preventScroll: true }); }
+  function openSettings() {
+    if (!canWrite) return;   // read-only users: no settings (the API answers 403 anyway)
+    $("drawer").hidden = false;
+    $("save-state").textContent = "";
+    loadSettings();
+  }
+  function closeSettings() {
+    $("drawer").hidden = true;
+    if (loaded) applyStyle(loaded.style);   // drop an unsaved preview
+    canvas.focus({ preventScroll: true });
+  }
 
   $("settings-form").addEventListener("submit", saveSettings);
-  $("btn-revert").addEventListener("click", () => { fillForm(loaded); showErrors([]); $("save-state").textContent = ""; });
+  $("btn-revert").addEventListener("click", () => { fillForm(loaded); applyStyle(loaded.style); showErrors([]); $("save-state").textContent = ""; });
   $("btn-defaults").addEventListener("click", resetDefaults);
   $("btn-settings").addEventListener("click", openSettings);
   $("btn-close-settings").addEventListener("click", closeSettings);
@@ -1058,12 +1274,12 @@
     new ResizeObserver(() => { resize(); layoutMinimap(); }).observe($("mapwrap"));
     resize();
     await refreshStatus();
-    await loadSettings();
+    await loadViewConfig();
     await loadMap();
     updateList();
     requestAnimationFrame(frame);
     pollFleet();
-    setInterval(refreshStatus, 5000);
+    setInterval(() => { refreshStatus(); loadViewConfig(); }, 5000);   // picks up style changes of others
     if (location.hash === "#settings") openSettings();
   })();
 })();

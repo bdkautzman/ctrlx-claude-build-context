@@ -1,6 +1,7 @@
 """Built-in simulation: navigation grid, paths and the published fleet JSON."""
 
 import json
+import math
 import unittest
 
 from app.fleet import parse_fleet
@@ -95,6 +96,51 @@ class SimulatorTest(unittest.TestCase):
         later = parse_fleet(sim.step(1.0))
         self.assertTrue(any((a["x"], a["y"], a["rotation"]) != (b["x"], b["y"], b["rotation"])
                             for a, b in zip(amrs, later)))   # something moves
+
+    def test_amrs_keep_their_distance(self):
+        sim = Simulator(FakeMaps(room_map(size=60)), publish=None, seed=3)
+        cfg = settings(count=5)
+        cfg["fleet"].update(amrLengthM=2.0, amrWidthM=1.4)    # clearance 2.56 m = 25.6 map units
+        sim.configure(cfg)
+        clearance = sim._cfg["clearance"]
+        sim.step(0.2)
+        start = [(a.x, a.y) for a in sim._amrs]
+        self.assertTrue(all(math.hypot(a[0] - b[0], a[1] - b[1]) >= clearance
+                            for i, a in enumerate(start) for b in start[i + 1:]), "spawned apart")
+        closest, states = float("inf"), set()
+        for _ in range(500):
+            amrs = json.loads(sim.step(0.4))["amrs"]
+            states.update(a["state"] for a in amrs)
+            for i, a in enumerate(amrs):
+                for b in amrs[i + 1:]:
+                    closest = min(closest, math.hypot(a["x"] - b["x"], a["y"] - b["y"]))
+        self.assertGreaterEqual(closest, clearance - 0.05)
+        self.assertGreater(sum(a.trips for a in sim._amrs), 4, "they still get somewhere (no deadlock)")
+        self.assertIn("info", amrs[0])
+
+    def test_no_deadlock_in_narrow_corridors(self):
+        """Regression (0.2.0 on the COREvirtual): on the bundled map - narrow free space - all AMRs stayed
+        'blocked' for minutes: after replanning they first went back to their own cell centre, i.e.
+        towards the AMR that blocked them."""
+        import os
+        from app import config
+        sim = Simulator(FakeMaps(OccupancyMap.from_file(os.path.join(config.BUNDLED_MAPS_DIR, "HMI_Map.txt"))),
+                        publish=None, seed=2)
+        cfg = settings(count=4)
+        cfg["map"]["unitsPerMeter"] = 1000.0
+        cfg["fleet"].update(amrLengthM=1.0, amrWidthM=0.7)
+        cfg["simulation"]["speedMps"] = 0.8
+        sim.configure(cfg)
+        stuck = longest = 0
+        for _ in range(1500):       # 5 simulated minutes at the real step (INTERVAL_S); old code: 223 s stuck
+            amrs = json.loads(sim.step(0.2))["amrs"]
+            if all(a["state"] in ("blocked", "waiting") for a in amrs) and any(a["state"] == "blocked" for a in amrs):
+                stuck += 1
+                longest = max(longest, stuck)
+            else:
+                stuck = 0
+        self.assertLess(longest * 0.2, 30, "all AMRs stuck for {:.0f} s".format(longest * 0.2))
+        self.assertGreater(sum(a.trips for a in sim._amrs), 40)
 
     def test_count_unit_and_disable(self):
         sim = Simulator(FakeMaps(room_map()), publish=None)

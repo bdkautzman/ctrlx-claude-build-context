@@ -34,7 +34,8 @@
       <span id="sim-badge" class="pill pill-sim" hidden title="AMRs come from the built-in simulation (settings)">Simulation</span>
       <span id="fleet-pill" class="pill pill-unknown" title="Fleet data">Fleet: …</span>
       <span id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</span>
-      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon"><svg class="ic"><use href="#i-sliders"/></svg>Settings</button>
+      <!-- hidden until /status says the user may change settings (read-only users never see it) -->
+      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" hidden title="Settings" aria-label="Settings"><svg class="ic"><use href="#i-sliders"/></svg><span class="btn-label">Settings</span></button>
     </div>
   </header>
 

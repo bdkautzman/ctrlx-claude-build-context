@@ -149,7 +149,7 @@ class WebApiTest(unittest.TestCase):
         self.assertTrue(body["errors"])
 
     def test_values(self):
-        status, body = self.req("GET", config.API_PREFIX + "/values", scopes=(config.SCOPE_READ,))
+        status, body = self.req("GET", config.API_PREFIX + "/values")
         self.assertEqual(status, 200)
         self.assertIn("fleet/amrs", body)
         status, _ = self.req("PUT", config.API_PREFIX + "/values/status/heartbeat", {"value": 1})
@@ -179,6 +179,54 @@ class WebApiTest(unittest.TestCase):
         status, _ = self.req("PUT", config.API_PREFIX + "/values/fleet/amrs", {"value": fleet_json},
                              scopes=(config.SCOPE_READ,))
         self.assertEqual(status, 403)
+
+    def test_read_only_users_get_no_settings(self):
+        reader = (config.SCOPE_READ,)
+        for path in ("/settings", "/settings/meta", "/values"):   # /values holds settings/active
+            status, _ = self.req("GET", config.API_PREFIX + path, scopes=reader)
+            self.assertEqual(status, 403, path)
+        status, view = self.req("GET", config.API_PREFIX + "/view-config", scopes=reader)
+        self.assertEqual(status, 200)
+        self.assertEqual(set(view), {"style", "unitsPerMeter", "amrLengthM", "amrWidthM", "staleAfterMs",
+                                     "refreshIntervalMs"})
+        self.assertRegex(view["style"]["accent"], r"^#[0-9a-f]{6}$")
+        self.assertGreaterEqual(len(view["style"]["amrColors"]), 1)
+        status, _ = self.req("GET", config.API_PREFIX + "/view-config", scopes=None)
+        self.assertEqual(status, 401)
+        status, s = self.req("GET", config.API_PREFIX + "/status", scopes=reader)
+        self.assertFalse(s["canWrite"])
+
+    def test_style_settings_validated(self):
+        status, body = self.req("PUT", config.API_PREFIX + "/settings",
+                                {"style": {"accent": "#12ab34", "amrColors": ["#000000", "#ffffff"]}})
+        self.assertEqual(status, 200)
+        status, view = self.req("GET", config.API_PREFIX + "/view-config", scopes=(config.SCOPE_READ,))
+        self.assertEqual((view["style"]["accent"], view["style"]["amrColors"]), ("#12ab34", ["#000000", "#ffffff"]))
+        status, problem = self.req("PUT", config.API_PREFIX + "/settings",
+                                   {"style": {"accent": "blue", "amrColors": ["#12345", "#123456"]}})
+        self.assertEqual(status, 400)
+        self.assertIn("style.accent: invalid format", problem["errors"])
+        self.assertIn("style.amrColors[0]: invalid format", problem["errors"])
+        status, problem = self.req("PUT", config.API_PREFIX + "/settings", {"style": {"amrColors": []}})
+        self.assertIn("style.amrColors: at least 1 entries", problem["errors"])
+        self.req("POST", config.API_PREFIX + "/settings/reset")
+
+    def test_widget_files(self):
+        """Home screen widget: static script + image, tag and URL consistent with the manifest."""
+        manifest_file = os.path.join(HERE, "..", "configs", "package-assets", config.SNAP_NAME + ".package-manifest.json")
+        with open(manifest_file, encoding="utf-8") as f:
+            widgets = json.load(f)["uiExtensions"]["dashboard"]
+        self.assertEqual(len(widgets), 1)
+        w = widgets[0]
+        for key in ("src", "image"):
+            self.assertTrue(w[key].startswith(config.URL_PREFIX + "/"), key)
+            status, body = self.req("GET", w[key], scopes=None)   # static: the ctrlX UI loads it without header
+            self.assertEqual(status, 200, w[key])
+        status, script = self.req("GET", w["src"], scopes=None)
+        self.assertIn('TAG = "{}"'.format(w["tag"]).encode(), script)
+        self.assertIn(b'sessionStorage.getItem("idm_token")', script)
+        self.assertEqual(set(w["permissions"]), {config.SCOPE_READ, config.SCOPE_WRITE})
+        self.assertTrue(w["tag"].startswith(config.SNAP_NAME + "-"))
 
     def test_map_and_tiles(self):
         status, info = self.req("GET", config.API_PREFIX + "/map", scopes=(config.SCOPE_READ,))
