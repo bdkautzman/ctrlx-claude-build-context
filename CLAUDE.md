@@ -1,9 +1,13 @@
 # ctrlX OS app development kit
 
-Python snaps for **ctrlX OS 4.6** (Bosch Rexroth ctrlX CORE / COREvirtual). Every app has a web
-UI behind the ctrlX reverse proxy, Data Layer nodes, and a settings JSON in ctrlX app data.
+Python snaps for **ctrlX OS 4.6** (Bosch Rexroth ctrlX CORE / COREvirtual), tested on the COREvirtual first,
+then on a real CORE. Every app has a web UI behind the ctrlX reverse proxy, Data Layer nodes, and a settings
+JSON in ctrlX app data (saved and loaded with configurations).
 
-First session in this folder? Read `docs/HANDOFF.md` (decisions so far + open verification tasks).
+The user prefers more work up front for fewer problems later: verify on the device, test, record what you
+learn in `docs/ctrlx/gotchas.md`, and bring generic fixes from an app back into the template/tools/docs.
+Why things are the way they are: `docs/ctrlx/decisions.md` - read it before changing an architectural choice.
+Current state of the kit and open items: `README.md` → "Status"; apps: `apps/README.md`.
 
 ## Pinned baseline (never change without the human)
 - base `core24`, snapcraft 8.x, ctrlX AUTOMATION SDK 4.6.0, `ctrlx-datalayer<=3.6` + `ctrlx-fbs`
@@ -73,3 +77,4 @@ python3 -m unittest discover -s tools/tests    # self-test of the checker
 | settings / app data | `docs/ctrlx/app-data-settings.md` |
 | build, deploy, debug | `docs/ctrlx/build-deploy-test.md`, then `docs/ctrlx/gotchas.md` |
 | release | `docs/ctrlx/release-and-validation.md` |
+| an architectural choice (why X, not Y) | `docs/ctrlx/decisions.md` |

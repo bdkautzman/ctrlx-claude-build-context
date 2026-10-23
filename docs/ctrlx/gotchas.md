@@ -276,7 +276,7 @@ App `ctrlx-amr-fleet` 0.2.0 (styling, read-only users, home screen widget), 2026
     (`/automationcore/widgets.js`, `/motion/widgets.js`, `/opcua-client/widgets.js`) read it there and send
     `Authorization: Bearer`. Widgets share the ctrlX UI's origin, so the app's restricted `/api` works
     directly. Details: web-ui-and-reverse-proxy.md → "Home screen widgets". (Found by reading the bundles;
-    the widget itself is not yet seen on a real home screen - see HANDOFF.)
+    the widget itself was verified on a real home screen later the same day: #57.)
 54. **UI test pitfalls with a second page in the same tab**: Playwright `page.set_content()` replaces the
     document but keeps the window - the old page's `setInterval`/`requestAnimationFrame` keep running and
     throw "Cannot read properties of null" on the new document. An SVG document can't be rewritten at

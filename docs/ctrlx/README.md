@@ -17,6 +17,7 @@ disagree, the upstream file wins, and the disagreement belongs in `gotchas.md`.
 | `build-deploy-test.md` | build, install on COREvirtual, read logs, debug |
 | `release-and-validation.md` | prepare a release or the Bosch validation artifacts |
 | `gotchas.md` | **before** debugging anything: known problems and fixes |
+| `decisions.md` | want to change an architectural choice: what was decided and why |
 | `sources.md` | need provenance (repos, commits, URLs) |
 
 Upstream SDK docs worth opening directly (in `upstream-sdk-4.6.0/`):
