@@ -13,13 +13,13 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 - base `core24`, snapcraft 8.x, ctrlX AUTOMATION SDK 4.6.0, `ctrlx-datalayer<=3.6` + `ctrlx-fbs`
 - package-manifest schema v1.7, Python 3.12 in the snap, stdlib-only web server
 - Unofficial, unlicensed apps: no ctrlX license check (`licensing-service`, manifest `licenses`)
-- Optional UI tests: Playwright 1.64.1 + its headless Chromium (`tools/setup-ui-test.sh`, in `~/.cache`)
+- Optional UI tests: Playwright 1.64.1 + its headless Chromium, pypdfium2 5.14.0 for PDF checks (`tools/setup-ui-test.sh`, in `~/.cache`)
 - Details: `docs/ctrlx/platform-baseline.md`
 
 ## Layout
 - `apps/<snap-name>/` – the apps (create with `python3 tools/new_app.py ...`, never by hand-copying)
 - `templates/python-webapp/` – reference implementation; keep it working, don't put app code in it
-- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `ui_check.py` (web UI in headless Chromium, screenshots; setup once: `setup-ui-test.sh`), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
+- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `ui_check.py` (web UI in headless Chromium, screenshots; setup once: `setup-ui-test.sh`), `pdf_check.py` (PDF pages → PNG), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
 - `docs/ctrlx/` – curated rules; start at `docs/ctrlx/README.md`; `upstream-sdk-4.6.0/` = verbatim SDK docs
 - `reference/` – read-only: Data Layer API source, SDK samples, REST specs, example apps (see `reference/README.md`)
 
@@ -58,11 +58,13 @@ python3 tools/new_app.py --name ctrlx-<company>-<app> --title "<Title>" --author
 tools/check.sh apps/<app> [--release] [--pre-build] [--snap file.snap]
 cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  (no ctrlX needed)
 python3 tools/ui_check.py apps/<app> [--narrow] [--role reader] [--device [NAME]]   # headless Chromium + screenshots (~1-2 min)
+python3 tools/pdf_check.py <file.pdf> [--text]  # a generated PDF: PDFium opens it, pages -> PNG to look at
 cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh; incremental, --clean for hand-over builds
 tools/ctrlx.py devices                         # test devices from devices.toml: virtual (amd64), core (arm64)
 tools/ctrlx.py [--device core] install apps/<app>/<snap>_<ver>_<arch>.snap --service   # --service: ask first
 tools/make-app.sh apps/<app> [--build] [--sign <oem-cert> <key>]   # optional, on request: one .app for amd64 + arm64
 tools/ctrlx.py [--device core] dl-read <snap>/status/heartbeat | appdata <snap>/settings.json | logs --snap <snap> | state
+tools/ctrlx.py [--device core] api GET /<snap>/api/v1/status [--data JSON] [--out file]   # the app's own API on the device
 tools/ctrlx.py [--device core] ssh 'sudo snap logs -n 50 <snap>'
 python3 -m unittest discover -s tools/tests    # self-test of the checker
 ```

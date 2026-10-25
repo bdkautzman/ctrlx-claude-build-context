@@ -1,0 +1,89 @@
+{
+  "settingsVersion": 1,
+  "general": {
+    "logLevel": "INFO",
+    "heartbeatIntervalMs": 1000
+  },
+  "scan": {
+    "maxAddresses": 1024
+  },
+  "history": {
+    "maxScans": 100,
+    "maxMegabytes": 20
+  },
+  "profiles": [
+    {
+      "id": "quick",
+      "name": "Quick inventory",
+      "targets": "auto",
+      "exclude": "",
+      "tcpPorts": "common",
+      "udpPorts": "",
+      "discoverNeighbors": true,
+      "discoverTcp": true,
+      "discoverMulticast": true,
+      "assumeAlive": false,
+      "serviceDetection": true,
+      "identifyAutomation": false,
+      "resolveNames": true,
+      "timeoutMs": 1000,
+      "retries": 0,
+      "concurrency": 32,
+      "ratePerSecond": 100,
+      "scheduleMode": "off",
+      "scheduleIntervalMinutes": 60,
+      "scheduleTimes": "02:00",
+      "scheduleDays": ""
+    },
+    {
+      "id": "automation",
+      "name": "Automation devices",
+      "targets": "auto",
+      "exclude": "",
+      "tcpPorts": "industrial, web, 21, 22, 23",
+      "udpPorts": "industrial",
+      "discoverNeighbors": true,
+      "discoverTcp": true,
+      "discoverMulticast": true,
+      "assumeAlive": false,
+      "serviceDetection": true,
+      "identifyAutomation": true,
+      "resolveNames": true,
+      "timeoutMs": 1500,
+      "retries": 1,
+      "concurrency": 16,
+      "ratePerSecond": 50,
+      "scheduleMode": "off",
+      "scheduleIntervalMinutes": 240,
+      "scheduleTimes": "02:00",
+      "scheduleDays": ""
+    },
+    {
+      "id": "deep",
+      "name": "Deep (well-known ports + UDP)",
+      "targets": "auto",
+      "exclude": "",
+      "tcpPorts": "well-known, common",
+      "udpPorts": "common",
+      "discoverNeighbors": true,
+      "discoverTcp": true,
+      "discoverMulticast": true,
+      "assumeAlive": false,
+      "serviceDetection": true,
+      "identifyAutomation": true,
+      "resolveNames": true,
+      "timeoutMs": 1000,
+      "retries": 0,
+      "concurrency": 32,
+      "ratePerSecond": 100,
+      "scheduleMode": "off",
+      "scheduleIntervalMinutes": 1440,
+      "scheduleTimes": "03:00",
+      "scheduleDays": "sun"
+    }
+  ],
+  "lists": {
+    "whitelist": [],
+    "blacklist": []
+  }
+}

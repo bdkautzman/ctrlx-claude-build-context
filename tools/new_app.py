@@ -55,7 +55,7 @@ def main():
         skip = set(common(directory, names))
         if os.path.abspath(directory) == os.path.abspath(TEMPLATE):
             # snapcraft build output and local venv of the template (after a template build)
-            skip |= {n for n in names if n in ("parts", "stage", "prime", "overlay", ".venv")}
+            skip |= {n for n in names if n in ("parts", "stage", "prime", "overlay", ".venv", ".craft")}
         return skip
 
     shutil.copytree(TEMPLATE, dest, ignore=ignore)

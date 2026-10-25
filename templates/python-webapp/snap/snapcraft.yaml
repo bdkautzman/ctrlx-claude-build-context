@@ -12,7 +12,7 @@
 
 name: ctrlx-acme-template
 title: Template App
-version: 0.1.6
+version: 0.1.7
 summary: ctrlX OS app template with web UI, Data Layer nodes and app-data settings
 description: |
   <!--

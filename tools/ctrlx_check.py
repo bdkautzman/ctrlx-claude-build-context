@@ -320,7 +320,31 @@ def check_snapcraft(app_dir, rep, ctx, release):
             rep.warn("PART-PY-SOURCE", "python part '{}' has source '.': every change in the app folder rebuilds the "
                      "venv (~8 min in the App Build Environment). Put pyproject.toml + app/ into src/ and use "
                      "'source: src' (docs/ctrlx/gotchas.md #47)".format(pname), where)
+    check_staged_dirs(app_dir, parts, rep, where)
     return snap
+
+
+# top-level folders of an app that are not needed in the snap (or reach it through another part)
+NOT_STAGED_DIRS = {"src", "tests", "snap", "validation", "scripts", "docs", "configs", "wrapper", "parts", "stage",
+                   "prime", "overlay", "build", "dist", "venv", ".venv", ".dev", ".ui-check", ".craft", ".git",
+                   "__pycache__", "node_modules"}
+
+
+def check_staged_dirs(app_dir, parts, rep, where):
+    """A dump part with `source: .` and a `stage:` list only puts the listed paths into the snap: a new
+    top-level folder (e.g. data/) that is not listed is silently missing on the device."""
+    for pname, part in parts.items():
+        part = part or {}
+        if part.get("plugin") != "dump" or str(part.get("source", "")).rstrip("/") not in (".", "") or "stage" not in part:
+            continue
+        covered = {str(s).strip("/").split("/")[0] for s in as_list(part.get("stage"))}
+        covered |= {str(k).strip("/").split("/")[0] for k in ((part.get("organize") or {}).keys())}
+        for entry in sorted(os.listdir(app_dir)):
+            if (os.path.isdir(os.path.join(app_dir, entry)) and entry not in NOT_STAGED_DIRS
+                    and entry not in covered and not entry.startswith(".")):
+                rep.warn("PART-STAGE-DIR", "folder '{}/' is not in the stage list of part '{}': it will be missing in "
+                         "the snap. Add it to stage: (or to NOT_STAGED_DIRS in tools/ctrlx_check.py if it is a "
+                         "development-only folder)".format(entry, pname), where)
 
 
 # ---------------------------------------------------------------------------

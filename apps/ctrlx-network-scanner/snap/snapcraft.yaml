@@ -1,0 +1,138 @@
+# Network Scanner — inventory of the networks the ctrlX CORE is connected to (web UI, Data Layer, app data)
+# Target: ctrlX OS 4.6 (Ubuntu Core 24)  |  SDK 4.6.0  |  snapcraft 8.x
+#
+# Rules this file must keep (enforced by tools/check.sh):
+#   - name: starts with "ctrlx-", lowercase, <= 32 chars (<= 29 keeps the socket path short enough)
+#   - base: core24, confinement: strict, grade: stable for releases
+#   - description contains the <!-- author/url --> HTML comment + >= 16 chars of text
+#   - version is MAJOR.MINOR.PATCH and must increase with every release
+#   - restart-delay >= 5s
+#   - only plugs/slots that are listed in validation/slotplug-description.json
+#   - NO reserved interfaces (docs/ctrlx/reserved-interfaces-and-ports.md)
+
+name: ctrlx-network-scanner
+title: Network Scanner
+version: 0.1.0
+summary: Scan the networks of the ctrlX CORE - hosts, ports, services, PDF reports
+description: |
+  <!--
+  author: bdkautzman
+  url: https://github.com/bdkautzman
+  -->
+  Network inventory for the networks a ctrlX CORE is connected to: finds hosts (neighbor
+  table, TCP, mDNS/SSDP/WS-Discovery), open TCP/UDP ports and the services behind them
+  (banners, HTTP, TLS certificates, automation protocols). Scan profiles with load limits,
+  manual or scheduled scans, whitelist/blacklist rating, change detection, scan history,
+  PDF/CSV/JSON reports and results in the ctrlX Data Layer.
+
+base: core24
+confinement: strict
+grade: stable
+
+platforms:
+  amd64:
+  arm64:
+    build-on: [amd64, arm64]
+    build-for: [arm64]
+
+apps:
+  service:
+    command: bin/run.sh
+    daemon: simple
+    restart-condition: always
+    passthrough:
+      restart-delay: 5s
+    plugs:
+      - network
+      - network-bind
+      - datalayer
+      - active-solution
+    slots:
+      - package-assets
+      - package-run
+
+parts:
+  app:
+    plugin: python
+    # only the Python package: changes elsewhere (UI, configs, ...) do not rebuild the venv
+    source: src
+    # don't upgrade pip/setuptools/wheel in the venv (default ["pip", "setuptools", "wheel"]): saves
+    # ~2 min per Python rebuild in the App Build Environment, and they are primed out anyway
+    python-packages: []
+    stage-packages:
+      - ctrlx-datalayer
+    # The ctrlx-datalayer .deb ships build tools, headers, a static lib and the shared libs of BOTH
+    # architectures (~100 MB). At runtime only usr/lib/<triplet>/libcomm_datalayer.so* is used
+    # (ctrlxdatalayer/clib.py loads "libcomm_datalayer.so"). The venv tooling (pip, setuptools,
+    # wheel, packaging) is not needed at runtime either (and would have to be listed in fossinfo).
+    prime:
+      - -usr/bin/dl_compliance
+      - -usr/bin/mddb_compiler
+      - -usr/include
+      - -usr/lib/*/libcomm_datalayer_static.a
+      - -usr/lib/*/pkgconfig
+      - -bin/pip*
+      - -lib/python3.12/site-packages/pip
+      - -lib/python3.12/site-packages/pip-*
+      - -lib/python3.12/site-packages/setuptools
+      - -lib/python3.12/site-packages/setuptools-*
+      - -lib/python3.12/site-packages/_distutils_hack
+      - -lib/python3.12/site-packages/distutils-precedence.pth
+      - -bin/wheel
+      - -lib/python3.12/site-packages/wheel
+      - -lib/python3.12/site-packages/wheel-*
+      - -lib/python3.12/site-packages/packaging
+      - -lib/python3.12/site-packages/packaging-*
+    override-prime: |
+      craftctl default
+      for d in usr/lib/*-linux-gnu; do
+        if [ "$d" != "usr/lib/${CRAFT_ARCH_TRIPLET_BUILD_FOR}" ]; then
+          rm -f "$d"/libcomm_datalayer*
+          rmdir --ignore-fail-on-non-empty "$d"
+        fi
+      done
+
+  # Everything that is not Python in ONE dump part - in the App Build Environment every part costs
+  # 30-60 s per step (gotchas #47). Resulting layout: bin/run.sh, package-assets/<snap>/, www/, defaults/
+  files:
+    plugin: dump
+    source: .
+    organize:
+      wrapper/run.sh: bin/run.sh
+      'configs/package-assets/*': package-assets/${CRAFT_PROJECT_NAME}/
+    stage:
+      - bin/run.sh
+      - package-assets
+      - www
+      - defaults
+      - data          # oui.tsv.gz: MAC vendor list (IEEE public listing, scripts/make_oui.py)
+
+slots:
+  package-assets:
+    interface: content
+    content: package-assets
+    source:
+      read:
+        - $SNAP/package-assets/${CRAFT_PROJECT_NAME}
+  package-run:
+    interface: content
+    content: package-run
+    source:
+      write:
+        - $SNAP_DATA/package-run/${CRAFT_PROJECT_NAME}
+
+plugs:
+  datalayer:
+    interface: content
+    content: datalayer
+    target: $SNAP_DATA/.datalayer
+  active-solution:
+    interface: content
+    content: solutions
+    target: $SNAP_COMMON/solutions
+
+lint:
+  ignore:
+    - library:
+        - usr/lib/aarch64-linux-gnu/libcomm_datalayer.so.*
+        - usr/lib/x86_64-linux-gnu/libcomm_datalayer.so.*

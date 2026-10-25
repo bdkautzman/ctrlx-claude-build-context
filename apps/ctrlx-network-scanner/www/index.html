@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network Scanner</title>
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<!-- data-ui-ready: app.js sets "true" once the data is shown; tools/ui_check.py waits for it -->
+<body data-ui-ready="false">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1 id="app-title">Network Scanner</h1>
+      <span id="app-version" class="muted"></span>
+    </div>
+    <div class="topbar-right">
+      <span id="scan-pill" class="pill pill-unknown">…</span>
+      <span id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</span>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" class="tab" data-tab="overview" aria-selected="true">Overview</button>
+    <button type="button" role="tab" class="tab" data-tab="results">Results</button>
+    <button type="button" role="tab" class="tab" data-tab="history">History</button>
+    <button type="button" role="tab" class="tab" data-tab="profiles">Profiles</button>
+    <button type="button" role="tab" class="tab" data-tab="lists">Whitelist / Blacklist</button>
+    <button type="button" role="tab" class="tab" data-tab="settings">Settings</button>
+  </nav>
+
+  <div id="banner" class="banner" hidden></div>
+  <div id="readonly-note" class="note" hidden>You can view scans and download reports. Starting scans and changing
+    profiles or lists needs the permission "Manage Network Scanner".</div>
+
+  <!-- ============================== Overview ============================== -->
+  <main id="tab-overview" class="panel grid" role="tabpanel">
+    <section class="card" aria-labelledby="run-h">
+      <h2 id="run-h">Run a scan</h2>
+      <div class="row">
+        <label class="grow">Profile
+          <select id="run-profile"></select>
+        </label>
+        <button type="button" id="btn-start" class="btn btn-primary">Start scan</button>
+        <button type="button" id="btn-abort" class="btn btn-danger" hidden>Abort</button>
+      </div>
+      <p id="run-estimate" class="muted small"></p>
+      <div id="progress" class="progress-box" hidden>
+        <div class="progress-head">
+          <strong id="pg-title"></strong>
+          <span id="pg-phase" class="muted"></span>
+        </div>
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="pg-bar"></div></div>
+        <div class="progress-facts">
+          <span><b id="pg-hosts">0</b> hosts up</span>
+          <span><b id="pg-ports">0</b> open ports</span>
+          <span><b id="pg-probes">0</b> attempts</span>
+          <span id="pg-elapsed" class="muted"></span>
+        </div>
+        <ul id="pg-live" class="live-hosts"></ul>
+      </div>
+      <p class="muted small">Scans only send what a normal client of each service sends first (connection
+        attempts, banners, standard discovery and identification requests) - no logins, no passwords.
+        Load limits are part of each profile.</p>
+    </section>
+
+    <section class="card" aria-labelledby="last-h">
+      <div class="card-head">
+        <h2 id="last-h">Last scan</h2>
+        <span id="last-when" class="muted small"></span>
+      </div>
+      <div id="last-empty" class="muted">No scan yet.</div>
+      <div id="last-body" hidden>
+        <div id="last-tiles" class="tiles"></div>
+        <div class="actions">
+          <button type="button" id="btn-last-open" class="btn">Show results</button>
+          <button type="button" id="btn-last-pdf" class="btn">Download PDF</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="sched-h">
+      <h2 id="sched-h">Schedules</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Profile</th><th>Schedule</th><th>Next run</th></tr></thead>
+          <tbody id="sched-body"></tbody>
+        </table>
+      </div>
+      <p id="sched-clock" class="muted small"></p>
+    </section>
+
+    <section class="card" aria-labelledby="net-h">
+      <h2 id="net-h">Networks of this device</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Interface / MAC</th><th>Address</th><th>Network</th></tr></thead>
+          <tbody id="net-body"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <p id="net-gw" class="muted small"></p>
+    </section>
+  </main>
+
+  <!-- ============================== Results ============================== -->
+  <main id="tab-results" class="panel" role="tabpanel" hidden>
+    <section class="card">
+      <div class="row wrap">
+        <label class="grow">Scan
+          <select id="res-scan"></select>
+        </label>
+        <div class="btn-group">
+          <button type="button" id="btn-res-pdf" class="btn">PDF</button>
+          <button type="button" id="btn-res-csv" class="btn">CSV</button>
+          <button type="button" id="btn-res-json" class="btn">JSON</button>
+        </div>
+      </div>
+      <div id="res-info" class="res-info muted small"></div>
+      <div id="res-tiles" class="tiles"></div>
+      <div id="res-changes" class="changes" hidden></div>
+      <div id="res-notes" class="notes" hidden></div>
+    </section>
+    <section class="card">
+      <div class="row wrap filters">
+        <input type="search" id="res-search" placeholder="Filter: address, name, vendor, port, service…" aria-label="Filter hosts">
+        <div class="seg" role="group" aria-label="Rating filter">
+          <button type="button" class="seg-btn active" data-filter="all">All</button>
+          <button type="button" class="seg-btn" data-filter="forbidden">Forbidden</button>
+          <button type="button" class="seg-btn" data-filter="unlisted">Not listed</button>
+          <button type="button" class="seg-btn" data-filter="ok">Expected</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data hosts">
+          <thead><tr><th>Host</th><th>Name</th><th>MAC / vendor</th><th>Open ports</th><th>Rating</th></tr></thead>
+          <tbody id="res-hosts"><tr><td colspan="5" class="muted">No scan selected.</td></tr></tbody>
+        </table>
+      </div>
+      <p class="muted small">Ratings use the current whitelist and blacklist. Click a host for its ports and to add
+        findings to a list.</p>
+    </section>
+  </main>
+
+  <!-- ============================== History ============================== -->
+  <main id="tab-history" class="panel" role="tabpanel" hidden>
+    <section class="card">
+      <div class="card-head">
+        <h2>Previous scans</h2>
+        <span id="hist-usage" class="muted small"></span>
+      </div>
+      <div id="hist-chart" class="chart" aria-hidden="true"></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Started</th><th>Profile</th><th>Started by</th><th>Duration</th><th class="num">Hosts</th>
+            <th class="num">Open ports</th><th class="num" title="Forbidden findings when the scan finished">Forbidden</th>
+            <th class="num">Changes</th><th>Status</th><th></th></tr></thead>
+          <tbody id="hist-body"><tr><td colspan="10" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================== Profiles ============================== -->
+  <main id="tab-profiles" class="panel profiles" role="tabpanel" hidden>
+    <section class="card profile-list-card">
+      <h2>Profiles</h2>
+      <ul id="prof-list" class="prof-list"></ul>
+      <button type="button" id="btn-prof-new" class="btn btn-small">+ New profile</button>
+    </section>
+    <section class="card">
+      <form id="prof-form" novalidate>
+        <div class="card-head">
+          <h2 id="prof-title">Profile</h2>
+          <span id="prof-estimate" class="muted small"></span>
+        </div>
+        <div class="fields">
+          <div class="field"><label for="p-name">Name</label><input id="p-name" data-f="name" type="text" maxlength="60"></div>
+          <div class="field"><label for="p-id">ID (Data Layer scan/start)</label><input id="p-id" data-f="id" type="text" maxlength="32"></div>
+          <div class="field span2"><label for="p-targets">Targets</label>
+            <textarea id="p-targets" data-f="targets" rows="2" spellcheck="false"></textarea>
+            <div id="p-target-chips" class="chips"></div>
+            <div class="help">auto = all networks of this device · if:XF10 = one interface · 192.168.1.0/24 ·
+              192.168.1.10-50 · single addresses or host names</div></div>
+          <div class="field span2"><label for="p-exclude">Exclude</label>
+            <input id="p-exclude" data-f="exclude" type="text" spellcheck="false" placeholder="e.g. 192.168.1.1, 192.168.1.200-254">
+            <div class="help">Addresses never touched by this profile.</div></div>
+          <div class="field"><label for="p-tcp">TCP ports</label><input id="p-tcp" data-f="tcpPorts" type="text" spellcheck="false">
+            <div class="chips" data-presets="tcp"></div></div>
+          <div class="field"><label for="p-udp">UDP ports</label><input id="p-udp" data-f="udpPorts" type="text" spellcheck="false" placeholder="none">
+            <div class="chips" data-presets="udp"></div></div>
+        </div>
+        <fieldset>
+          <legend>Discovery and identification</legend>
+          <div class="checks">
+            <label class="checkbox"><input type="checkbox" data-f="discoverNeighbors"> Neighbor table (ARP) on directly connected networks</label>
+            <label class="checkbox"><input type="checkbox" data-f="discoverTcp"> TCP connection attempts to common ports</label>
+            <label class="checkbox"><input type="checkbox" data-f="discoverMulticast"> mDNS / SSDP / WS-Discovery queries</label>
+            <label class="checkbox"><input type="checkbox" data-f="assumeAlive"> Skip discovery: scan every address</label>
+            <label class="checkbox"><input type="checkbox" data-f="serviceDetection"> Service detection (banners, HTTP, TLS certificates)</label>
+            <label class="checkbox"><input type="checkbox" data-f="identifyAutomation"> Identify automation devices (Modbus, OPC UA, EtherNet/IP, ISO-on-TCP)</label>
+            <label class="checkbox"><input type="checkbox" data-f="resolveNames"> Resolve names (DNS, NetBIOS, mDNS)</label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Load limits</legend>
+          <div class="fields">
+            <div class="field"><label for="p-timeout">Timeout [ms]</label><input id="p-timeout" data-f="timeoutMs" type="number" min="100" max="10000" step="1"></div>
+            <div class="field"><label for="p-retries">Retries</label><input id="p-retries" data-f="retries" type="number" min="0" max="3" step="1"></div>
+            <div class="field"><label for="p-conc">Parallel attempts</label><input id="p-conc" data-f="concurrency" type="number" min="1" max="256" step="1"></div>
+            <div class="field"><label for="p-rate">Max. attempts per second</label><input id="p-rate" data-f="ratePerSecond" type="number" min="1" max="2000" step="1"></div>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Schedule</legend>
+          <div class="fields">
+            <div class="field"><label for="p-smode">Run</label>
+              <select id="p-smode" data-f="scheduleMode">
+                <option value="off">only manually</option>
+                <option value="interval">every … minutes</option>
+                <option value="daily">at fixed times</option>
+              </select></div>
+            <div class="field" data-when="interval"><label for="p-sint">Interval [min]</label><input id="p-sint" data-f="scheduleIntervalMinutes" type="number" min="5" max="10080" step="1"></div>
+            <div class="field" data-when="daily"><label for="p-stimes">Times (HH:MM, device time)</label><input id="p-stimes" data-f="scheduleTimes" type="text" placeholder="02:00, 14:30"></div>
+            <div class="field span2" data-when="daily"><span class="label">Days</span>
+              <div id="p-sdays" class="days"></div></div>
+          </div>
+        </fieldset>
+        <ul id="prof-errors" class="error-list" hidden></ul>
+        <div class="actions">
+          <button type="submit" id="btn-prof-save" class="btn btn-primary">Save</button>
+          <button type="button" id="btn-prof-revert" class="btn">Revert</button>
+          <button type="button" id="btn-prof-run" class="btn">Save and run</button>
+          <button type="button" id="btn-prof-dup" class="btn btn-ghost">Duplicate</button>
+          <button type="button" id="btn-prof-del" class="btn btn-ghost btn-danger-text">Delete</button>
+          <span id="prof-state" class="muted" aria-live="polite"></span>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <!-- ============================== Lists ============================== -->
+  <main id="tab-lists" class="panel" role="tabpanel" hidden>
+    <section class="card">
+      <h2>Whitelist and blacklist</h2>
+      <p class="muted small">The lists rate scan results, they don't limit what is scanned. <b class="ok">Whitelist</b> =
+        expected, <b class="bad">blacklist</b> = forbidden (counted as alarm, also in the Data Layer node
+        <code>last/alarms</code>), neither = not listed. The blacklist wins.<br>
+        <b>Hosts</b>: IP, network, range, MAC address, MAC prefix (00:60:34 = one vendor), name pattern (plc-*) - empty =
+        all hosts. <b>Ports</b>: 502, tcp/22, udp/161, tcp/8000-8100 - empty = the entry rates the hosts themselves.</p>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2 class="ok">Whitelist (expected)</h2>
+        <button type="button" class="btn btn-small" data-add="whitelist">+ Add entry</button></div>
+      <div class="table-wrap"><table class="data list-table">
+        <thead><tr><th>Hosts</th><th>Ports</th><th>Note</th><th></th></tr></thead>
+        <tbody id="list-whitelist"></tbody>
+      </table></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2 class="bad">Blacklist (forbidden)</h2>
+        <button type="button" class="btn btn-small" data-add="blacklist">+ Add entry</button></div>
+      <div class="table-wrap"><table class="data list-table">
+        <thead><tr><th>Hosts</th><th>Ports</th><th>Note</th><th></th></tr></thead>
+        <tbody id="list-blacklist"></tbody>
+      </table></div>
+    </section>
+    <section class="card">
+      <ul id="lists-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="button" id="btn-lists-save" class="btn btn-primary">Save lists</button>
+        <button type="button" id="btn-lists-revert" class="btn">Revert</button>
+        <span id="lists-state" class="muted" aria-live="polite"></span>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================== Settings ============================== -->
+  <main id="tab-settings" class="panel grid" role="tabpanel" hidden>
+    <section class="card">
+      <div class="card-head">
+        <h2>Settings</h2>
+        <span class="muted small">Stored in ctrlX app data · saved and loaded with configurations</span>
+      </div>
+      <form id="set-form" novalidate>
+        <div class="fields">
+          <div class="field"><label for="s-maxaddr">Max. addresses per scan</label><input id="s-maxaddr" data-s="scan.maxAddresses" type="number" min="1" max="65536" step="1">
+            <div class="help">A scan whose targets cover more addresses is refused before it starts.</div></div>
+          <div class="field"><label for="s-hscans">Keep at most [scans]</label><input id="s-hscans" data-s="history.maxScans" type="number" min="1" max="1000" step="1"></div>
+          <div class="field"><label for="s-hmb">Keep at most [MB]</label><input id="s-hmb" data-s="history.maxMegabytes" type="number" min="1" max="200" step="1">
+            <div class="help">History is kept on the device (not in app data); oldest scans are deleted first.</div></div>
+          <div class="field"><label for="s-log">Log level</label>
+            <select id="s-log" data-s="general.logLevel"><option>ERROR</option><option>WARNING</option><option>INFO</option><option>DEBUG</option></select></div>
+          <div class="field"><label for="s-hb">Heartbeat interval [ms]</label><input id="s-hb" data-s="general.heartbeatIntervalMs" type="number" min="100" max="60000" step="1"></div>
+        </div>
+        <ul id="set-errors" class="error-list" hidden></ul>
+        <div class="actions">
+          <button type="submit" id="btn-set-save" class="btn btn-primary">Save</button>
+          <button type="button" id="btn-set-revert" class="btn">Revert</button>
+          <span id="set-state" class="muted" aria-live="polite"></span>
+        </div>
+      </form>
+    </section>
+    <section class="card">
+      <h2>Status</h2>
+      <dl class="kv">
+        <dt>Uptime</dt><dd id="st-uptime">–</dd>
+        <dt>Settings source</dt><dd id="st-source">–</dd>
+        <dt>Settings persisted</dt><dd id="st-persisted">–</dd>
+        <dt>History</dt><dd id="st-history">–</dd>
+        <dt>Signed in as</dt><dd id="st-user">–</dd>
+      </dl>
+      <p id="st-error" class="error" hidden></p>
+    </section>
+    <section class="card card-wide">
+      <h2>Data Layer nodes</h2>
+      <p class="muted small">A PLC can start a scan by writing a profile ID to <code id="dl-start">scan/start</code> and read the
+        results below <code>last/</code>.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Address</th><th>Type</th><th>Value</th></tr></thead>
+          <tbody id="values-body"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

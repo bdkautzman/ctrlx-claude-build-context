@@ -6,6 +6,7 @@
 #
 # Installs, outside the kit and outside every snap:
 #   ~/.cache/ctrlx-kit/uivenv   Python venv with playwright==$PLAYWRIGHT_VERSION   (CTRLX_UI_VENV overrides)
+#                               and pypdfium2==$PDFIUM_VERSION for tools/pdf_check.py (PDF pages -> PNG)
 #   ~/.cache/ms-playwright/     Playwright's matching chrome-headless-shell (~280 MB, downloaded once)
 # The App Build Environment (Ubuntu 24.04 server-like VM) lacks a few shared libraries and has no fonts:
 # the script prints ONE sudo apt-get line for them instead of running it (system change = the user's call).
@@ -14,6 +15,7 @@
 set -euo pipefail
 
 PLAYWRIGHT_VERSION=1.64.1
+PDFIUM_VERSION=5.14.0   # pypdfium2 (Apache-2.0/BSD-3, bundles PDFium = Chrome's PDF engine), ~3 MB wheel
 VENV="${CTRLX_UI_VENV:-$HOME/.cache/ctrlx-kit/uivenv}"
 # Ubuntu 24.04 packages of the libraries chrome-headless-shell links against that a server install lacks
 # (found with ldd, 2026-10-23), plus fonts - without fonts every text renders as boxes.
@@ -40,6 +42,13 @@ if [ "$have" != "$PLAYWRIGHT_VERSION" ]; then
   [ "$CHECK" = 1 ] && fail "playwright ${have:-missing} in $VENV, want $PLAYWRIGHT_VERSION - run tools/setup-ui-test.sh"
   echo "== installing playwright==$PLAYWRIGHT_VERSION (pip uses http(s)_proxy from the environment)"
   "$VENV/bin/pip" install -q "playwright==$PLAYWRIGHT_VERSION"
+fi
+
+have=$("$VENV/bin/python" -c "import importlib.metadata as m; print(m.version('pypdfium2'))" 2>/dev/null || true)
+if [ "$have" != "$PDFIUM_VERSION" ]; then
+  [ "$CHECK" = 1 ] && fail "pypdfium2 ${have:-missing} in $VENV, want $PDFIUM_VERSION - run tools/setup-ui-test.sh"
+  echo "== installing pypdfium2==$PDFIUM_VERSION (for tools/pdf_check.py)"
+  "$VENV/bin/pip" install -q "pypdfium2==$PDFIUM_VERSION"
 fi
 
 # 2. the browser build that belongs to this Playwright version (headless shell only, no full Chrome)
@@ -78,4 +87,4 @@ with sync_playwright() as pw:
     print("browser", browser.version)
     browser.close()
 EOF
-echo "READY: python3 tools/ui_check.py apps/<app> [--device NAME]"
+echo "READY: python3 tools/ui_check.py apps/<app> [--device NAME]  |  python3 tools/pdf_check.py <file.pdf>"

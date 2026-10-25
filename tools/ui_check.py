@@ -13,7 +13,7 @@ One-time setup: tools/setup-ui-test.sh (Playwright + Chromium in ~/.cache, pinne
 This script re-runs itself with that venv's Python, so plain `python3` works.
 
 What it does
-  1. local: copies src/ www/ defaults/ of the app to a temp folder and starts `python3 -m app.main` there
+  1. local: copies src/ www/ defaults/ (data/) of the app to a temp folder and starts `python3 -m app.main` there
      on a free port (APP_DEV_NO_AUTH=1, own app data, Data Layer off) - the app folder is not touched.
      --device: logs in with the devices.toml credentials and opens /<snap>/?token=... like the ctrlX menu.
   2. opens the page (1400 x 860) and waits until <body data-ui-ready="true">: index.html starts with
@@ -87,7 +87,7 @@ class LocalApp:
 
     def __init__(self, app_dir, snap, role="admin"):
         self.tmp = tempfile.mkdtemp(prefix="ui-check-")
-        for part in ("src", "www", "defaults"):
+        for part in ("src", "www", "defaults", "data"):   # data/: optional app files staged into the snap
             if os.path.isdir(os.path.join(app_dir, part)):
                 shutil.copytree(os.path.join(app_dir, part), os.path.join(self.tmp, part))
         self.port = free_port()

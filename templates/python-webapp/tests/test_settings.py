@@ -86,6 +86,25 @@ class ItemsPatternSecretRulesTest(unittest.TestCase):
                          "peers[1].name: duplicate value 'A1'", "peers[1].password: must have at least 1 characters"):
             self.assertIn(expected, errors)
 
+    def test_min_items_and_item_pattern(self):
+        defaults = {"tags": ["a"]}
+        rules = {"tags": {"minItems": 1, "itemPattern": r"[a-z]+"}}
+        self.assertEqual(validate({"tags": ["x", "yz"]}, defaults, rules)[1], [])
+        _, errors = validate({"tags": []}, defaults, rules)
+        self.assertIn("tags: at least 1 entries", errors)
+        _, errors = validate({"tags": ["ok", "No!", 3]}, defaults, rules)
+        self.assertEqual(errors, ["tags[1]: invalid format", "tags[2]: invalid format"])
+
+    def test_validator_hook_always_runs(self):
+        # an app-level check (e.g. "host list must parse") runs together with the rule checks,
+        # so the user sees every problem after one save
+        def no_admin(settings):
+            return ["peers[{}].name: reserved".format(i) for i, p in enumerate(settings["peers"]) if p["name"] == "admin"]
+        _, errors = validate({"peers": [{"name": "admin", "password": "x"}, {"name": "B"}]},
+                             self.DEFAULTS, self.RULES, no_admin)
+        self.assertIn("peers[0].name: reserved", errors)
+        self.assertIn("peers[1].name: invalid format", errors)
+
     def test_secrets_masked_and_restored(self):
         current = {"token": "t0p", "peers": [{"name": "a", "port": 443, "password": "pa"}]}
         shown = redact(current, self.RULES)

@@ -163,6 +163,12 @@ def _check_value(value, rule, where, errors):
             errors.append("{}: invalid format".format(where))
     if isinstance(value, list) and "maxItems" in rule and len(value) > rule["maxItems"]:
         errors.append("{}: at most {} entries".format(where, rule["maxItems"]))
+    if isinstance(value, list) and "minItems" in rule and len(value) < rule["minItems"]:
+        errors.append("{}: at least {} entries".format(where, rule["minItems"]))
+    if isinstance(value, list) and "itemPattern" in rule:   # arrays of strings
+        for i, item in enumerate(value):
+            if not isinstance(item, str) or not re.fullmatch(rule["itemPattern"], item):
+                errors.append("{}[{}]: invalid format".format(where, i))
 
 
 def _normalize_items(value, rule, where, errors):
@@ -248,13 +254,21 @@ def restore_secrets(candidate, current, rules):
     return result
 
 
-def validate(candidate, defaults, rules):
-    """Return (normalized_settings, errors). errors == [] means valid."""
+def validate(candidate, defaults, rules, validator=None):
+    """Return (normalized_settings, errors). errors == [] means valid.
+
+    validator: optional fn(normalized) -> [error messages] for checks the generic rules can't
+    express (e.g. the syntax of a target list). It always runs, so the user sees all problems at
+    once: every value has the type of its default (wrong types were replaced by the default),
+    but values may break the rules. Messages should start with the dotted path
+    ("profiles[0].targets: ...")."""
     errors = []
     if not isinstance(candidate, dict):
         return copy.deepcopy(defaults), ["settings must be a JSON object (not {})".format(_type_name(candidate))]
     normalized = _normalize(candidate, defaults, "", errors)
     _apply_rules(normalized, rules, errors)
+    if validator is not None:
+        errors.extend(validator(normalized))
     return normalized, errors
 
 
@@ -263,14 +277,15 @@ def validate(candidate, defaults, rules):
 # ---------------------------------------------------------------------------
 
 class SettingsStore:
-    def __init__(self, settings_file, defaults_file, active_configuration_dir, rules):
+    def __init__(self, settings_file, defaults_file, active_configuration_dir, rules, validator=None):
         self._file = settings_file
+        self._validator = validator
         self._dir = os.path.dirname(settings_file)
         self._active_configuration_dir = active_configuration_dir
         self._rules = rules
         with open(defaults_file, "r", encoding="utf-8") as f:
             defaults = json.load(f)
-        normalized, errors = validate(defaults, defaults, rules)
+        normalized, errors = validate(defaults, defaults, rules, validator)
         if errors:
             raise SettingsError(["defaults/settings.json violates settings_rules.py: " + e for e in errors])
         self._defaults = normalized
@@ -320,7 +335,7 @@ class SettingsStore:
         """Validate, persist and apply new settings. Raises SettingsError.
         Masked `secret` values in candidate keep their stored value."""
         candidate = restore_secrets(candidate, self.get(), self._rules)
-        normalized, errors = validate(candidate, self._defaults, self._rules)
+        normalized, errors = validate(candidate, self._defaults, self._rules, self._validator)
         if errors:
             raise SettingsError(errors)
         with self._lock:
@@ -374,7 +389,7 @@ class SettingsStore:
             with self._lock:
                 self._status["error"] = err
             raise SettingsError([err])
-        normalized, errors = validate(candidate, self._defaults, self._rules)
+        normalized, errors = validate(candidate, self._defaults, self._rules, self._validator)
         if errors:
             with self._lock:
                 self._status["error"] = "invalid settings.json: " + "; ".join(errors)

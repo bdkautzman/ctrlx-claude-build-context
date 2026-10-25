@@ -53,6 +53,14 @@ the proxy pass decoded claims as headers (format not verified in this kit - see 
   (→ 401 on restricted paths). Use `fetch()` with the header → `res.blob()` → `createImageBitmap()`
   (canvas) or `URL.createObjectURL()` (`<img>`). Content-addressed URLs (hash in the path) can be
   cached: `Cache-Control: private, max-age=...`.
+* **File downloads (PDF/CSV/JSON reports) from the API**: an `<a href="api/...">` can't send the header
+  either. `fetch()` with the header → `res.blob()` → `URL.createObjectURL()` → a temporary
+  `<a download>` that is clicked and removed; the server sets `Content-Disposition: attachment;
+  filename="..."` and the page takes the name from it. Example: `apps/ctrlx-network-scanner/www/app.js`
+  `download()`; `tests/ui_scenario.py` checks it with Playwright's `page.expect_download()`.
+* **PDF documents**: no PDF library is needed - `apps/ctrlx-network-scanner/src/app/pdf_writer.py` (stdlib,
+  standard fonts, tables via `report_pdf.py`) is self-contained and reusable. Look at what it produces
+  with `python3 tools/pdf_check.py file.pdf` (pages → PNG + text), like UI screenshots.
 * Large pictures (maps, layouts): serve tiles per zoom level and load only the visible ones -
   `apps/ctrlx-amr-fleet/src/app/occupancy_map.py` (1-bit palette PNG with stdlib `zlib`) and the
   tile cache in its `www/app.js`.

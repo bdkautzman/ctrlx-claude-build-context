@@ -15,13 +15,19 @@ Supported rule keys:
   hidden:   true -> not shown in the web UI (value is preserved)
   items:    for arrays of objects: {"template": {...}, "rules": {field: rule}} - every element
             is normalized against the template (types, missing keys) and checked with the rules
-  maxItems: maximum array length
+  maxItems/minItems: maximum/minimum array length
+  itemPattern: arrays of strings - regular expression every element must match
   unique:   field name that must be unique within an array of objects (also used to match
             elements when restoring secrets)
   Example with all of them: apps/ctrlx-core-monitor/app/settings_rules.py ("cores").
 
 The web UI fetches these rules from GET <api>/settings/meta and renders matching inputs.
 When you add a setting: add it to defaults/settings.json AND (if it has limits) here.
+
+Checks the rules can't express (syntax of an address list, cross-field checks): write a function
+validate_settings(settings) -> [error messages] and pass it to SettingsStore(..., validator=...);
+it runs on every validation, messages start with the dotted path. Example:
+apps/ctrlx-network-scanner/src/app/settings_rules.py.
 """
 
 RULES = {

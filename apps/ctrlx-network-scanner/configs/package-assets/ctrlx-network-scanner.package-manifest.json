@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/package-manifest/package-manifest.v1.7.schema.json",
+  "version": "1.0.0",
+  "id": "ctrlx-network-scanner",
+  "scopes-declaration": [
+    {
+      "identifier": "ctrlx-network-scanner.web",
+      "name": "Network Scanner",
+      "description": "Permissions for the Network Scanner",
+      "scopes": [
+        {
+          "identifier": "ctrlx-network-scanner.web.all.r",
+          "name": "View network scans",
+          "description": "View scan results, history and profiles of the Network Scanner, download reports"
+        },
+        {
+          "identifier": "ctrlx-network-scanner.web.all.rw",
+          "name": "Manage Network Scanner",
+          "description": "Start and abort network scans, change scan profiles, whitelist/blacklist and settings, delete scans"
+        }
+      ]
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "ctrlx-network-scanner.web",
+        "url": "/ctrlx-network-scanner",
+        "binding": "unix://{$SNAP_DATA}/package-run/ctrlx-network-scanner/web.sock",
+        "restricted": [
+          "/ctrlx-network-scanner/api"
+        ]
+      }
+    ]
+  },
+  "menus": {
+    "sidebar": [
+      {
+        "id": "ctrlx-network-scanner",
+        "title": "Network Scanner",
+        "icon": "bosch-ic-worldwideweb",
+        "link": "/ctrlx-network-scanner/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-network-scanner.web.all.r",
+          "ctrlx-network-scanner.web.all.rw"
+        ],
+        "items": []
+      }
+    ],
+    "overview": [
+      {
+        "id": "ctrlx-network-scanner-overview",
+        "title": "Network Scanner",
+        "description": "Scan the networks of this device: hosts, ports, services, reports",
+        "icon": "bosch-ic-worldwideweb",
+        "link": "/ctrlx-network-scanner/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-network-scanner.web.all.r",
+          "ctrlx-network-scanner.web.all.rw"
+        ],
+        "items": []
+      }
+    ]
+  },
+  "commands": {
+    "activeConfiguration": {
+      "save": [
+        {
+          "id": "ctrlx-network-scanner",
+          "subject": "Network Scanner settings",
+          "url": "/ctrlx-network-scanner/api/v1/appdata/save"
+        }
+      ],
+      "load": [
+        {
+          "id": "ctrlx-network-scanner",
+          "subject": "Network Scanner settings",
+          "url": "/ctrlx-network-scanner/api/v1/appdata/load"
+        }
+      ]
+    }
+  },
+  "configuration": {
+    "appDirectories": [
+      {
+        "name": "ctrlx-network-scanner",
+        "description": "Network Scanner",
+        "icon": "bosch-ic-worldwideweb",
+        "copyOnLoad": true,
+        "writeProtected": false
+      }
+    ],
+    "appPrivateFiles": [
+      "^ctrlx-network-scanner/.*\\.tmp$"
+    ]
+  }
+}

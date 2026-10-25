@@ -28,6 +28,9 @@ Commands:
     ctrlx.py dl-read <path>                   read a Data Layer node (REST)
     ctrlx.py dl-browse <path>                 list child nodes
     ctrlx.py dl-write <path> <json-value> --type float64
+    ctrlx.py api <METHOD> <path> [--data JSON] [--out FILE]
+                                              any REST path with the login token, e.g. an app's own API:
+                                              api GET /ctrlx-network-scanner/api/v1/status
     ctrlx.py appdata <relative-path>          read a file of the active configuration (WebDAV),
                                               e.g. ctrlx-acme-demo/settings.json
     ctrlx.py logs [--snap NAME] [--search TEXT] [--limit N]
@@ -343,6 +346,21 @@ def cmd_dl_write(dev, args):
     print(json.dumps(body, indent=1) if body else "OK")
 
 
+def cmd_api(dev, args):
+    """Any REST path of the device with the login token, e.g. an app's own API through the reverse proxy."""
+    body = json.loads(args.data) if args.data is not None else None
+    status, headers, content = dev.request(args.method.upper(), args.path, body, raw=True)
+    if args.out:
+        with open(args.out, "wb") as f:
+            f.write(content)
+        print("HTTP {} {} - {} bytes -> {}".format(status, headers.get("Content-Type", ""), len(content), args.out))
+        return
+    if content.strip()[:1] in (b"{", b"["):
+        print(json.dumps(json.loads(content), indent=1))
+    else:
+        sys.stdout.write(content.decode(errors="replace") or "HTTP {}\n".format(status))
+
+
 def cmd_appdata(dev, args):
     _, _, content = dev.request("GET", "/solutions/webdav/appdata/" + args.path.lstrip("/"), raw=True)
     sys.stdout.write(content.decode(errors="replace"))
@@ -449,6 +467,12 @@ def main():
     p.add_argument("value", help="JSON value, e.g. 1.5 or '\"text\"' or true")
     p.add_argument("--type", required=True, help="Data Layer type, e.g. float64, string, bool8")
     p.set_defaults(fn=cmd_dl_write)
+    p = sub.add_parser("api")
+    p.add_argument("method", help="GET, POST, PUT, DELETE")
+    p.add_argument("path", help="e.g. /ctrlx-network-scanner/api/v1/status")
+    p.add_argument("--data", help="JSON body")
+    p.add_argument("--out", help="write the response body to this file (e.g. a PDF)")
+    p.set_defaults(fn=cmd_api)
     p = sub.add_parser("appdata")
     p.add_argument("path")
     p.set_defaults(fn=cmd_appdata)

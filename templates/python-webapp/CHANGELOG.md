@@ -3,6 +3,13 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## 0.1.7
+
+- Settings: `SettingsStore(..., validator=fn)` for checks the generic rules can't express (`fn(settings)`
+  returns error messages starting with the dotted path); it runs on every validation together with the
+  rules, so a save shows all problems at once. New rule keys `minItems` and `itemPattern` (arrays of
+  strings). From apps/ctrlx-network-scanner (target/port syntax) and apps/ctrlx-amr-fleet (color lists).
+
 ## 0.1.6
 
 - UI check in a real browser: `tests/ui_scenario.py` (run by `tools/ui_check.py`, headless Chromium via

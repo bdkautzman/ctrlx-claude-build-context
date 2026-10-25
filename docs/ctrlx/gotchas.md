@@ -330,3 +330,48 @@ App `ctrlx-amr-fleet` 0.2.0 (styling, read-only users, home screen widget), 2026
     browser's own times (`LayoutDuration`, `RecalcStyleDuration`, `ScriptDuration`), not only fps. Found
     that way: a list rewritten on every poll costs layout even when the values are the same - write only
     changes and give off-screen items `content-visibility: auto` (layout 190 -> 18 ms/s at 200 rows).
+
+App `ctrlx-network-scanner` (network inventory: discovery, ports, services, PDF reports), 2026-10-25:
+
+61. **What a strict snap with only the `network` plug can do on the network** (read from the AppArmor and
+    seccomp profiles of an installed kit app on the COREvirtual 4.6, `/var/lib/snapd/apparmor/profiles/snap.<snap>.*`
+    and `/var/lib/snapd/seccomp/bpf/*.src`): AppArmor allows `network inet/inet6 stream|dgram` and
+    `network netlink raw|dgram`; seccomp allows `socket AF_NETLINK - NETLINK_ROUTE`. So TCP connects, UDP
+    (also multicast/broadcast sends) and **rtnetlink dumps** work: interfaces/addresses (RTM_GETADDR), routes
+    (RTM_GETROUTE) and the kernel's **neighbor (ARP) table** (RTM_GETNEIGH) - stdlib `socket.AF_NETLINK`,
+    `apps/ctrlx-network-scanner/src/app/netinfo.py`. Not possible: raw and packet sockets (no `network inet raw`,
+    no `network packet` rule; `network-control` is denied for ctrlX apps, reserved-interfaces doc), and
+    **unprivileged ICMP ping**: `net.ipv4.ping_group_range` is `1 0` on the COREvirtual AND the real CORE, which
+    excludes the snap daemon's gid 0. Consequences for a scanner: no ping, no SYN scan, no OS fingerprinting.
+    What works instead: host discovery by sending one empty UDP datagram per address (the kernel ARPs for it)
+    and reading the neighbor table (directly connected networks), TCP connect "pings" (accepted or refused =
+    up), and a *connected* UDP socket reports an ICMP port unreachable as `ECONNREFUSED` (UDP "closed").
+62. **Filling the kernel's neighbor table**: every address probed on a directly connected network gets an
+    entry (INCOMPLETE -> FAILED for silent ones); `net.ipv4.neigh.default.gc_thresh3` is 1024 on ctrlX OS. Above
+    it new entries fail ("neighbour table overflow") - for the whole device, also real-time traffic of other
+    apps. The scanner probes local networks in batches of 128 and waits ~2 s per batch so the kernel resolves
+    or fails them before the next batch.
+63. **A new top-level folder of an app is not in the snap** unless it is in the `stage:` list of the `files`
+    dump part (here `data/oui.tsv.gz`, the MAC vendor list - the lookup would have failed silently on the
+    device). Check: `PART-STAGE-DIR` (warning). `tools/ui_check.py` copies `data/` for local runs now.
+64. **What a scan from inside the COREvirtual sees** (ctrlX WORKS, QEMU user networking; verified 2026-10-25):
+    `10.0.2.2` (gateway) is the Windows PC - TCP connections to it land on the PC's own services, including
+    the ports the PC forwards back into the COREvirtual (2069/2070 Data Layer, 8443 web with the
+    COREvirtual's certificate), so the device partly sees itself there. `10.0.2.3` (QEMU DNS) answers ARP
+    but never sends ICMP port unreachable: every UDP port of it is "open|filtered". A second address on
+    eth0 (192.168.2.19/24 here) has nobody else on its network. The device's own addresses answer SSDP
+    (its UPnP "DeviceDiscovery" service) but never appear in its own neighbor table - mark them as up directly.
+    Test real discovery on a real CORE/LAN.
+65. **Small runtime facts of a strict snap on ctrlX OS 4.6**: the snap sees the device's time zone
+    (`datetime.astimezone()` gave CDT, like the host - `/etc/localtime` comes from the host); reverse DNS of
+    the default gateway returns systemd-resolved's synthetic name `_gateway` (filter names starting with `_`);
+    a Data Layer string node used as a command (`scan/start`) that rejects a value in `on_write` answers a REST
+    write with HTTP 400 `DL_INVALID_VALUE` and keeps its old value, as designed (#50).
+66. **Cost of a network scan on a real ctrlX CORE** (arm64, 2 cores; ctrlx-network-scanner 0.1.0, 2026-10-25):
+    "Quick inventory" of a /24 (254 addresses, 4 hosts up, ~75 common TCP ports, 100 attempts/s, 32 parallel)
+    took 15 s and 588 connection attempts: neighbor-table discovery ~10 s (2 ARP batches of 128 + 2 s wait
+    each), port scan ~5 s. App process: CPU max 9.7 %, average 4.7 % of one core; RSS 38.7 -> 42.2 MB.
+    No "neighbour table overflow" in dmesg; the neighbor table was back to its 3 entries right after. The
+    same profile on the COREvirtual without the "no TCP ping for addresses that did not answer ARP" rule
+    took 77 s for 508 addresses (2.4 k TCP attempts in discovery alone), with it 20 s (767 attempts, same
+    4 hosts): on directly connected networks ARP decides, TCP pings are only for routed targets. History: ~1.5 KB per scan (gzip JSON).

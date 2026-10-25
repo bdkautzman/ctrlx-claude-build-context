@@ -10,6 +10,7 @@
 | Python Data Layer package | `ctrlx-datalayer<=3.6` + `ctrlx-fbs` (PyPI); native lib via apt package `ctrlx-datalayer` (.deb from the SDK release zip) | SDK samples `pyproject.toml` |
 | Data Layer API docs | 3.6.0 → `reference/ctrlxdatalayer-api-3.6.0/` | SDK `doc/api/python` |
 | UI test browser (optional) | Playwright **1.64.1** (PyPI) with its chrome-headless-shell 156.0.8078.4, venv `~/.cache/ctrlx-kit/uivenv`; Ubuntu 24.04 libs + `fonts-liberation` via apt | `tools/setup-ui-test.sh` |
+| PDF check (optional) | pypdfium2 **5.14.0** (PyPI, bundles PDFium) in the same venv, for `tools/pdf_check.py`; dev only, never in a snap | `tools/setup-ui-test.sh` |
 | package-manifest schema | v1.7 (released with ctrlX OS 4.4; v1.6 is what SDK 4.6 samples reference — 1.7 only adds `licenses[].supportsTrial`, widget `noInitialCreation`) | `tools/schemas/` |
 | Old bases | core20 = ctrlX OS 1.x, core22 = ctrlX OS 2.x/3.x. Do not use them for 4.x apps: the base snap may be missing on the device (a forum case: a core20 snap failed to install on a 2.x core with "base core20" error) and the SDK 4.6 libraries are built for core24 | SDK history, example repos, forum |
 
