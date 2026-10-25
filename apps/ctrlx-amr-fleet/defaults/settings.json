@@ -13,7 +13,8 @@
     "rotationUnit": "deg",
     "staleAfterMs": 5000,
     "amrLengthM": 1.0,
-    "amrWidthM": 0.7
+    "amrWidthM": 0.7,
+    "pathHistoryMinutes": 5
   },
   "display": {
     "refreshIntervalMs": 250

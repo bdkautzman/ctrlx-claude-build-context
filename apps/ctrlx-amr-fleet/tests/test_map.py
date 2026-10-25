@@ -3,6 +3,7 @@
 import os
 import struct
 import tempfile
+import time
 import unittest
 import zlib
 
@@ -91,6 +92,22 @@ class OccupancyMapTest(unittest.TestCase):
         m = OccupancyMap.from_file(os.path.join(config.BUNDLED_MAPS_DIR, "HMI_Map.txt"))
         self.assertEqual((m.resolution, m.width, m.height, m.points, m.levels), (20, 520, 890, 17015, 3))
 
+    def test_prepare_builds_the_same_bitmaps(self):
+        """prepare() derives each level from the one below - must equal building from all points."""
+        m = OccupancyMap.from_file(os.path.join(config.BUNDLED_MAPS_DIR, "HMI_Map.txt"))
+        reference = OccupancyMap.from_file(os.path.join(config.BUNDLED_MAPS_DIR, "HMI_Map.txt"))
+        m.prepare()
+        self.assertTrue(m.prepared)
+        for level in range(m.levels):
+            self.assertEqual(m._bitmaps[level], reference._bitmap(level), level)
+
+    def test_fast_and_careful_parsing_agree(self):
+        text = "x\ty\n1\t2\t\t\tMin X\t1\n 3 4 \n5;6\n1.2.3\t9\n-\t1\n+1.5e2\t-.5\n1e400\t1\n"
+        fast = parse_points(text)                                  # no commas: regex path (falls back here)
+        careful = parse_points(text.replace("\n", "\n,\n"))         # a comma forces the line-by-line path
+        self.assertEqual(list(zip(*fast)), list(zip(*careful)))
+        self.assertEqual(list(zip(*parse_points("1\t2\n+1.5e2\t-.5\n"))), [(1.0, 2.0), (150.0, -0.5)])
+
 
 class MapSourceTest(unittest.TestCase):
     def setUp(self):
@@ -100,7 +117,7 @@ class MapSourceTest(unittest.TestCase):
         os.makedirs(self.appdata)
         os.makedirs(self.bundled)
         self.write(self.bundled, "m.txt", "0\t0\n10\t10\n")
-        self.src = MapSource([("app data", self.appdata), ("bundled", self.bundled)])
+        self.src = MapSource([("app data", self.appdata), ("bundled", self.bundled)], background=False)
         self.events = []
         self.src.add_listener(self.events.append)
 
@@ -138,6 +155,39 @@ class MapSourceTest(unittest.TestCase):
         self.assertGreaterEqual(len(self.events), 4)
         self.src.configure("", 0)
         self.assertIn("map.file", self.src.info()["error"])
+
+    def test_background_load(self):
+        """configure() answers at once; the previous map stays until the new one is loaded and
+        prepared (all tile levels built)."""
+        import threading
+        from unittest import mock
+        from app import occupancy_map
+        src = MapSource([("bundled", self.bundled)])
+        src.add_listener(self.events.append)
+        src.configure("m.txt", 0)
+        self.assertTrue(src.wait_idle(10))
+        first = src.current()
+        self.assertTrue(src.info()["prepared"])
+        self.write(self.bundled, "m.txt", "0\t0\n10\t0\n20\t0\n", mtime=12345)
+        release = threading.Event()
+        real = occupancy_map.OccupancyMap.from_file
+
+        def slow(*args, **kwargs):
+            release.wait(10)
+            return real(*args, **kwargs)
+        with mock.patch.object(occupancy_map.OccupancyMap, "from_file", side_effect=slow):
+            started = time.monotonic()
+            src.poll()
+            self.assertLess(time.monotonic() - started, 1.0)       # did not wait for the load
+            info = src.info()
+            self.assertTrue(info["loading"])
+            self.assertIs(src.current(), first)                    # old map still shown
+            self.assertFalse(src.wait_idle(0.2))
+            release.set()
+            self.assertTrue(src.wait_idle(10))
+        info = src.info()
+        self.assertEqual((info["loading"], info["prepared"], info["width"]), (False, True, 3))
+        self.assertTrue(any(e["loading"] for e in self.events) and not self.events[-1]["loading"])
 
 
 if __name__ == "__main__":

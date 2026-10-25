@@ -60,6 +60,15 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertIsInstance(normalized["simulation"]["speedMps"], float)
 
+    def test_path_history_minutes(self):
+        defaults = load_defaults()
+        self.assertEqual(defaults["fleet"]["pathHistoryMinutes"], 5)
+        normalized, errors = validate({"fleet": {"pathHistoryMinutes": 0}}, defaults, RULES)
+        self.assertEqual((errors, normalized["fleet"]["pathHistoryMinutes"]), ([], 0))   # 0 = off
+        for bad in (-1, 61, 2.5, "5"):
+            _, errors = validate({"fleet": {"pathHistoryMinutes": bad}}, defaults, RULES)
+            self.assertTrue(any(e.startswith("fleet.pathHistoryMinutes") for e in errors), bad)
+
     def test_root_must_be_object(self):
         _, errors = validate([1, 2], load_defaults(), RULES)
         self.assertTrue(errors)

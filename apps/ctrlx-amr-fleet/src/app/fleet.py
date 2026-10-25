@@ -15,16 +15,24 @@ Input (Data Layer node <snap>/fleet/amrs, or the built-in simulation), the whole
 
 The app adds `speed` (map units per second) from the change of position between accepted updates.
 
+Path history (setting fleet.pathHistoryMinutes, 0 = off): per AMR the positions of the last minutes,
+a point whenever the AMR has moved PATH_STEP_M from the previous one. In memory only; at most
+PATH_POINT_BUDGET points for all AMRs together (with many AMRs the paths get shorter). A jump (more
+than PATH_JUMP_M at more than PATH_JUMP_SPEED_MPS, e.g. a relocalization) starts the path anew, and an
+AMR that is missing from an update loses its path.
+
 A write that is not valid is rejected as a whole (the Data Layer write fails with
 DL_INVALID_VALUE) and the reason goes to <snap>/fleet/last-error; the previous fleet stays.
 Positions are kept in memory only - nothing is written to disk (a PLC may write cyclically).
 """
 
+import bisect
 import json
 import logging
 import math
 import threading
 import time
+from array import array
 
 log = logging.getLogger("fleet")
 
@@ -34,6 +42,28 @@ MAX_INFO = 16
 MAX_INFO_KEY = 32
 SPEED_SMOOTHING = 0.5     # weight of the newest measurement
 MIN_SPEED_DT_S = 0.02     # ignore updates closer together than this for the speed
+PATH_STEP_M = 0.25        # a new path point after this distance
+PATH_POINT_BUDGET = 200_000   # all AMRs together: 24 bytes per point -> <= 4.8 MB
+PATH_MAX_POINTS = 20_000      # one AMR (5 km at 0.25 m)
+PATH_JUMP_M = 5.0
+PATH_JUMP_SPEED_MPS = 15.0
+
+
+class _Path:
+    """Points of one AMR: time (clock) and position in parallel arrays (no Python object per point)."""
+    __slots__ = ("t", "x", "y")
+
+    def __init__(self, t, x, y):
+        self.t, self.x, self.y = array("d", [t]), array("d", [x]), array("d", [y])
+
+    def append(self, t, x, y):
+        self.t.append(t)
+        self.x.append(x)
+        self.y.append(y)
+
+    def drop_first(self, n):
+        if n > 0:
+            del self.t[:n], self.x[:n], self.y[:n]
 
 
 class FleetError(ValueError):
@@ -128,8 +158,12 @@ def parse_fleet(text, rotation_unit="deg"):
 
 
 class FleetState:
-    def __init__(self, rotation_unit="deg", clock=time.monotonic, wallclock=time.time):
+    def __init__(self, rotation_unit="deg", clock=time.monotonic, wallclock=time.time,
+                 path_minutes=0, units_per_meter=1000.0):
         self._rotation_unit = rotation_unit
+        self._path_s = path_minutes * 60.0
+        self._units_per_meter = units_per_meter
+        self._paths = {}            # id -> _Path
         self._clock = clock
         self._wallclock = wallclock
         self._lock = threading.Lock()
@@ -143,9 +177,13 @@ class FleetState:
         self._motion = {}           # id -> (x, y, clock, speed) for the speed estimate
         self._listeners = []
 
-    def configure(self, rotation_unit):
+    def configure(self, rotation_unit, path_minutes=0, units_per_meter=1000.0):
         with self._lock:
             self._rotation_unit = rotation_unit
+            self._path_s = path_minutes * 60.0
+            self._units_per_meter = units_per_meter
+            if not self._path_s:
+                self._paths = {}
 
     def add_listener(self, callback):
         """callback(snapshot) after every accepted or rejected update (keep it fast)."""
@@ -165,6 +203,7 @@ class FleetState:
             raise
         with self._lock:
             now = self._clock()
+            self._record_paths(amrs, now)    # before _add_speed: uses the previous positions
             self._add_speed(amrs, now)
             self._amrs = amrs
             self._revision += 1
@@ -194,6 +233,51 @@ class FleetState:
                 amr["speed"] = round(speed, 3)
             motion[amr["id"]] = (amr["x"], amr["y"], now, speed)
         self._motion = motion
+
+    def _record_paths(self, amrs, now):
+        """Runs on every update (200 AMRs at 5/s): most AMRs moved less than a step since their last
+        point - then it is one squared distance. Only a step further can be a jump (the previous
+        update was within a step of the last point, and a step is far less than PATH_JUMP_M)."""
+        if not self._path_s:
+            return
+        upm = self._units_per_meter
+        step2 = (PATH_STEP_M * upm) ** 2
+        jump, jump_speed = PATH_JUMP_M * upm, PATH_JUMP_SPEED_MPS * upm
+        cap = max(2, min(PATH_MAX_POINTS, PATH_POINT_BUDGET // max(1, len(amrs))))
+        cutoff = now - self._path_s
+        old, motion, paths = self._paths, self._motion, {}
+        for amr in amrs:
+            ident, x, y = amr["id"], amr["x"], amr["y"]
+            path = old.get(ident)
+            if path is None or not path.t:      # new, or all its points were too old (parked)
+                path = _Path(now, x, y)
+            else:
+                dx, dy = x - path.x[-1], y - path.y[-1]
+                if dx * dx + dy * dy >= step2:
+                    prev = motion.get(ident)
+                    d = math.hypot(x - prev[0], y - prev[1]) if prev else 0.0
+                    if d > jump and d > jump_speed * (now - prev[2]):   # relocalized: start anew
+                        path = _Path(now, x, y)
+                    else:
+                        path.append(now, x, y)
+                if path.t[0] < cutoff or len(path.t) > cap:
+                    path.drop_first(max(bisect.bisect_left(path.t, cutoff), len(path.t) - cap))
+            paths[ident] = path
+        self._paths = paths
+
+    def path(self, ident):
+        """{"id", "points": [[x, y, age_s], ...]} oldest first, None for an unknown id. Points older
+        than the history are left out (they are dropped from memory with the next update)."""
+        with self._lock:
+            if ident not in self._paths and not any(a["id"] == ident for a in self._amrs):
+                return None
+            path = self._paths.get(ident)
+            if path is None:
+                return {"id": ident, "points": []}
+            now = self._clock()
+            first = bisect.bisect_left(path.t, now - self._path_s)
+            return {"id": ident, "points": [[round(x, 3), round(y, 3), round(now - t, 1)] for t, x, y
+                                            in zip(path.t[first:], path.x[first:], path.y[first:])]}
 
     def snapshot(self, stale_after_s=None, include_amrs=True):
         with self._lock:

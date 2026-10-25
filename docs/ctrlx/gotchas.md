@@ -301,4 +301,32 @@ App `ctrlx-amr-fleet` 0.2.0 (styling, read-only users, home screen widget), 2026
     replaces its rows every poll made Playwright's `locator.wait_for` time out (element detached
     between checks) - wait with `page.wait_for_function` instead, and don't churn the DOM (fixed in
     the widget: rows are rebuilt only when something visible changed).
+58. **How much slower is a real ctrlX CORE than the COREvirtual for a Python app?** Measured with
+    ctrlx-amr-fleet 0.2.2 (2026-10-23; CORE = ARM, 2 cores, rexroth-arch01; COREvirtual on a Windows PC,
+    4 cores): parsing a 184k-line map 5.0 s vs 0.8 s (~6x), CPU for the same simulation load 25 % vs 5 %
+    of a core (~5x). The emulated build VM is another ~6x slower than the CORE (~35x vs the COREvirtual).
+    Plan CPU-heavy work (big files, per-cycle loops) for the CORE, not for the COREvirtual. SSH CPU/RSS of
+    an app: `systemctl show -p MainPID --value snap.<snap>.<app>.service` (the template's app is called
+    `service`: `snap.<snap>.service.service`), then `/proc/<pid>/stat` fields 14+15 and `VmRSS`;
+    `apps/ctrlx-amr-fleet/scripts/perf_test.py` does it.
 
+59. **A Python app's memory (RSS) stays up after a big load** (ctrlx-amr-fleet 0.2.4 on a CORE: 62-63 MB
+    instead of 49-51 MB after a faster map parser, 2026-10-24). Python keeps the memory of millions of
+    short-lived small objects (lists of tuples/strings/floats) for reuse - RSS does not go back down. Keep
+    the *peak* low: parse big files in chunks (a regex `findall` over a 184k-line file peaked at 39 MB,
+    256 KB chunks at 7 MB), work on `bytes`/`array` instead of sets of tuples. Measuring: `tracemalloc`
+    shows peaks per allocation but slows allocation-heavy code ~20x (51 s instead of 2.3 s) - time
+    without it; `f.read(limit)` appears in tracemalloc as the full `limit` (64 MB) although on Linux only
+    the bytes read become resident - check the size with `os.fstat(f.fileno()).st_size` instead. Compare
+    on the device: `VmRSS` before/after (`scripts/perf_test.py` in ctrlx-amr-fleet), `VmHWM` = peak.
+    Result on the CORE (0.2.5 fixes, in 0.3.0): 55-58 MB instead of 62-63, peak 60 MB instead of 82 MB.
+60. **Measuring a web page's speed in the emulated build VM: single runs mislead** (2026-10-24,
+    ctrlx-amr-fleet). Headless Chromium there has no GPU and shares the TCG-emulated CPUs: the same
+    page gave 4.1 fps one day and 2.5 the next, and a "locked onto an AMR" view 1.0 / 2.4 / 14 fps
+    depending on whether that AMR was moving (a still view reuses the cached map layer). A regression
+    blamed on 0.3.0 from such runs turned out to be the VM. Compare page versions A/B in alternating
+    rounds in one session against the same data (`apps/ctrlx-amr-fleet/scripts/browser_ab.py`: serves
+    each version's www/ via Playwright `page.route`, reads CDP `Performance.getMetrics`) and look at the
+    browser's own times (`LayoutDuration`, `RecalcStyleDuration`, `ScriptDuration`), not only fps. Found
+    that way: a list rewritten on every poll costs layout even when the values are the same - write only
+    changes and give off-screen items `content-visibility: auto` (layout 190 -> 18 ms/s at 200 rows).

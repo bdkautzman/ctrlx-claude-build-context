@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 # keep in sync with snap/snapcraft.yaml (name, version) - tools/check.sh verifies the name
 name = "ctrlx-amr-fleet"
-version = "0.2.1"
+version = "0.3.1"
 description = "Live map of AMR positions from a JSON Data Layer node, with pan, zoom and follow"
 requires-python = ">=3.10"
 # Same pins as the ctrlX AUTOMATION SDK 4.6.0 Python samples.

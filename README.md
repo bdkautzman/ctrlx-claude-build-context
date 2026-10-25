@@ -52,10 +52,12 @@ Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (ar
 Open items:
 * template candidates from `ctrlx-amr-fleet`: settings rules `minItems` / `itemPattern` / `format: "color"`
   with color fields in the generated settings form; a "settings only for users who may change them" option
-  (that app's `/view-config` pattern, gotchas #55)
+  (that app's `/view-config` pattern, gotchas #55); a help menu (`?`) with a step-by-step tutorial that
+  marks each control (ring overlay + card, `tests/ui_scenario.py` checks it)
 * still unverified parts of the kit: gotchas.md → "Unverified assumptions"
-* `ctrlx-amr-fleet`: arm64 build and test on the real CORE; map units (mm) and the fleet JSON format were
-  chosen without a real PLC/fleet manager - confirm when one is connected
+* `ctrlx-amr-fleet`: map units (mm) and the fleet JSON format were chosen without a real PLC/fleet
+  manager - confirm when one is connected; performance (its README): with 200 AMRs the browser spends
+  most time drawing AMRs + labels and rasterizing (0.3.1 fixed the list's share)
 
 History: git log, the CHANGELOGs, `docs/ctrlx/gotchas.md`. Decisions and their reasons: `docs/ctrlx/decisions.md`.
 

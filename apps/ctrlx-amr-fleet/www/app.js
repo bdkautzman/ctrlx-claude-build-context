@@ -11,6 +11,9 @@
 // The map arrives as PNG tiles per level (level 0 = one pixel per map cell, each level halves;
 // src/app/occupancy_map.py), so only the visible part of a large map is loaded.
 // AMR positions are polled (GET /fleet?since=<revision>) and interpolated between updates.
+// Paths: the app keeps each AMR's recent path; a switched-on path is fetched once and then extended
+// from the fleet updates. Help menu: the app's GitHub page and a tutorial (a card that steps through
+// the controls and blinks a ring over each).
 "use strict";
 
 (function () {
@@ -83,6 +86,7 @@
     return svg;
   }
   function showBanner(msg) { const b = $("banner"); b.textContent = msg; b.hidden = !msg; }
+  function setText(node, text) { if (node.textContent !== text) node.textContent = text; }  // no needless restyle
   function humanize(key) {   // "toGoal" -> "To goal"
     return key.replace(/([a-z0-9])([A-Z])/g, (m, a, b) => a + " " + b.toLowerCase()).replace(/[_-]+/g, " ")
       .replace(/^./, (c) => c.toUpperCase());
@@ -115,6 +119,14 @@
   // ---- state -------------------------------------------------------------------
   const canvas = $("map");
   const ctx = canvas.getContext("2d");
+  // The map (background, floor, grid, tiles) is drawn into this layer only when the view, the colors or the
+  // loaded tiles change; every frame copies it and draws the AMRs on top. Redrawing the whole map each
+  // frame while AMRs move was most of the browser's work (performance test 2026-10-23).
+  const layer = document.createElement("canvas");
+  const lctx = layer.getContext("2d");
+  let layerKey = "";       // what the layer shows
+  let lastFrameKey = "";   // what the previous frame showed - a different one = the view is moving
+  let tileVersion = 0;     // +1 whenever a tile finished loading (or failed): the layer must be redrawn
   const mini = $("minimap");
   const mctx = mini.getContext("2d");
   const colors = {};
@@ -125,9 +137,10 @@
   let amrPalette = ["#1f6feb", "#d1242f", "#1a7f37", "#bf8700", "#8250df", "#0a8a9a", "#cf2a93", "#57801c", "#d4570a", "#3e4bd1"];
   let viewConfigJson = "";   // last applied GET /view-config (style + view settings)
 
-  const cfg = { unitsPerMeter: 1000, amrLength: 1000, amrWidth: 700, refreshMs: 250 };
+  const cfg = { unitsPerMeter: 1000, amrLength: 1000, amrWidth: 700, refreshMs: 250, pathMinutes: 0, pathStepM: 0.25 };
   let mapInfo = null;      // GET /map, only when a map is loaded
   let mapError = "";
+  let mapNote = "";        // e.g. "Loading map ..." (not an error)
   const view = { cx: 0, cy: 0, zoom: 0.05, rot: 0 };
   let viewReady = false;   // first fit done
   const size = { w: 1, h: 1, dpr: 1 };
@@ -137,6 +150,7 @@
   let lastChangeAt = 0;
   let updateInterval = 250;
   let follow = null;       // id of the AMR the view is locked to
+  let focusPulse = null;   // {id, t0}: the crosshair was pressed - the AMR's outline pulses (drawFocusPulse)
   let selected = null;
   let headingUp = prefs.get("headingUp", true);
   let showLabels = prefs.get("labels", true);
@@ -145,6 +159,8 @@
   let firstFleetAnswer = false;  // for data-ui-ready
   let canWrite = false;
   const MAX_DETAIL_INFO = 16;
+  const paths = new Map();                          // id -> {pts: [[x, y, performance.now() ms], ...], loading}
+  const pathOn = new Set(prefs.get("paths", []));   // AMRs whose path this viewer switched on
 
   // ---- view transforms -----------------------------------------------------------
   function worldToScreen(x, y) {
@@ -256,8 +272,12 @@
       inflight++;
       apiImage(tilePath(t.z, t.x, t.y))
         .then((img) => { t.img = img; t.state = "ok"; })
-        .catch(() => { t.state = "error"; t.at = performance.now(); })
-        .finally(() => { inflight--; if (mapInfo && mapInfo.id === id) { dirty = true; } });
+        .catch(() => {
+          t.state = "error";
+          t.at = performance.now();
+          setTimeout(() => { tileVersion++; dirty = true; }, 5100);   // redraw then retries it
+        })
+        .finally(() => { inflight--; if (mapInfo && mapInfo.id === id) { tileVersion++; dirty = true; } });
     }
     let excess = tiles.size - TILE_CACHE;
     for (const [key, t] of tiles) {
@@ -272,6 +292,7 @@
   function resetTiles() {
     for (const t of tiles.values()) if (t.img && t.img.close) t.img.close();
     tiles.clear();
+    tileVersion++;
     if (overview && overview.close) overview.close();
     overview = null;
   }
@@ -279,7 +300,7 @@
   function loadOverview() {
     const top = mapInfo.levels - 1, id = mapInfo.id, color = wallHex;
     apiImage(tilePath(top, 0, 0)).then((img) => {
-      if (mapInfo && mapInfo.id === id && wallHex === color) { overview = img; dirty = true; }
+      if (mapInfo && mapInfo.id === id && wallHex === color) { overview = img; tileVersion++; dirty = true; }
     }).catch(() => {});
   }
 
@@ -294,6 +315,8 @@
       if (changed) resetTiles();
       mapInfo = info.loaded ? info : null;
       mapError = info.error || "";
+      mapNote = info.loading ? "Loading map " + info.file + " …" : "";
+      if (info.loading) setTimeout(loadMap, 1000);   // until it is ready (its id then arrives here)
       if (mapInfo && changed) loadOverview();
       // a changed map (file updated while the app runs) keeps the view, unless it is out of sight
       if (mapInfo && changed && (!viewReady || (!follow && !mapInView()))) fitView();
@@ -301,8 +324,10 @@
       mapError = "Cannot load the map: " + e.message;
     } finally {
       mapLoading = false;
-      $("map-msg").textContent = mapError ? "Map: " + mapError : "";
-      $("map-msg").hidden = !mapError;
+      const msg = $("map-msg");
+      msg.textContent = mapError ? "Map: " + mapError : mapNote;
+      msg.classList.toggle("info", !mapError && !!mapNote);
+      msg.hidden = !msg.textContent;
       layoutMinimap();
       dirty = true;
     }
@@ -342,6 +367,7 @@
         a = { from: target, to: target, t0: now, dur: 0, hash: hashId(item.id) };
         amrs.set(item.id, a);
         membership = true;
+        if (pathOn.has(item.id) && cfg.pathMinutes) fetchPath(item.id);
       } else {
         const cur = poseAt(a, now);
         const jump = Math.hypot(target.x - cur.x, target.y - cur.y) > 5 * cfg.unitsPerMeter;
@@ -349,13 +375,60 @@
         a.to = target;
         a.t0 = now;
         a.dur = jump ? 0 : updateInterval;
+        if (pathOn.has(item.id) && cfg.pathMinutes) {
+          if (jump) fetchPath(item.id);     // relocalized? the app decides whether the path goes on
+          else recordPath(item.id, target, now);
+        }
       }
       a.data = item;
     }
-    for (const id of [...amrs.keys()]) if (!seen.has(id)) { amrs.delete(id); membership = true; }
+    for (const id of [...amrs.keys()]) if (!seen.has(id)) { amrs.delete(id); paths.delete(id); membership = true; }
     if (selected && !amrs.has(selected)) selected = null;
     dirty = true;
     return membership;
+  }
+
+  // ---- driven paths ----------------------------------------------------------------------
+  // The app keeps every AMR's path of the last minutes (setting fleet.pathHistoryMinutes). Switching a
+  // path on fetches it once (GET /fleet/path); then the positions of the fleet updates are appended
+  // here with the app's spacing (pathStepM) and the oldest dropped.
+  function shade(hex, f) {   // towards black by f (0..1): the path is a few shades darker than its AMR
+    if (!HEX.test(hex || "")) return hex;
+    return "#" + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - f))
+      .toString(16).padStart(2, "0")).join("");
+  }
+  function pathColor(a, stale) { return shade(stale ? colors["amr-stale"] : amrColor(a), 0.35); }
+  async function fetchPath(id) {
+    const path = { pts: [], loading: true };
+    paths.set(id, path);
+    try {
+      const d = await api("GET", "/fleet/path?id=" + encodeURIComponent(id));
+      const now = performance.now();
+      if (paths.get(id) === path) path.pts = d.points.map(([x, y, age]) => [x, y, now - age * 1000]);
+    } catch (e) {
+      if (paths.get(id) === path) paths.delete(id);
+      // not in the fleet any more (404) or no connection: try again while it is switched on
+      setTimeout(() => { if (pathOn.has(id) && amrs.has(id) && !paths.has(id) && cfg.pathMinutes) fetchPath(id); }, 5000);
+    }
+    path.loading = false;
+    dirty = true;
+  }
+  function recordPath(id, p, now) {
+    const path = paths.get(id);
+    if (!path || path.loading) return;
+    const last = path.pts[path.pts.length - 1];
+    if (!last || Math.hypot(p.x - last[0], p.y - last[1]) >= cfg.pathStepM * cfg.unitsPerMeter) path.pts.push([p.x, p.y, now]);
+    const cutoff = now - cfg.pathMinutes * 60000;
+    let old = 0;
+    while (old < path.pts.length - 1 && path.pts[old][2] < cutoff) old++;
+    if (old) path.pts.splice(0, old);
+  }
+  function togglePath(id) {
+    if (pathOn.has(id)) { pathOn.delete(id); paths.delete(id); }
+    else { pathOn.add(id); if (amrs.has(id) && cfg.pathMinutes) fetchPath(id); }
+    prefs.set("paths", [...pathOn].slice(-50));
+    updateList();
+    dirty = true;
   }
 
   // ---- follow ----------------------------------------------------------------------
@@ -390,30 +463,30 @@
     size.dpr = window.devicePixelRatio || 1;
     size.w = Math.max(1, r.width);
     size.h = Math.max(1, r.height);
-    canvas.width = Math.round(size.w * size.dpr);
-    canvas.height = Math.round(size.h * size.dpr);
+    canvas.width = layer.width = Math.round(size.w * size.dpr);
+    canvas.height = layer.height = Math.round(size.h * size.dpr);
     if (!viewReady && (mapInfo || amrs.size)) fitView();
     dirty = true;
   }
 
-  function setMapPixelTransform() {
+  function setMapPixelTransform(g) {
     // level-0 map pixel (p, q) -> device pixels: p right = +x, q down = -y
     const res = mapInfo.resolution, c = Math.cos(view.rot), s = Math.sin(view.rot), z = view.zoom, d = size.dpr;
     const lx = mapInfo.left - view.cx, ty = mapInfo.top - view.cy;
-    ctx.setTransform(d * z * c * res, d * z * s * res, -d * z * s * res, d * z * c * res,
+    g.setTransform(d * z * c * res, d * z * s * res, -d * z * s * res, d * z * c * res,
       d * (size.w / 2 + z * (c * lx + s * ty)), d * (size.h / 2 + z * (s * lx - c * ty)));
   }
 
-  function drawMap() {
-    setMapPixelTransform();
-    ctx.fillStyle = colors["map-floor"];
-    ctx.fillRect(0, 0, mapInfo.width, mapInfo.height);
-    drawGrid();
-    setMapPixelTransform();
+  function drawMap(g) {
+    setMapPixelTransform(g);
+    g.fillStyle = colors["map-floor"];
+    g.fillRect(0, 0, mapInfo.width, mapInfo.height);
+    drawGrid(g);
+    setMapPixelTransform(g);
     const T = mapInfo.tileSize, top = mapInfo.levels - 1;
     const cellPx = view.zoom * mapInfo.resolution * size.dpr;   // device px per map cell
     const z = clamp(Math.round(Math.log2(1 / cellPx)), 0, top);
-    ctx.imageSmoothingEnabled = cellPx * (1 << z) < 1;
+    g.imageSmoothingEnabled = cellPx * (1 << z) < 1;
     const span = T * (1 << z);                                   // level-0 px per tile
     const b = visibleWorldBox(), res = mapInfo.resolution;
     const p0 = (b.x0 - mapInfo.left) / res, p1 = (b.x1 - mapInfo.left) / res;
@@ -426,14 +499,14 @@
       for (let tx = tx0; tx <= tx1; tx++) {
         const prio = Math.hypot((tx + 0.5) * span - pc, (ty + 0.5) * span - qc);
         const t = wantTile(z, tx, ty, prio);
-        if (t) { ctx.drawImage(t.img, tx * span, ty * span, span, span); continue; }
+        if (t) { g.drawImage(t.img, tx * span, ty * span, span, span); continue; }
         // not loaded yet: draw the matching part of a coarser level that is
         for (let up = z + 1; up <= top; up++) {
           const k = up - z, ax = tx >> k, ay = ty >> k;
           const img = up === top && overview ? overview : (loadedTile(up, ax, ay) || {}).img;
           if (!img) continue;
           const sub = T >> k, sx = (tx - (ax << k)) * sub, sy = (ty - (ay << k)) * sub;
-          ctx.drawImage(img, sx, sy, Math.max(1, sub), Math.max(1, sub), tx * span, ty * span, span, span);
+          g.drawImage(img, sx, sy, Math.max(1, sub), Math.max(1, sub), tx * span, ty * span, span, span);
           break;
         }
       }
@@ -441,33 +514,92 @@
     pumpTiles();
   }
 
-  function drawGrid() {
+  function drawGrid(g) {
     const step = niceStep(200 / (view.zoom * cfg.unitsPerMeter)) * cfg.unitsPerMeter;  // 80..200 px
     const b = visibleWorldBox();
     const x0 = Math.max(b.x0, mapInfo.left), x1 = Math.min(b.x1, mapInfo.right);
     const y0 = Math.max(b.y0, mapInfo.bottom), y1 = Math.min(b.y1, mapInfo.top);
     if (x0 >= x1 || y0 >= y1 || (x1 - x0) / step > 400 || (y1 - y0) / step > 400) return;
-    ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
-    ctx.strokeStyle = colors["map-grid"];
-    ctx.lineWidth = 1;
-    ctx.beginPath();
+    g.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
+    g.strokeStyle = colors["map-grid"];
+    g.lineWidth = 1;
+    g.beginPath();
     for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) {
       const [ax, ay] = worldToScreen(x, y0), [bx, by] = worldToScreen(x, y1);
-      ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      g.moveTo(ax, ay); g.lineTo(bx, by);
     }
     for (let y = Math.ceil(y0 / step) * step; y <= y1; y += step) {
       const [ax, ay] = worldToScreen(x0, y), [bx, by] = worldToScreen(x1, y);
-      ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      g.moveTo(ax, ay); g.lineTo(bx, by);
     }
-    ctx.stroke();
+    g.stroke();
   }
 
+  // Zoomed far out (big maps) AMRs keep their shape - body with the heading arrow - at a minimum size.
+  // 0.2.3-0.3.0 drew a small arrowhead below 14 px instead: hard to see (user, 2026-10-24). 16 px keeps
+  // the arrow inside readable; 0.2.2 had 18 px (on a 100 m map ~4 m: 200 AMRs were a crowd).
+  const MIN_AMR_PX = 16;
   function amrScreenSize() {
     let L = cfg.amrLength * view.zoom, W = cfg.amrWidth * view.zoom;
-    if (L < 18) { W *= 18 / L; L = 18; }   // keep tiny AMRs visible when zoomed out
-    return [L, Math.max(W, 10)];
+    if (L < MIN_AMR_PX) { W *= MIN_AMR_PX / L; L = MIN_AMR_PX; }
+    return [L, Math.max(W, 8)];
   }
 
+  // Crosshair pressed: the lock's blue outline pulses around the AMR three times and goes. Zoomed out
+  // (small AMRs) it is drawn bigger, at least FOCUS_MIN_PX long, so the AMR is easy to find on a big map.
+  const FOCUS_PULSE_MS = 2000, FOCUS_MIN_PX = 60;
+  function drawFocusPulse(L, W, now) {    // in the AMR's rotated frame (ctx at its centre)
+    const k = (now - focusPulse.t0) / FOCUS_PULSE_MS;
+    if (k >= 1) { focusPulse = null; return; }
+    const beat = reduceMotion ? 1 : 0.5 - 0.5 * Math.cos(k * 6 * Math.PI);   // 0 -> 1 -> 0, three times
+    const grow = Math.max(1, FOCUS_MIN_PX / (L + 8));
+    const w = (L + 8) * grow + 14 * beat, h = (W + 8) * grow + 14 * beat;
+    ctx.strokeStyle = colors.accent;
+    ctx.globalAlpha = k < 0.8 ? 1 : (1 - k) / 0.2;                        // fades out at the end
+    ctx.lineWidth = 3;
+    roundRect(-w / 2, -h / 2, w, h, 6 * grow);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // A line from the oldest kept point to the AMR's current (interpolated) position, on a halo in the floor
+  // color so it stays visible over walls and grid. Points closer than 1 px on screen are skipped.
+  function drawPaths(now) {
+    if (!paths.size) return;
+    const c = Math.cos(view.rot), s = Math.sin(view.rot), z = view.zoom, w2 = size.w / 2, h2 = size.h / 2;
+    const stale = isStale();
+    ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    for (const [id, path] of paths) {
+      const a = amrs.get(id);
+      if (!a || !path.pts.length) continue;
+      const pose = poseAt(a, now);
+      let n = 0, lx = 0, ly = 0;
+      ctx.beginPath();
+      const add = (x, y, force) => {
+        const dx = (x - view.cx) * z, dy = -(y - view.cy) * z;
+        const sx = w2 + dx * c - dy * s, sy = h2 + dx * s + dy * c;
+        if (n && !force && Math.abs(sx - lx) < 1 && Math.abs(sy - ly) < 1) return;
+        if (n++) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy);
+        lx = sx; ly = sy;
+      };
+      for (const q of path.pts) add(q[0], q[1], false);
+      add(pose.x, pose.y, true);
+      if (n < 2) continue;
+      ctx.strokeStyle = colors["map-floor"];
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ctx.strokeStyle = pathColor(a, stale);
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const hitList = [];      // [{id, x, y, r}] in CSS px, for clicks
   function drawAmrs(now) {
     hitList.length = 0;
@@ -478,12 +610,25 @@
       const p = poseAt(a, now);
       const [sx, sy] = worldToScreen(p.x, p.y);
       const radius = Math.hypot(L, W) / 2;
-      if (sx < -radius - 80 || sy < -radius - 40 || sx > size.w + radius + 80 || sy > size.h + radius + 40) continue;
+      const margin = focusPulse && focusPulse.id === id ? FOCUS_MIN_PX : 0;   // its pulse may reach into view
+      if (sx < -radius - 80 - margin || sy < -radius - 40 - margin || sx > size.w + radius + 80 + margin
+          || sy > size.h + radius + 40 + margin) continue;
       hitList.push({ id, x: sx, y: sy, r: radius + 4 });
       const phi = view.rot - (p.r * Math.PI) / 180;
       ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
+      if (id === tourPulse) {          // the tutorial's example AMR pulses
+        const k = reduceMotion ? 1 : 0.5 + 0.5 * Math.sin(now / 160);
+        ctx.strokeStyle = colors.accent;
+        ctx.globalAlpha = 0.35 + 0.65 * k;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(sx, sy, radius + 8 + 6 * k, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       ctx.translate(sx, sy);
       ctx.rotate(phi);
+      if (focusPulse && focusPulse.id === id) drawFocusPulse(L, W, now);
       if (id === selected || id === follow) {
         ctx.strokeStyle = colors.accent;
         ctx.lineWidth = 3;
@@ -597,12 +742,13 @@
       mctx.imageSmoothingEnabled = true;
       mctx.drawImage(overview, 0, 0, span * miniGeo.s, span * miniGeo.s);
     }
+    const dot = amrs.size > 50 ? 1.5 : amrs.size > 15 ? 2 : 3;   // many AMRs: smaller dots
     for (const a of amrs.values()) {
       const p = poseAt(a, now);
       const [x, y] = miniPoint(p.x, p.y);
       mctx.fillStyle = isStale() ? colors["amr-stale"] : amrColor(a);
       mctx.beginPath();
-      mctx.arc(x, y, 3, 0, 2 * Math.PI);
+      mctx.arc(x, y, dot, 0, 2 * Math.PI);
       mctx.fill();
     }
     const corners = [[0, 0], [size.w, 0], [size.w, size.h], [0, size.h]].map(([sx, sy]) => miniPoint(...screenToWorld(sx, sy)));
@@ -627,14 +773,34 @@
     requestAnimationFrame(frame);
     const now = performance.now();
     const animating = anyAnimating(now);
-    if (!dirty && !animating) return;
+    if (focusPulse && now - focusPulse.t0 >= FOCUS_PULSE_MS) { focusPulse = null; dirty = true; }  // also off-screen
+    if (!dirty && !animating && !tourPulse && !focusPulse) return;
     dirty = false;
     frameNo++;
     applyFollow(now);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = colors["map-bg"];
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (mapInfo) drawMap();
+    const key = [view.cx, view.cy, view.zoom, view.rot, size.w, size.h, size.dpr, mapInfo ? mapInfo.id : "",
+      wallHex, colors["map-bg"], colors["map-floor"], colors["map-grid"], tileVersion].join("|");
+    const moving = key !== lastFrameKey;
+    lastFrameKey = key;
+    if (key !== layerKey && moving) {
+      // the view changes from frame to frame (locked onto an AMR, panning, zooming): caching can't help,
+      // draw the map straight onto the canvas (copying a fresh layer each frame only costs extra)
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = colors["map-bg"];
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (mapInfo) drawMap(ctx);
+    } else {
+      if (key !== layerKey) {         // the view has settled: draw the map layer once, then reuse it
+        layerKey = key;
+        lctx.setTransform(1, 0, 0, 1, 0, 0);
+        lctx.fillStyle = colors["map-bg"];
+        lctx.fillRect(0, 0, layer.width, layer.height);
+        if (mapInfo) drawMap(lctx);
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(layer, 0, 0);
+    }
+    drawPaths(now);
     drawAmrs(now);
     drawMinimap(now);
     updateHud();
@@ -677,6 +843,7 @@
       if (!matches(id, a, f)) continue;
       const followBtn = el("button", { type: "button", class: "btn-icon", title: "Lock the view to this AMR", "aria-label": "Follow " + id }, icon("lock"));
       const centerBtn = el("button", { type: "button", class: "btn-icon", title: "Show this AMR on the map", "aria-label": "Center on " + id }, icon("target"));
+      const pathBtn = el("button", { type: "button", class: "btn-icon btn-path", "aria-label": "Path of " + id }, icon("path"));
       const parts = {
         swatch: el("span", { class: "swatch" }),
         title: el("div", { class: "amr-title" }),
@@ -684,10 +851,13 @@
         battery: el("div", { class: "battery", title: "Battery" }, el("span")),
         details: el("dl", { class: "amr-details", hidden: true }),
         followBtn,
+        centerBtn,
+        pathBtn,
+        shown: {},          // what the tile shows now (updateList writes only changes)
       };
       parts.head = el("div", { class: "amr-head", role: "button", tabindex: "0", "aria-expanded": "false",
         title: "Show / hide details" }, parts.swatch, el("div", { class: "amr-main" }, parts.title, parts.sub),
-        parts.battery, el("div", { class: "amr-actions" }, centerBtn, followBtn));
+        parts.battery, el("div", { class: "amr-actions" }, centerBtn, followBtn, pathBtn));
       const li = el("li", { class: "amr", "data-id": id }, parts.head, parts.details);
       parts.head.addEventListener("click", () => toggleSelected(id));
       parts.head.addEventListener("keydown", (ev) => {
@@ -695,6 +865,7 @@
       });
       centerBtn.addEventListener("click", (ev) => { ev.stopPropagation(); centerOn(id); });
       followBtn.addEventListener("click", (ev) => { ev.stopPropagation(); setFollow(follow === id ? null : id); });
+      pathBtn.addEventListener("click", (ev) => { ev.stopPropagation(); togglePath(id); });
       parts.li = li;
       rows.set(id, parts);
       list.append(li);
@@ -719,33 +890,66 @@
     for (const [k, v] of Object.entries(d.info || {}).slice(0, MAX_DETAIL_INFO)) items.push([humanize(k), fmtValue(v)]);
     dl.replaceChildren(...items.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]));
   }
+  // Runs with every fleet update (5 per second). Every tile remembers what it shows (r.shown) and only
+  // changed values are written: the browser restyles and lays out whatever is written, even an unchanged
+  // value - rewriting 200 tiles per update cost more frames than drawing the map (A/B test 2026-10-24).
+  // Tiles outside the visible part of the list are not laid out or painted at all (content-visibility).
   function updateList() {
     const f = filterText();
     const ids = [...amrs.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     if (ids.join("\n") + "|" + f !== listIds) { rebuildList(); return; }
     const stale = isStale();
     for (const [id, r] of rows) {
-      const a = amrs.get(id);
+      const a = amrs.get(id), s = r.shown;
       const d = a.data || {};
-      r.swatch.style.background = amrColor(a);
-      r.title.replaceChildren(document.createTextNode(id), d.name ? el("span", { class: "muted", text: " · " + d.name }) : "");
-      r.sub.textContent = (d.state || "–") + (typeof d.battery === "number" ? " · " + Math.round(d.battery) + " %" : "");
-      r.battery.hidden = typeof d.battery !== "number";
-      if (typeof d.battery === "number") {
-        r.battery.firstChild.style.width = clamp(d.battery, 0, 100) + "%";
-        r.battery.className = "battery" + (d.battery < 20 ? " low" : d.battery < 40 ? " mid" : "");
-        r.battery.title = "Battery " + Math.round(d.battery) + " %";
+      const battery = typeof d.battery === "number" ? Math.round(clamp(d.battery, 0, 100)) : -1;
+      const color = amrColor(a);
+      if (s.color !== color) { s.color = color; r.swatch.style.background = color; }
+      const name = d.name || "";
+      if (s.name !== name) {
+        s.name = name;
+        r.title.replaceChildren(document.createTextNode(id), name ? el("span", { class: "muted", text: " · " + name }) : "");
+      }
+      const sub = (d.state || "–") + (battery >= 0 ? " · " + battery + " %" : "");
+      if (s.sub !== sub) { s.sub = sub; r.sub.textContent = sub; }
+      if (s.battery !== battery) {
+        s.battery = battery;
+        r.battery.hidden = battery < 0;
+        r.battery.firstChild.style.width = Math.max(0, battery) + "%";
+        r.battery.className = "battery" + (battery < 20 ? " low" : battery < 40 ? " mid" : "");
+        r.battery.title = "Battery " + battery + " %";
       }
       const open = id === selected;
-      r.li.classList.toggle("selected", open);
-      r.head.setAttribute("aria-expanded", String(open));
-      r.details.hidden = !open;
-      if (open) fillDetails(r.details, id, d);
-      r.li.classList.toggle("stale", stale);
-      r.followBtn.classList.toggle("on", id === follow);
-      r.followBtn.setAttribute("aria-pressed", String(id === follow));
+      if (s.open !== open) {
+        s.open = open;
+        r.li.classList.toggle("selected", open);
+        r.head.setAttribute("aria-expanded", String(open));
+        r.details.hidden = !open;
+      }
+      if (open) fillDetails(r.details, id, d);           // one tile: position, speed etc. change all the time
+      if (s.stale !== stale) { s.stale = stale; r.li.classList.toggle("stale", stale); }
+      const locked = id === follow;
+      if (s.locked !== locked) {
+        s.locked = locked;
+        r.followBtn.classList.toggle("on", locked);
+        r.followBtn.setAttribute("aria-pressed", String(locked));
+      }
+      const pathShown = cfg.pathMinutes > 0 && pathOn.has(id);
+      const pc = pathShown ? pathColor(a, stale) : "";
+      const pathKey = cfg.pathMinutes + "|" + pc;
+      if (s.path !== pathKey) {
+        s.path = pathKey;
+        r.pathBtn.hidden = !cfg.pathMinutes;
+        r.pathBtn.classList.toggle("on", pathShown);
+        r.pathBtn.setAttribute("aria-pressed", String(pathShown));
+        r.pathBtn.title = pathShown ? "Hide the path" : "Show the path of the last " + cfg.pathMinutes + " min";
+        if (pathShown) {
+          r.pathBtn.style.setProperty("--path", pc);
+          r.pathBtn.style.setProperty("--path-ink", inkFor(pc));
+        }
+      }
     }
-    $("amr-count").textContent = amrs.size ? "(" + amrs.size + ")" : "";
+    setText($("amr-count"), amrs.size ? "(" + amrs.size + ")" : "");
     const empty = $("amr-empty");
     if (!amrs.size) {
       empty.replaceChildren(document.createTextNode("No AMRs. Write the fleet JSON to the Data Layer node "),
@@ -754,7 +958,8 @@
     } else if (!rows.size) {
       empty.textContent = "No AMR matches the filter.";
     }
-    empty.hidden = amrs.size > 0 && rows.size > 0;
+    const noEmpty = amrs.size > 0 && rows.size > 0;
+    if (empty.hidden !== noEmpty) empty.hidden = noEmpty;
   }
   function centerOn(id) {
     const a = amrs.get(id);
@@ -762,6 +967,7 @@
     if (follow && follow !== id) setFollow(null);
     const p = poseAt(a, performance.now());
     view.cx = p.x; view.cy = p.y;
+    focusPulse = { id, t0: performance.now() };
     dirty = true;
   }
   function scrollRowIntoView(id) {
@@ -770,17 +976,23 @@
   }
 
   // ---- fleet polling + status -------------------------------------------------------------
-  function updateFleetPill(error) {
-    const pill = $("fleet-pill");
+  function updateFleetPill(error) {   // every poll: write only what changed
     const s = fleetStatus;
-    if (error) { pill.className = "pill pill-err"; pill.textContent = "Fleet: no connection"; pill.title = error; return; }
-    if (!s || !s.revision) { pill.className = "pill pill-unknown"; pill.textContent = "Fleet: no data yet"; pill.title = "Nothing written to " + PREFIX.slice(1) + "/fleet/amrs since the app started"; }
-    else if (s.stale) { pill.className = "pill pill-warn"; pill.textContent = s.count + " AMR" + (s.count === 1 ? "" : "s") + " · no update for " + Math.round(s.ageMs / 1000) + " s"; pill.title = "Last update " + new Date(s.receivedAt * 1000).toLocaleTimeString(); }
-    else { pill.className = "pill pill-ok"; pill.textContent = s.count + " AMR" + (s.count === 1 ? "" : "s") + " · live"; pill.title = "Updates: " + s.revision; }
-    $("sim-badge").hidden = !s || s.source !== "simulation" || s.stale;
-    const err = $("fleet-error");
-    err.textContent = s && s.lastError ? "Last fleet update rejected: " + s.lastError : "";
-    err.hidden = !err.textContent;
+    let cls, text, title;
+    if (error) { cls = "pill pill-err"; text = "Fleet: no connection"; title = error; }
+    else if (!s || !s.revision) { cls = "pill pill-unknown"; text = "Fleet: no data yet"; title = "Nothing written to " + PREFIX.slice(1) + "/fleet/amrs since the app started"; }
+    else if (s.stale) { cls = "pill pill-warn"; text = s.count + " AMR" + (s.count === 1 ? "" : "s") + " · no update for " + Math.round(s.ageMs / 1000) + " s"; title = "Last update " + new Date(s.receivedAt * 1000).toLocaleTimeString(); }
+    else { cls = "pill pill-ok"; text = s.count + " AMR" + (s.count === 1 ? "" : "s") + " · live"; title = "Updates: " + s.revision; }
+    const pill = $("fleet-pill");
+    if (pill.className !== cls) pill.className = cls;
+    setText(pill, text);
+    if (pill.title !== title) pill.title = title;
+    if (error) return;
+    const sim = !!s && s.source === "simulation" && !s.stale;
+    if ($("sim-badge").hidden === sim) $("sim-badge").hidden = !sim;
+    const err = $("fleet-error"), msg = s && s.lastError ? "Last fleet update rejected: " + s.lastError : "";
+    setText(err, msg);
+    if (err.hidden !== !msg) err.hidden = !msg;
   }
 
   async function pollFleet() {
@@ -827,12 +1039,20 @@
     cfg.amrLength = v.amrLengthM * v.unitsPerMeter;
     cfg.amrWidth = v.amrWidthM * v.unitsPerMeter;
     cfg.refreshMs = v.refreshIntervalMs;
+    cfg.pathStepM = v.pathStepM || cfg.pathStepM;
+    const minutes = v.pathHistoryMinutes || 0;
+    if (minutes !== cfg.pathMinutes) {          // fetch again: the app keeps more or less now
+      cfg.pathMinutes = minutes;
+      paths.clear();
+      if (minutes) for (const id of pathOn) if (amrs.has(id)) fetchPath(id);
+    }
     applyStyle(v.style);
     dirty = true;
   }
   function viewConfigFrom(s) {   // the same from full settings (after saving them)
     return { style: s.style, unitsPerMeter: s.map.unitsPerMeter, amrLengthM: s.fleet.amrLengthM,
-      amrWidthM: s.fleet.amrWidthM, staleAfterMs: s.fleet.staleAfterMs, refreshIntervalMs: s.display.refreshIntervalMs };
+      amrWidthM: s.fleet.amrWidthM, staleAfterMs: s.fleet.staleAfterMs, refreshIntervalMs: s.display.refreshIntervalMs,
+      pathHistoryMinutes: s.fleet.pathHistoryMinutes, pathStepM: cfg.pathStepM };
   }
   async function loadViewConfig() {
     try {
@@ -957,7 +1177,7 @@
   canvas.addEventListener("dblclick", (ev) => {
     const [x, y] = localPoint(ev);
     const hit = hitTest(x, y);
-    if (hit) setFollow(hit);
+    if (hit) setFollow(follow === hit ? null : hit);   // double-click on the locked AMR unlocks
     else zoomAt(x, y, 2);
   });
   canvas.addEventListener("wheel", (ev) => {
@@ -970,7 +1190,13 @@
   window.addEventListener("keydown", (ev) => {
     const tag = (ev.target.tagName || "").toLowerCase();
     if (!$("drawer").hidden) { if (ev.key === "Escape") closeSettings(); return; }
+    if (!helpMenu.hidden && ev.key === "Escape") { setHelpMenu(false); helpBtn.focus(); return; }
     if (tag === "input" || tag === "select" || tag === "textarea" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (tour && (ev.key === "ArrowLeft" || ev.key === "ArrowRight" || ev.key === "Escape")) {   // the tutorial has the arrows
+      ev.preventDefault();
+      if (ev.key === "Escape") endTour(); else stepTour(ev.key === "ArrowRight" ? 1 : -1);
+      return;
+    }
     const step = Math.min(size.w, size.h) * 0.15;
     const keys = {
       "+": () => zoomAt(size.w / 2, size.h / 2, 1.5), "=": () => zoomAt(size.w / 2, size.h / 2, 1.5),
@@ -1027,9 +1253,9 @@
   }
   $("btn-labels").addEventListener("click", () => setLabels(!showLabels));
   $("btn-minimap").addEventListener("click", () => { showMinimap = !showMinimap; prefs.set("minimap", showMinimap); layoutMinimap(); dirty = true; });
-  function setPanel(open) {
+  function setPanel(open, remember = true) {
     $("panel").hidden = !open;
-    prefs.set("panel", open);
+    if (remember) prefs.set("panel", open);
     requestAnimationFrame(resize);
   }
   $("btn-panel").addEventListener("click", () => setPanel($("panel").hidden));
@@ -1263,6 +1489,157 @@
   $("btn-defaults").addEventListener("click", resetDefaults);
   $("btn-settings").addEventListener("click", openSettings);
   $("btn-close-settings").addEventListener("click", closeSettings);
+
+  // ---- help menu ---------------------------------------------------------------------------------
+  const helpBtn = $("btn-help"), helpMenu = $("help-menu");
+  function setHelpMenu(open) {
+    helpMenu.hidden = !open;
+    helpBtn.setAttribute("aria-expanded", String(open));
+    if (open) helpMenu.querySelector("[role=menuitem]").focus();
+  }
+  helpBtn.addEventListener("click", () => setHelpMenu(helpMenu.hidden));
+  helpMenu.addEventListener("click", () => setHelpMenu(false));     // an item was chosen
+  helpMenu.addEventListener("keydown", (ev) => {
+    if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const items = [...helpMenu.querySelectorAll("[role=menuitem]")];
+    const i = items.indexOf(document.activeElement);
+    items[(i + (ev.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus();
+  });
+  document.addEventListener("pointerdown", (ev) => {
+    if (!helpMenu.hidden && !ev.target.closest(".menu-wrap")) setHelpMenu(false);
+  });
+  $("btn-tutorial").addEventListener("click", startTour);
+
+  // ---- tutorial ----------------------------------------------------------------------------------
+  // A card at the bottom of the map steps through the controls; the control of the step blinks - a ring
+  // laid over it (position: fixed), so nothing clips it. Everything stays usable while the card is open;
+  // the AMR steps use an example AMR (it pulses on the map) and "Show me" does the step's action.
+  let tour = null;          // {i, amr, step}
+  let tourPulse = null;     // id of the AMR that pulses on the map
+  const ring = $("tour-ring"), tourCard = $("tour");
+  const tourRow = () => (tour && tour.amr ? rows.get(tour.amr) || {} : {});
+  const TOUR = [
+    { title: "Welcome",
+      text: "This tour shows the controls of the AMR Fleet View. Step through it with the arrows (or the ← → " +
+        "keys); the control of each step blinks. Everything stays usable - try the controls while the tour is open." },
+    { title: "Map", panel: false, target: () => canvas,
+      text: "The floor plan with the AMRs, live; the point of an AMR shows where it is heading. Drag to move the " +
+        "map, use the mouse wheel or pinch to zoom. Click an AMR to select it, double-click it to lock onto it." },
+    { title: "AMR list", panel: true, target: () => $("panel"),
+      text: "Every AMR with its state and battery. The filter finds AMRs by id, name or state; the button at the " +
+        "top left shows and hides the list." },
+    { title: "Details", panel: true, amr: true, target: () => tourRow().head,
+      act: () => { if (selected !== tour.amr) toggleSelected(tour.amr); },
+      text: "Click the tile of an AMR to open its details: position, heading, speed, last update and the extra " +
+        "information of the fleet data. Click it again to close them." },
+    { title: "Focus", panel: true, amr: true, showsMap: true, target: () => tourRow().centerBtn, act: () => centerOn(tour.amr),
+      text: "The crosshair moves the map to this AMR (it pulses on the map now). The map stays there - it does " +
+        "not follow the AMR." },
+    { title: "Lock", panel: true, amr: true, showsMap: true, target: () => tourRow().followBtn,
+      act: () => { if (follow !== tour.amr) setFollow(tour.amr); },
+      text: "The lock follows the AMR: it stays in the middle and the map moves around it; with “Rotate map " +
+        "with AMR” it also keeps facing up. Unlock in the bar at the top, or drag the map, to end it." },
+    { title: "Path", panel: true, amr: true, showsMap: true, when: () => cfg.pathMinutes > 0, target: () => tourRow().pathBtn,
+      act: () => { if (!pathOn.has(tour.amr)) togglePath(tour.amr); },
+      text: () => "Shows where this AMR drove in the last " + cfg.pathMinutes + " minutes, in a darker shade of " +
+        "its color. Switch on several paths to compare them; click again to hide one." },
+    { title: "Zoom and view", panel: false, target: () => document.querySelector(".tools .tool-group"),
+      text: "Zoom in and out, show the whole map, turn the map back to north up. Keys: + and − zoom, F shows " +
+        "the whole map, N turns it north up." },
+    { title: "Names and overview", panel: false, target: () => document.querySelectorAll(".tools .tool-group")[1],
+      text: "Show or hide the names of the AMRs on the map, and the overview map." },
+    { title: "Overview map", panel: false, when: () => !!mapInfo, target: () => (mini.hidden ? $("btn-minimap") : mini),
+      text: () => "The whole map with all AMRs; the frame is the part you see. Click or drag in it to move the " +
+        "view." + (mini.hidden ? " It is switched off at the moment - the blinking button shows it." : "") },
+    { title: "Status", target: () => ["sim-badge", "fleet-pill", "conn"].map($),
+      text: "Whether the AMR data is current (number of AMRs, “live” or the time since the last update), " +
+        "“Simulation” while the AMRs come from the built-in simulation, and the Data Layer connection." },
+    { title: "Settings", when: () => canWrite, target: () => $("btn-settings"),
+      text: "Map file and units, the fleet data, colors, the path history and the simulation. Only users who " +
+        "may change settings see this button." },
+    { title: "Help", target: () => helpBtn, text: "Start this tour again, or open the app's page on GitHub." },
+  ];
+  const tourSteps = () => TOUR.filter((st) => !st.when || st.when());
+  function pickTourAmr() {
+    return [selected, follow].find((id) => id && rows.has(id)) || rows.keys().next().value || null;
+  }
+  const narrowLayout = () => window.matchMedia("(max-width: 760px)").matches;   // the list floats over the map
+  function renderTour() {
+    const steps = tourSteps();
+    tour.i = clamp(tour.i, 0, steps.length - 1);
+    const st = tour.step = steps[tour.i];
+    if (st.amr && !rows.has(tour.amr)) tour.amr = pickTourAmr();
+    if (st.panel && $("panel").hidden) setPanel(true, false);
+    else if (st.panel === false && narrowLayout() && !$("panel").hidden) setPanel(false, false);
+    $("tour-count").textContent = "Step " + (tour.i + 1) + " of " + steps.length;
+    $("tour-title").textContent = st.title;
+    $("tour-text").textContent = (typeof st.text === "function" ? st.text() : st.text)
+      + (st.amr && !tour.amr ? " (There is no AMR in the list at the moment.)" : "");
+    $("tour-prev").disabled = tour.i === 0;
+    const last = tour.i === steps.length - 1;
+    tourCard.classList.toggle("last", last);
+    $("tour-next").setAttribute("aria-label", last ? "End the tutorial" : "Next step");
+    $("tour-next").title = last ? "End the tutorial" : "Next step";
+    $("tour-try").hidden = !(st.act && tour.amr);
+    tourPulse = st.amr ? tour.amr : null;
+    if (st.amr && tour.amr) scrollRowIntoView(tour.amr);
+    ring.classList.remove("blink");
+    void ring.offsetWidth;                  // restart the blinking
+    ring.classList.add("blink");
+    placeTour();
+    dirty = true;
+  }
+  // every frame while open: the ring follows its control (list rebuilt, scrolled, layout changed)
+  function placeTour() {
+    if (!tour) return;
+    const t = tour.step.target ? tour.step.target() : null;
+    const els = (Array.isArray(t) ? t : [t]).filter((e) => e && e.getClientRects().length);
+    if (!els.length) { ring.hidden = true; tourCard.classList.remove("at-top"); return; }
+    const rs = els.map((e) => e.getBoundingClientRect());
+    const x0 = Math.max(2, Math.min(...rs.map((r) => r.left)) - 4), y0 = Math.max(2, Math.min(...rs.map((r) => r.top)) - 4);
+    const x1 = Math.min(innerWidth - 2, Math.max(...rs.map((r) => r.right)) + 4);
+    const y1 = Math.min(innerHeight - 2, Math.max(...rs.map((r) => r.bottom)) + 4);
+    Object.assign(ring.style, { left: x0 + "px", top: y0 + "px", width: (x1 - x0) + "px", height: (y1 - y0) + "px" });
+    ring.hidden = false;
+    // the card goes to the top of the map when it would cover the control (not for the whole map)
+    const m = $("mapwrap").getBoundingClientRect(), cw = tourCard.offsetWidth, ch = tourCard.offsetHeight;
+    const cx0 = m.left + (m.width - cw) / 2, cy1 = m.bottom - 8, cy0 = cy1 - ch - 8;
+    const covers = x0 < cx0 + cw && x1 > cx0 && y0 < cy1 && y1 > cy0;
+    tourCard.classList.toggle("at-top", covers && (x1 - x0) * (y1 - y0) < 0.5 * m.width * m.height);
+  }
+  function tourLoop() { if (tour) { placeTour(); requestAnimationFrame(tourLoop); } }
+  function startTour() {
+    if (!$("drawer").hidden) closeSettings();
+    const running = !!tour;
+    tour = { i: 0, amr: pickTourAmr(), step: null };
+    tourCard.hidden = false;
+    renderTour();
+    if (!running) requestAnimationFrame(tourLoop);
+    $("tour-next").focus();
+  }
+  function endTour() {
+    tour = null;
+    tourPulse = null;
+    tourCard.hidden = true;
+    ring.hidden = true;
+    dirty = true;
+    canvas.focus({ preventScroll: true });
+  }
+  function stepTour(delta) {
+    if (tour.i + delta >= tourSteps().length) { endTour(); return; }
+    tour.i = Math.max(0, tour.i + delta);
+    renderTour();
+  }
+  $("tour-prev").addEventListener("click", () => stepTour(-1));
+  $("tour-next").addEventListener("click", () => stepTour(1));
+  $("tour-close").addEventListener("click", endTour);
+  $("tour-try").addEventListener("click", () => {
+    if (!tour || !tour.step.act || !amrs.has(tour.amr)) return;
+    tour.step.act();
+    if (tour.step.showsMap && narrowLayout()) setPanel(false, false);   // the result is on the map
+  });
 
   // ---- start ---------------------------------------------------------------------------------
   (async function init() {

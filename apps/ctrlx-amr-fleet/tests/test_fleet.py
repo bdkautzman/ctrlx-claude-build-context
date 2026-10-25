@@ -4,6 +4,7 @@ import json
 import math
 import unittest
 
+from app import fleet as fleet_module
 from app.fleet import MAX_AMRS, FleetError, FleetState, parse_fleet
 
 
@@ -117,6 +118,79 @@ class FleetStateTest(unittest.TestCase):
         with self.assertLogs("fleet", "ERROR"):
             fleet.receive("[]")
         self.assertEqual(fleet.snapshot()["revision"], 1)
+
+
+
+def _amrs(*positions):
+    return json.dumps([{"id": "a{}".format(i), "x": x, "y": y, "rotation": 0} for i, (x, y) in enumerate(positions)])
+
+
+class PathHistoryTest(unittest.TestCase):
+    """Map units mm (1000 per m): a point per 250 mm driven."""
+
+    def setUp(self):
+        self.now = [0.0]
+        self.fleet = FleetState(clock=lambda: self.now[0], path_minutes=1, units_per_meter=1000.0)
+
+    def drive(self, positions, dt=0.2):
+        for pos in positions:
+            self.fleet.receive(_amrs(pos))
+            self.now[0] += dt
+
+    def points(self, ident="a0"):
+        return [p[:2] for p in self.fleet.path(ident)["points"]]
+
+    def test_a_point_per_step(self):
+        self.drive([(x, 0) for x in range(0, 1001, 100)])          # 0.1 m per update, 1 m in total
+        self.assertEqual(self.points(), [[0, 0], [300, 0], [600, 0], [900, 0]])
+        ages = [p[2] for p in self.fleet.path("a0")["points"]]
+        self.assertEqual(ages, [2.2, 1.6, 1.0, 0.4])               # oldest first
+
+    def test_old_points_dropped_and_parked_amr(self):
+        self.drive([(x, 0) for x in range(0, 3001, 500)], dt=10.0)  # t = 0..60 s, now 70 s
+        self.assertEqual(self.points(), [[x, 0] for x in range(500, 3001, 500)])   # x=500: 60 s old
+        self.now[0] += 200.0                                          # parked for longer than the history
+        self.assertEqual(self.points(), [])
+        self.drive([(3000, 0), (3000, 0)])
+        self.assertEqual(self.points(), [[3000, 0]])                  # starts again where it stands
+
+    def test_jump_starts_a_new_path(self):
+        self.drive([(0, 0), (300, 0), (600, 0)])
+        self.drive([(20000, 0), (20300, 0)])                          # 19.4 m in 0.2 s: relocalized
+        self.assertEqual(self.points(), [[20000, 0], [20300, 0]])
+        self.now[0] += 30.0
+        self.drive([(30000, 0)])                                      # 9.7 m in 30 s: real driving
+        self.assertEqual(self.points(), [[20000, 0], [20300, 0], [30000, 0]])
+
+    def test_amr_missing_from_an_update_loses_its_path(self):
+        self.fleet.receive(_amrs((0, 0), (0, 0)))
+        self.fleet.receive(_amrs((500, 0), (0, 500)))
+        self.assertEqual(len(self.points("a1")), 2)
+        self.fleet.receive(_amrs((900, 0)))
+        self.assertIsNone(self.fleet.path("a1"))
+        self.assertIsNone(self.fleet.path("unknown"))
+        self.fleet.receive(_amrs((900, 0), (0, 600)))
+        self.assertEqual(self.points("a1"), [[0, 600]])
+
+    def test_budget_shortens_paths_of_many_amrs(self):
+        budget = fleet_module.PATH_POINT_BUDGET
+        fleet_module.PATH_POINT_BUDGET = 10
+        try:
+            for k in range(8):                                        # 2 AMRs: at most 5 points each
+                self.fleet.receive(_amrs((k * 500, 0), (0, k * 500)))
+        finally:
+            fleet_module.PATH_POINT_BUDGET = budget
+        self.assertEqual(self.points("a0"), [[x, 0] for x in range(1500, 3501, 500)])
+
+    def test_off_and_unit_change(self):
+        self.drive([(0, 0), (500, 0)])
+        self.fleet.configure("deg", 0, 1000.0)                        # 0 minutes: no paths, memory freed
+        self.assertEqual(self.points(), [])
+        self.drive([(1000, 0), (1500, 0)])
+        self.assertEqual(self.points(), [])
+        self.fleet.configure("deg", 1, 1.0)                           # map in metres: 0.25 per point
+        self.drive([(0, 0), (0.2, 0), (0.3, 0)])
+        self.assertEqual(self.points(), [[0, 0], [0.3, 0]])
 
 
 if __name__ == "__main__":

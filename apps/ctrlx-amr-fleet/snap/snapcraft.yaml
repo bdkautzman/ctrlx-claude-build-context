@@ -12,7 +12,7 @@
 
 name: ctrlx-amr-fleet
 title: AMR Fleet View
-version: 0.2.1
+version: 0.3.1
 summary: Live map of AMR positions from a JSON Data Layer node (pan, zoom, follow)
 description: |
   <!--

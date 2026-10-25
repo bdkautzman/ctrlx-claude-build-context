@@ -19,6 +19,12 @@
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-path" viewBox="0 0 24 24"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h8.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H16"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><path d="M12 17.3h.01"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z"/></symbol>
   </svg>
 
   <header class="topbar">
@@ -36,6 +42,15 @@
       <span id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</span>
       <!-- hidden until /status says the user may change settings (read-only users never see it) -->
       <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" hidden title="Settings" aria-label="Settings"><svg class="ic"><use href="#i-sliders"/></svg><span class="btn-label">Settings</span></button>
+      <div class="menu-wrap">
+        <button type="button" id="btn-help" class="btn btn-small btn-help" title="Help" aria-label="Help"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu"><svg class="ic"><use href="#i-help"/></svg></button>
+        <div id="help-menu" class="menu" role="menu" aria-label="Help" hidden>
+          <a role="menuitem" id="help-github" href="https://github.com/bdkautzman/ctrlx-claude-build-context/tree/main/apps/ctrlx-amr-fleet"
+             target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-external"/></svg>App page on GitHub</a>
+          <button type="button" role="menuitem" id="btn-tutorial"><svg class="ic"><use href="#i-play"/></svg>Tutorial</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -83,6 +98,22 @@
         <div id="cursor-pos" class="muted"></div>
       </div>
       <canvas id="minimap" class="minimap" hidden aria-label="Overview map - click to move the view"></canvas>
+
+      <!-- tutorial (help menu): a card at the bottom of the map; app.js blinks a ring over each step's control -->
+      <div id="tour" class="tour" role="dialog" aria-labelledby="tour-title" aria-describedby="tour-text" hidden>
+        <div class="tour-head">
+          <span id="tour-count" class="muted"></span>
+          <button type="button" id="tour-close" class="tool tool-bare" title="End the tutorial" aria-label="End the tutorial"><svg class="ic"><use href="#i-close"/></svg></button>
+        </div>
+        <h3 id="tour-title"></h3>
+        <p id="tour-text" aria-live="polite"></p>
+        <div class="tour-nav">
+          <button type="button" id="tour-prev" class="btn btn-arrow" title="Previous step" aria-label="Previous step"><svg class="ic"><use href="#i-left"/></svg></button>
+          <button type="button" id="tour-next" class="btn btn-primary btn-arrow" title="Next step" aria-label="Next step"><svg class="ic"><use href="#i-right"/></svg><span class="tour-done">Done</span></button>
+          <span class="spacer"></span>
+          <button type="button" id="tour-try" class="btn btn-small" hidden>Show me</button>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -103,6 +134,8 @@
       </div>
     </form>
   </div>
+
+  <div id="tour-ring" class="tour-ring" hidden aria-hidden="true"></div>
 
   <script src="app.js"></script>
 </body>

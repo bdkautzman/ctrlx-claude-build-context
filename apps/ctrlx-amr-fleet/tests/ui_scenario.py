@@ -4,13 +4,20 @@
     python3 ../../tools/ui_check.py . --role reader     # read-only user: no settings (button, drawer, API)
     python3 ../../tools/ui_check.py . --device          # installed app: screenshots only, changes nothing
 
-Screenshots: start, details (expanded tile), follow (lock + heading-up), styling (unsaved preview of
-other colors), widget (the home screen widget on its own page, same origin as on the device).
+Screenshots: start, details (expanded tile), follow (lock + heading-up), focus-small (zoomed far out right
+after the crosshair: small AMRs keep their shape, the enlarged outline pulses), path (driven path of the first
+AMR), help (menu open), tutorial / tutorial-narrow (the "Focus" step after "Show me", 1400 / 390 px wide),
+styling (unsaved preview of other colors), widget (the home screen widget on its own page, same origin
+as on the device).
 """
 
 import json
 import re
+import time
 import urllib.error
+from urllib.parse import quote
+
+GITHUB_URL = "https://github.com/bdkautzman/ctrlx-claude-build-context/tree/main/apps/ctrlx-amr-fleet"
 
 WIDGET_PAGE = """<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;font:14px system-ui,sans-serif;background:#eef0f2;color:#1f2328">
@@ -26,6 +33,7 @@ def prepare(ui):
 
 def run(ui):
     page = ui.page
+    header_heights(ui)
     if ui.local:
         page.wait_for_function(r"/^\(\d+\)$/.test(document.getElementById('amr-count').textContent)",
                                timeout=30000)
@@ -35,6 +43,8 @@ def run(ui):
         assert page.locator("#btn-settings").is_visible(), "a user who may write sees the settings button"
     if page.locator("#amr-list li").count():
         details_and_lock(ui)
+        path(ui)
+    help_and_tutorial(ui)
     if ui.role != "reader" and ui.local:
         styling(ui)
     widget(ui)
@@ -70,6 +80,11 @@ def details_and_lock(ui):
     page.wait_for_selector("#followbar:not([hidden])")
     page.click("#btn-zoom-in")
     ui.shot("follow")
+    box = page.locator("#map").bounding_box()              # the locked AMR is in the middle of the map
+    page.mouse.dblclick(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_selector("#followbar", state="hidden")   # double-click on the locked AMR unlocks
+    tile.get_by_role("button", name=re.compile(r"^Follow ")).click()
+    page.wait_for_selector("#followbar:not([hidden])")
     box = page.locator("#map").bounding_box()
     x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
     page.mouse.move(x, y)
@@ -78,6 +93,110 @@ def details_and_lock(ui):
     page.mouse.up()
     page.wait_for_selector("#followbar", state="hidden")
     page.keyboard.press("f")
+    for _ in range(5):                                     # far out: AMRs at their minimum size
+        page.click("#btn-zoom-out")
+    tile.get_by_role("button", name=re.compile(r"^Center on ")).click()
+    shot_path = ui.out + "/{}-focus-small.png".format(ui.prefix)
+    page.screenshot(path=shot_path)                        # at once: the outline pulses for 2 s only
+    ui.shots.append(shot_path)
+    page.keyboard.press("f")
+
+
+def header_heights(ui):
+    """Pills and buttons of the top bar have one height (the help button had another)."""
+    boxes = ui.page.evaluate("""() => [...document.querySelectorAll('.topbar-right .pill, .topbar-right .btn')]
+        .filter(e => e.getClientRects().length).map(e => [e.id, e.getBoundingClientRect().height, e.getBoundingClientRect().top])""")
+    assert len({round(h, 1) for _, h, _ in boxes}) == 1 and len({round(t, 1) for _, _, t in boxes}) == 1, boxes
+
+
+def path(ui):
+    """Path button of the first AMR: the app's path for it (GET /fleet/path) is drawn on the map."""
+    page = ui.page
+    tile = page.locator("#amr-list li").first
+    button = tile.get_by_role("button", name=re.compile(r"^Path of "))
+    if button.is_hidden():                                 # path history 0 in the settings (device)
+        return
+    ident = tile.get_attribute("data-id")
+    if button.get_attribute("aria-pressed") != "true":
+        button.click()
+    assert button.get_attribute("aria-pressed") == "true"
+    assert "on" in button.get_attribute("class")
+    if ui.local:                                           # the simulation drives: the path grows
+        deadline = time.monotonic() + 40
+        while len(ui.api("GET", "/fleet/path?id=" + quote(ident))["points"]) < 3:
+            assert time.monotonic() < deadline, "no path recorded for " + ident
+            time.sleep(1)
+    tile.get_by_role("button", name=re.compile(r"^Center on ")).click()
+    ui.shot("path")
+
+
+def help_and_tutorial(ui):
+    page = ui.page
+    menu = page.locator("#help-menu")
+    page.click("#btn-help")
+    menu.wait_for()
+    link = page.locator("#help-github")
+    assert (link.get_attribute("href"), link.get_attribute("target")) == (GITHUB_URL, "_blank")
+    ui.shot("help")
+    page.keyboard.press("Escape")
+    assert menu.is_hidden()
+    page.click("#btn-help")
+    page.click("#btn-tutorial")
+    assert menu.is_hidden()
+    tour = page.locator("#tour")
+    tour.wait_for()
+    count = int(re.search(r"of (\d+)$", page.inner_text("#tour-count")).group(1))
+    titles, has_amrs = [], page.locator("#amr-list li").count() > 0
+    for i in range(count):
+        assert page.inner_text("#tour-count") == "Step {} of {}".format(i + 1, count)
+        titles.append(page.inner_text("#tour-title"))
+        if titles[-1] == "Focus" and has_amrs:
+            check_ring_over(ui, page.locator("#amr-list li").first.get_by_role("button", name=re.compile(r"^Center on ")))
+            page.click("#tour-try")
+            ui.shot("tutorial")
+        page.click("#tour-next")                           # the last one is "Done"
+    assert tour.is_hidden() and page.locator("#tour-ring").is_hidden(), "Done ends the tutorial"
+    assert ("Settings" in titles) == (ui.role != "reader"), titles
+    assert titles[0] == "Welcome" and titles[-1] == "Help", titles
+    page.click("#btn-help")                                # keyboard: arrows step, Escape ends
+    page.click("#btn-tutorial")
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press("ArrowLeft")
+    assert page.inner_text("#tour-title") == titles[1]
+    page.keyboard.press("Escape")
+    assert tour.is_hidden()
+    if has_amrs:
+        tutorial_narrow(ui)
+
+
+def tutorial_narrow(ui):
+    """390 px: the list floats over the map - the tutorial opens it for the AMR steps, "Show me" closes it."""
+    page = ui.page
+    size = page.viewport_size
+    page.set_viewport_size({"width": 390, "height": 844})
+    try:
+        page.click("#btn-help")
+        page.click("#btn-tutorial")
+        while page.inner_text("#tour-title") != "Focus":
+            page.click("#tour-next")
+        assert page.locator("#panel").is_visible(), "the AMR steps show the list"
+        check_ring_over(ui, page.locator("#amr-list li").first.get_by_role("button", name=re.compile(r"^Center on ")))
+        page.click("#tour-try")
+        assert page.locator("#panel").is_hidden(), "Show me closes the floating list: the result is on the map"
+        ui.shot("tutorial-narrow")
+        page.click("#tour-close")
+    finally:
+        page.set_viewport_size(size)
+
+
+def check_ring_over(ui, target):
+    ring = ui.page.locator("#tour-ring")
+    assert ring.is_visible(), "the step's control is marked"
+    assert ring.evaluate("e => getComputedStyle(e).animationIterationCount") == "infinite", "pulses while the step is shown"
+    r, t = ring.bounding_box(), target.bounding_box()
+    assert r["x"] <= t["x"] and r["y"] <= t["y"] and r["x"] + r["width"] >= t["x"] + t["width"] \
+        and r["y"] + r["height"] >= t["y"] + t["height"], (r, t)
 
 
 def styling(ui):

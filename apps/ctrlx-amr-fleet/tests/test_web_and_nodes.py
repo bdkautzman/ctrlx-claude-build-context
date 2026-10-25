@@ -7,6 +7,7 @@ import os
 import tempfile
 import time
 import unittest
+from urllib.parse import quote
 
 from app import auth, config
 from app.datalayer_nodes import NodeRegistry, NodeSpec, NodeWriteError, build_node_specs
@@ -93,11 +94,12 @@ class WebApiTest(unittest.TestCase):
         cls.store = SettingsStore(os.path.join(active, config.SNAP_NAME, "settings.json"),
                                   DEFAULTS_FILE, active, RULES)
         cls.store.load_from_disk(create_if_missing=True)
-        cls.fleet = FleetState()
+        cls.fleet = FleetState(path_minutes=5)
         cls.dl = DataLayerService(cls.store.get(), "test", on_fleet_write=cls.fleet.receive)
         cls.store.add_listener(cls.dl.on_settings_changed)
         cls.maps = MapSource(config.MAP_SEARCH_DIRS)
         cls.maps.configure("HMI_Map.txt", 0)
+        cls.maps.wait_idle(60)
         cls._port = config.DEV_HTTP_PORT
         config.DEV_HTTP_PORT = 0  # let the OS pick a free port
         cls.web = WebServer(cls.store, cls.dl, cls.fleet, cls.maps)
@@ -180,6 +182,22 @@ class WebApiTest(unittest.TestCase):
                              scopes=(config.SCOPE_READ,))
         self.assertEqual(status, 403)
 
+    def test_fleet_path(self):
+        for x in (0, 400, 800):
+            fleet_json = json.dumps([{"id": "P 1/ä", "x": x, "y": 0, "rotation": 0}])
+            status, _ = self.req("PUT", config.API_PREFIX + "/values/fleet/amrs", {"value": fleet_json})
+            self.assertEqual(status, 200)
+        url = config.API_PREFIX + "/fleet/path?id=" + quote("P 1/ä")
+        status, body = self.req("GET", url, scopes=(config.SCOPE_READ,))
+        self.assertEqual(status, 200)
+        self.assertEqual(body["id"], "P 1/ä")
+        self.assertEqual([p[:2] for p in body["points"]], [[0, 0], [400, 0], [800, 0]])
+        self.assertTrue(all(0 <= p[2] < 60 for p in body["points"]))
+        status, _ = self.req("GET", config.API_PREFIX + "/fleet/path?id=nobody", scopes=(config.SCOPE_READ,))
+        self.assertEqual(status, 404)
+        status, _ = self.req("GET", url, scopes=None)
+        self.assertEqual(status, 401)
+
     def test_read_only_users_get_no_settings(self):
         reader = (config.SCOPE_READ,)
         for path in ("/settings", "/settings/meta", "/values"):   # /values holds settings/active
@@ -188,7 +206,8 @@ class WebApiTest(unittest.TestCase):
         status, view = self.req("GET", config.API_PREFIX + "/view-config", scopes=reader)
         self.assertEqual(status, 200)
         self.assertEqual(set(view), {"style", "unitsPerMeter", "amrLengthM", "amrWidthM", "staleAfterMs",
-                                     "refreshIntervalMs"})
+                                     "refreshIntervalMs", "pathHistoryMinutes", "pathStepM"})
+        self.assertEqual((view["pathHistoryMinutes"], view["pathStepM"]), (5, 0.25))
         self.assertRegex(view["style"]["accent"], r"^#[0-9a-f]{6}$")
         self.assertGreaterEqual(len(view["style"]["amrColors"]), 1)
         status, _ = self.req("GET", config.API_PREFIX + "/view-config", scopes=None)

@@ -74,7 +74,7 @@ def main():
     logsetup.set_level(settings["general"]["logLevel"])
     store.add_listener(lambda s: logsetup.set_level(s["general"]["logLevel"]))
 
-    fleet = FleetState(settings["fleet"]["rotationUnit"])
+    fleet = FleetState()
     maps = MapSource(config.MAP_SEARCH_DIRS)
 
     # the Data Layer node settings/active gets redacted settings (`secret` rules masked)
@@ -98,9 +98,11 @@ def main():
     simulator.start()
 
     def apply_settings(s):
-        fleet.configure(s["fleet"]["rotationUnit"])
+        fleet.configure(s["fleet"]["rotationUnit"], s["fleet"]["pathHistoryMinutes"], s["map"]["unitsPerMeter"])
         maps.configure(s["map"]["file"], s["map"]["resolution"])
         simulator.configure(s)
+    fleet.configure(settings["fleet"]["rotationUnit"], settings["fleet"]["pathHistoryMinutes"],
+                    settings["map"]["unitsPerMeter"])
     store.add_listener(apply_settings)
 
     web = WebServer(store, datalayer, fleet, maps)

@@ -77,6 +77,14 @@ RULES = {
     },
     "fleet.amrLengthM": {"label": "AMR length [m]", "min": 0.05, "max": 50.0},
     "fleet.amrWidthM": {"label": "AMR width [m]", "min": 0.05, "max": 50.0},
+    "fleet.pathHistoryMinutes": {
+        "label": "Path history [min]",
+        "min": 0,
+        "max": 60,
+        "help": "How long the app keeps the driven path of every AMR (path button in the AMR list; in "
+                "memory, lost on restart). 0 = no paths. One point per 0.25 m driven, at most 200,000 "
+                "for all AMRs together - with many AMRs the paths get shorter.",
+    },
     "display": {"label": "Display"},
     "display.refreshIntervalMs": {
         "label": "Refresh interval [ms]",
@@ -102,6 +110,7 @@ RULES = {
         "help": "Demo/test without a PLC: the app moves AMRs through the free space of the map "
                 "and overwrites fleet/amrs every 200 ms.",
     },
-    "simulation.amrCount": {"label": "Simulated AMRs", "min": 1, "max": 50},
+    "simulation.amrCount": {"label": "Simulated AMRs", "min": 1, "max": 200,
+                            "help": "Up to 200 (performance tests); they need room: a few per 100 m² of free floor."},
     "simulation.speedMps": {"label": "Simulation speed [m/s]", "min": 0.05, "max": 10.0},
 }

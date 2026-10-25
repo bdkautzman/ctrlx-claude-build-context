@@ -17,8 +17,9 @@ Routes
   POST /<snap>/api/v1/settings/reset write
   GET  /<snap>/api/v1/values         write  (Data Layer nodes of this app, incl. settings/active)
   PUT  /<snap>/api/v1/values/<name>  write  body {"value": ...}
-  GET  /<snap>/api/v1/view-config    read   what the map view needs: style colors, units, AMR size, refresh
+  GET  /<snap>/api/v1/view-config    read   what the map view needs: style colors, units, AMR size, refresh, paths
   GET  /<snap>/api/v1/fleet[?since=<revision>]   read  AMRs; only status if the revision is unchanged
+  GET  /<snap>/api/v1/fleet/path?id=<id>          read  driven path of one AMR: points [x, y, age s]
   GET  /<snap>/api/v1/map            read   active map: file, error, cell size, extent, tile levels
   GET  /<snap>/api/v1/map/tiles/<map id>/<level>/<x>/<y>.png[?color=rrggbb]   read  map tile
   POST /<snap>/api/v1/appdata/save   Solutions save command
@@ -38,6 +39,7 @@ import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from app import appdata_commands, auth, config
+from app.fleet import PATH_STEP_M
 from app.datalayer_nodes import NodeWriteError
 from app.settings_store import SettingsError
 
@@ -287,6 +289,8 @@ def _make_handler(store, datalayer, fleet, maps):
                     "amrWidthM": settings["fleet"]["amrWidthM"],
                     "staleAfterMs": settings["fleet"]["staleAfterMs"],
                     "refreshIntervalMs": settings["display"]["refreshIntervalMs"],
+                    "pathHistoryMinutes": settings["fleet"]["pathHistoryMinutes"],
+                    "pathStepM": PATH_STEP_M,
                 })
             if route == "/fleet" and method == "GET":
                 auth.require(self.headers, write=False)
@@ -299,6 +303,12 @@ def _make_handler(store, datalayer, fleet, maps):
                 occ_map = maps.current()
                 snap["mapId"] = occ_map.id if occ_map is not None else None
                 return self._send_json(200, snap)
+            if route == "/fleet/path" and method == "GET":
+                auth.require(self.headers, write=False)
+                path = fleet.path(self._query().get("id", ""))
+                if path is None:
+                    return self._problem(404, "No such AMR")
+                return self._send_json(200, path)
             if route == "/map" and method == "GET":
                 auth.require(self.headers, write=False)
                 info = maps.info()

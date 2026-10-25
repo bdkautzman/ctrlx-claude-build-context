@@ -18,6 +18,7 @@ Levels are built on first use from the cell list, tiles are cached (LRU).
 
 import hashlib
 import math
+import os
 import re
 import struct
 import threading
@@ -30,7 +31,16 @@ MAX_CELLS = 100_000_000           # 10000 x 10000 cells -> 12.5 MB bitmap for le
 MAX_FILE_BYTES = 64 * 1024 * 1024
 TILE_CACHE_ENTRIES = 512
 _FIELD_SPLIT = re.compile(r"[\t; ]+")
+# fast path for files without commas: the first two number-like fields of every line in one C-level
+# regex pass; float() validates them (anything odd -> the line-by-line path)
+_NUMBERISH = r"[-+.\d][-+.\deE]*"
+_FAST_LINE = re.compile(r"^[ \t]*(" + _NUMBERISH + r")[\t; ]+(" + _NUMBERISH + r")", re.M)
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+# prepare(): one byte of a level = 8 pixels -> 4 pixels (pairs OR-ed) of the next level, as a nibble
+_PAIRS = [(((b & 0xC0) != 0) << 3) | (((b & 0x30) != 0) << 2) | (((b & 0x0C) != 0) << 1) | ((b & 0x03) != 0)
+          for b in range(256)]
+_PAIRS_HIGH = bytes(v << 4 for v in _PAIRS)   # for the even bytes of a row
+_PAIRS_LOW = bytes(_PAIRS)                     # for the odd bytes
 
 
 class MapError(Exception):
@@ -39,6 +49,16 @@ class MapError(Exception):
 
 def parse_points(text):
     """Return (xs, ys) as array('d') from the point-list text."""
+    if "," not in text:   # no decimal commas possible: regex passes (several times faster)
+        try:
+            xs, ys = _parse_fast(text)
+        except ValueError:
+            pass              # e.g. "1.2.3" or a lone "-": the careful path below skips such lines
+        else:
+            if all(map(math.isfinite, xs)) and all(map(math.isfinite, ys)):
+                return xs, ys
+            keep = [i for i in range(len(xs)) if math.isfinite(xs[i]) and math.isfinite(ys[i])]
+            return array("d", (xs[i] for i in keep)), array("d", (ys[i] for i in keep))
     xs, ys = array("d"), array("d")
     for line in text.splitlines():
         line = line.strip()
@@ -60,8 +80,40 @@ def parse_points(text):
     return xs, ys
 
 
+def _parse_fast(text, chunk_chars=256 * 1024):
+    """The regex pass in chunks of whole lines: all 184k lines at once as Python tuples/strings/floats
+    peaked at 39 MB (Python keeps that memory afterwards, gotchas #59); 256 KB chunks: 7 MB."""
+    xs, ys = array("d"), array("d")
+    pos, end_of_text = 0, len(text)
+    while pos < end_of_text:
+        end = text.find("\n", pos + chunk_chars)
+        end = end_of_text if end < 0 else end + 1
+        pairs = _FAST_LINE.findall(text, pos, end)
+        xs.extend([float(p[0]) for p in pairs])
+        ys.extend([float(p[1]) for p in pairs])
+        pos = end
+    return xs, ys
+
+
+def _halve(stride, bits, height, width2, height2):
+    """Bitmap of the next level (half size, a pixel is set if any of its 2 x 2 pixels is) from the bytes
+    of this one - row by row with C-level operations, no Python object per pixel."""
+    stride2 = (width2 + 7) >> 3      # == ceil(stride / 2): the even bytes of a row
+    out = bytearray(stride2 * height2)
+    for r in range(height2):
+        top = bits[2 * r * stride:(2 * r + 1) * stride]
+        if 2 * r + 1 < height:       # OR of the two rows
+            bottom = bits[(2 * r + 1) * stride:(2 * r + 2) * stride]
+            top = (int.from_bytes(top, "big") | int.from_bytes(bottom, "big")).to_bytes(stride, "big")
+        high = bytes(top[0::2]).translate(_PAIRS_HIGH)
+        low = bytes(top[1::2]).translate(_PAIRS_LOW).ljust(stride2, b"\0")
+        out[r * stride2:(r + 1) * stride2] = (int.from_bytes(high, "big") | int.from_bytes(low, "big")).to_bytes(stride2, "big")
+    return stride2, out
+
+
 def _scaled_offset_gcd(xs, ys, scale):
-    """gcd of all offsets from the minimum, after multiplying by scale; None if not integers."""
+    """gcd of all offsets from the minimum, after multiplying by scale; None if not integers.
+    xs, ys: the distinct values are enough (a big map has ~100x fewer distinct values than points)."""
     g = 0
     for values in (xs, ys):
         base = round(min(values) * scale)
@@ -76,6 +128,7 @@ def _scaled_offset_gcd(xs, ys, scale):
 
 def auto_resolution(xs, ys):
     """Cell size = gcd of all offsets from the minimum, for coordinates with <= 4 decimals."""
+    xs, ys = set(xs), set(ys)
     for scale in (1, 10, 100, 1000, 10000):
         g = _scaled_offset_gcd(xs, ys, scale)
         if g is not None:
@@ -107,10 +160,11 @@ class OccupancyMap:
         if width * height > MAX_CELLS:
             raise MapError("map has {} x {} cells at resolution {:g} (max. {} cells) - set a larger "
                            "map.resolution".format(width, height, res, MAX_CELLS))
-        cols, rows = array("I"), array("I")
-        for x, y in zip(xs, ys):
-            cols.append(int(round((x - min_x) / res)))
-            rows.append(int(round((max_y - y) / res)))
+        # cell of every point via lookup tables of the distinct values (far fewer than points)
+        col_of = {x: int(round((x - min_x) / res)) for x in set(xs)}
+        row_of = {y: int(round((max_y - y) / res)) for y in set(ys)}
+        cols = array("I", map(col_of.__getitem__, xs))
+        rows = array("I", map(row_of.__getitem__, ys))
         self.name = name
         self.resolution = res
         self.min_x, self.max_x, self.min_y, self.max_y = min_x, max_x, min_y, max_y
@@ -125,20 +179,27 @@ class OccupancyMap:
         self._bitmaps = {}
         self._tiles = OrderedDict()
         self._lock = threading.Lock()
+        self._build_lock = threading.Lock()   # one bitmap build at a time (prepare() vs. tile requests)
+        self.prepared = False
 
     @classmethod
-    def from_text(cls, text, resolution=0.0, name=""):
+    def from_text(cls, text, resolution=0.0, name="", digest=None):
         xs, ys = parse_points(text)
-        digest = hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()
+        if digest is None:
+            digest = hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()
         return cls(xs, ys, resolution, name, digest)
 
     @classmethod
     def from_file(cls, path, resolution=0.0, name=""):
         with open(path, "rb") as f:
-            data = f.read(MAX_FILE_BYTES + 1)
-        if len(data) > MAX_FILE_BYTES:
-            raise MapError("map file larger than {} MB".format(MAX_FILE_BYTES // (1024 * 1024)))
-        return cls.from_text(data.decode("utf-8-sig", "replace"), resolution, name)
+            # check the size first: f.read(limit) reserves `limit` bytes up front (64 MB for a 3 MB map)
+            if os.fstat(f.fileno()).st_size > MAX_FILE_BYTES:
+                raise MapError("map file larger than {} MB".format(MAX_FILE_BYTES // (1024 * 1024)))
+            data = f.read()
+        digest = hashlib.sha1(data).hexdigest()   # of the bytes: no extra copy of the text for it
+        text = data.decode("utf-8-sig", "replace")
+        del data
+        return cls.from_text(text, resolution, name, digest)
 
     # -- geometry ---------------------------------------------------------------------
     def level_size(self, level):
@@ -169,15 +230,39 @@ class OccupancyMap:
             found = self._bitmaps.get(level)
         if found:
             return found
-        w, h = self.level_size(level)
-        stride = (w + 7) >> 3
-        bits = bytearray(stride * h)
-        for c, r in zip(self._cols, self._rows):
-            c >>= level
-            bits[(r >> level) * stride + (c >> 3)] |= 0x80 >> (c & 7)
-        with self._lock:
-            self._bitmaps.setdefault(level, (stride, bits))
-            return self._bitmaps[level]
+        with self._build_lock:
+            with self._lock:
+                found = self._bitmaps.get(level)
+            if found:
+                return found
+            w, h = self.level_size(level)
+            stride = (w + 7) >> 3
+            bits = bytearray(stride * h)
+            for c, r in zip(self._cols, self._rows):
+                c >>= level
+                bits[(r >> level) * stride + (c >> 3)] |= 0x80 >> (c & 7)
+            with self._lock:
+                self._bitmaps[level] = (stride, bits)
+                return self._bitmaps[level]
+
+    def prepare(self):
+        """Build the bitmaps of all levels ahead of the first tile request (MapSource runs it in the
+        background after loading): level 0 from the points, every further level from the bytes of the one
+        below (_halve) - fast and without a Python object per point (memory)."""
+        stride, bits = self._bitmap(0)
+        for level in range(1, self.levels):
+            with self._lock:
+                done = self._bitmaps.get(level)
+            if done:
+                stride, bits = done
+                continue
+            w1, h1 = self.level_size(level - 1)
+            w2, h2 = self.level_size(level)
+            with self._build_lock:
+                stride, bits = _halve(stride, bits, h1, w2, h2)
+                with self._lock:
+                    self._bitmaps.setdefault(level, (stride, bits))
+        self.prepared = True
 
     def tile_png(self, level, tx, ty, rgb=(0x33, 0x3d, 0x4a)):
         """PNG bytes of one tile, or None if level/tile is outside the map."""

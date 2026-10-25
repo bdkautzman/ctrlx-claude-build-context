@@ -2,6 +2,7 @@
 
 import json
 import math
+import time
 import unittest
 
 from app.fleet import parse_fleet
@@ -79,6 +80,20 @@ class NavGridTest(unittest.TestCase):
             self.assertTrue(r <= 17 and c <= 17, (r, c))
 
 
+    def test_door_in_the_outer_wall(self):
+        """The walls are the map border; a door gap connects the floor with the edge (Warehouse map,
+        0.2.2): the floor must still be chosen, not a small enclosed pocket (e.g. inside a rack pair)."""
+        box = [(c, r) for c in range(40, 76) for r in range(8, 44) if c in (40, 75) or r in (8, 43)]
+        m = room_map(size=80, stray=box)                               # hollow 36 x 36 box: a pocket
+        door = {(c, 0) for c in range(10, 30)}                          # gap in the top wall (row 0)
+        text = "\n".join("{}\t{}".format(c * 10, (m.height - 1 - r) * 10) for c, r in sorted(set(m.cells()))
+                          if (c, r) not in door)
+        nav = NavGrid(OccupancyMap.from_text(text), 20)
+        self.assertGreater(len(nav.free), 700)                         # the floor ...
+        self.assertNotIn(29 * nav.cols + 29, nav.free)                  # ... not the pocket inside the box
+        self.assertIn(5 * nav.cols + 10, nav.free)                      # (nav row 29, col 29 / row 5, col 10)
+
+
 class SimulatorTest(unittest.TestCase):
     def test_publishes_valid_fleet_inside_free_space(self):
         sim = Simulator(FakeMaps(room_map()), publish=None)
@@ -92,10 +107,13 @@ class SimulatorTest(unittest.TestCase):
         for a in amrs:
             self.assertTrue(20 <= a["x"] <= 370 and 20 <= a["y"] <= 370, a)    # inside the walls
             self.assertFalse(160 < a["x"] < 230 and 160 < a["y"] < 230, a)    # not in the pillar
-            self.assertIn(a["state"], ("driving", "turning", "waiting"))
-        later = parse_fleet(sim.step(1.0))
-        self.assertTrue(any((a["x"], a["y"], a["rotation"]) != (b["x"], b["y"], b["rotation"])
-                            for a, b in zip(amrs, later)))   # something moves
+            self.assertIn(a["state"], ("driving", "turning", "waiting", "blocked"))
+        moved = False
+        for _ in range(30):                                   # something moves (not in every single step:
+            later = parse_fleet(sim.step(0.2))                # all may be waiting at their goals)
+            moved = moved or any((a["x"], a["y"], a["rotation"]) != (b["x"], b["y"], b["rotation"])
+                                 for a, b in zip(amrs, later))
+        self.assertTrue(moved)
 
     def test_amrs_keep_their_distance(self):
         sim = Simulator(FakeMaps(room_map(size=60)), publish=None, seed=3)
@@ -153,6 +171,22 @@ class SimulatorTest(unittest.TestCase):
         sim.configure(settings(enabled=False))
         self.assertEqual(json.loads(sim.step(0.2)), {"amrs": []})       # once, to clear the view
         self.assertIsNone(sim.step(0.2))
+
+    def test_fixed_rhythm(self):
+        """5 updates/s even when a step's work takes most of the period (here 120 ms of 200)."""
+        published = []
+
+        def slow_publish(text):
+            time.sleep(0.12)
+            published.append(time.monotonic())
+        sim = Simulator(FakeMaps(room_map()), publish=slow_publish)
+        sim.configure(settings(count=2))
+        sim.start()
+        time.sleep(2.1)
+        sim.stop()
+        self.assertGreaterEqual(len(published), 9)       # a wait *after* the work gave 1 / 0.32 s = 6
+        gaps = [b - a for a, b in zip(published, published[1:])]
+        self.assertLess(max(gaps), 0.35)
 
     def test_no_map(self):
         sim = Simulator(FakeMaps(None), publish=None)
