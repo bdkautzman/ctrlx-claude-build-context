@@ -35,6 +35,15 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 ## Hard rules
 - **Interfaces**: never add a plug/slot or open a port without asking. Check
   `docs/ctrlx/reserved-interfaces-and-ports.md`; every interface must also be in `validation/slotplug-description.json`.
+- **Custom tools: ask first.** Before you build something the kit, the template and the standard library don't
+  already offer, just to solve this one case, stop and ask the user (AskUserQuestion; best while planning, together
+  with the other open questions). This covers: your own implementation of a file format, protocol or parser that a
+  library normally provides (a PDF writer, a binary protocol reader); a new tool or script in `tools/` or an app's
+  `scripts/`, or a new command in an existing tool; a new test or verification harness; a new dev dependency (also
+  outside the snap, e.g. in the UI test venv). Say what it is and why it's needed, give the options (existing open-source
+  library: license, size, aarch64 wheel / small custom version: rough size / reduce the feature or check it another
+  way) and recommend one. Not needed for the code of the feature the user asked for, unit tests, small helpers or
+  throwaway scripts in the scratchpad. Checklist: skill `new-ctrlx-app`; why: `docs/ctrlx/decisions.md`.
 - **Names**: snap `ctrlx-<company>-<app>` ≤ 29 chars; manifest file `<snap>.package-manifest.json` with `id` = snap name;
   proxy name `<snap>.web`, url `/<snap>`; scopes `<snap>.web.<what>.<r|rw|x>`; Data Layer root `<snap>/`;
   app-data dir `<snap>/`. Never keep identifiers from samples (`sdk-py-*`, `rexroth-python-webserver`).

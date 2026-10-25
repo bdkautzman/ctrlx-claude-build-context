@@ -14,6 +14,9 @@ report findings only.
    - blocking work inside Data Layer callbacks; callbacks that may not call `cb` exactly once
    - settings changes bypassing `SettingsStore`; breaking changes to `settings.json` without migration
    - new plugs/slots/ports and whether they are justified and described in `validation/`
+   - custom tools (own format/protocol implementations, new `tools/` commands or app `scripts/`, test harnesses,
+     new dependencies incl. dev-only ones): list them, and say whether the app's README/CHANGELOG notes that the
+     user agreed to them (CLAUDE.md "Custom tools: ask first") - if not, mark it "should fix: confirm with the user"
    - copied identifiers from samples; hardcoded paths into other snaps; credentials
    - Data Layer API calls that don't exist in `reference/ctrlxdatalayer-api-3.6.0/`
    - missing tests for new logic

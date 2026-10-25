@@ -106,4 +106,15 @@ python3 ../../tools/pdf_check.py report.pdf      # render a report's pages to PN
 ./build-snap-amd64.sh && ./build-snap-arm64.sh
 ```
 
+## Custom tools in this app
+
+Built before the kit's "Custom tools: ask first" rule (CLAUDE.md, 2026-10-25); listed in the hand-over report and
+committed with the user's OK the same day:
+
+* `src/app/pdf_writer.py` + `report_pdf.py` + `fontmetrics.py` (`scripts/make_font_metrics.py`) - instead of a PDF
+  library (reportlab/fpdf2 need Pillow, a C extension)
+* `src/app/netinfo.py` - rtnetlink reader (no library for it in the standard library)
+* `scripts/make_oui.py` (vendor list), `scripts/device_scan.py` (scan + CPU/RAM on a device)
+* in the kit: `tools/pdf_check.py` (+ pypdfium2 in the UI test venv), `ctrlx.py api`, checker rule `PART-STAGE-DIR`
+
 Verification status: see CHANGELOG.md.

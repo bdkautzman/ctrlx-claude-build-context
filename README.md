@@ -77,7 +77,7 @@ claude
 ## Maintaining the kit
 
 * After each project: keep `docs/ctrlx/gotchas.md` current; turn repeat problems into checker rules
-  (`tools/ctrlx_check.py` + `tools/tests/`); update "Status" above and `apps/README.md`; new kit-wide
+  (`tools/ctrlx_check.py` + `tools/tests/`; new tools and rules only after asking - CLAUDE.md "Custom tools: ask first"); update "Status" above and `apps/README.md`; new kit-wide
   decisions go to `docs/ctrlx/decisions.md`.
 * New ctrlX OS / SDK version: `docs/ctrlx/sources.md` → "Refreshing".
 * Snapshot date of all sources: 2026-10-15 (SDK tag 4.6.0).
