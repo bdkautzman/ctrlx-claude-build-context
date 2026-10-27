@@ -1,0 +1,29 @@
+{
+  "settingsVersion": 1,
+  "general": {
+    "logLevel": "INFO",
+    "heartbeatIntervalMs": 1000
+  },
+  "collector": {
+    "intervalSeconds": 5,
+    "threads": true,
+    "pss": true
+  },
+  "history": {
+    "rawMinutes": 120,
+    "minuteHours": 24,
+    "tenMinuteDays": 7,
+    "maxMemoryMb": 28
+  },
+  "leak": {
+    "metric": "anon",
+    "minMbPerHour": 1.0,
+    "minFit": 0.8,
+    "minSpanMinutes": 30,
+    "nodeWindowMinutes": 60
+  },
+  "recording": {
+    "medium": "",
+    "threads": false
+  }
+}

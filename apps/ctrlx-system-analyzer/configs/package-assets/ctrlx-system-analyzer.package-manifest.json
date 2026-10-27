@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/package-manifest/package-manifest.v1.7.schema.json",
+  "version": "1.0.0",
+  "id": "ctrlx-system-analyzer",
+  "scopes-declaration": [
+    {
+      "identifier": "ctrlx-system-analyzer.web",
+      "name": "System Analyzer",
+      "description": "Permissions for the System Analyzer",
+      "scopes": [
+        {
+          "identifier": "ctrlx-system-analyzer.web.all.r",
+          "name": "View System Analyzer",
+          "description": "View CPU and memory history, leak analysis, events and exports of the System Analyzer"
+        },
+        {
+          "identifier": "ctrlx-system-analyzer.web.all.rw",
+          "name": "Manage System Analyzer",
+          "description": "Also change the System Analyzer settings, the recording medium and add event markers"
+        }
+      ]
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "ctrlx-system-analyzer.web",
+        "url": "/ctrlx-system-analyzer",
+        "binding": "unix://{$SNAP_DATA}/package-run/ctrlx-system-analyzer/web.sock",
+        "restricted": [
+          "/ctrlx-system-analyzer/api"
+        ]
+      }
+    ]
+  },
+  "menus": {
+    "sidebar": [
+      {
+        "id": "ctrlx-system-analyzer",
+        "title": "System Analyzer",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-system-analyzer/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-system-analyzer.web.all.r",
+          "ctrlx-system-analyzer.web.all.rw"
+        ],
+        "items": []
+      }
+    ],
+    "overview": [
+      {
+        "id": "ctrlx-system-analyzer-overview",
+        "title": "System Analyzer",
+        "description": "CPU and memory of every app, process and thread over time",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-system-analyzer/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-system-analyzer.web.all.r",
+          "ctrlx-system-analyzer.web.all.rw"
+        ],
+        "items": []
+      }
+    ]
+  },
+  "commands": {
+    "activeConfiguration": {
+      "save": [
+        {
+          "id": "ctrlx-system-analyzer",
+          "subject": "System Analyzer settings",
+          "url": "/ctrlx-system-analyzer/api/v1/appdata/save"
+        }
+      ],
+      "load": [
+        {
+          "id": "ctrlx-system-analyzer",
+          "subject": "System Analyzer settings",
+          "url": "/ctrlx-system-analyzer/api/v1/appdata/load"
+        }
+      ]
+    }
+  },
+  "configuration": {
+    "appDirectories": [
+      {
+        "name": "ctrlx-system-analyzer",
+        "description": "System Analyzer settings",
+        "icon": "bosch-ic-components",
+        "copyOnLoad": true,
+        "writeProtected": false
+      }
+    ],
+    "appPrivateFiles": [
+      "^ctrlx-system-analyzer/.*\\.tmp$"
+    ]
+  }
+}

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>System Analyzer</title>
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="vendor/uPlot.min.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<!-- data-ui-ready: app.js sets "true" once the data is shown; tools/ui_check.py waits for it -->
+<body data-ui-ready="false">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1 id="app-title">System Analyzer</h1>
+      <span id="app-version" class="muted"></span>
+    </div>
+    <div class="pills">
+      <span id="pill-sampling" class="pill pill-unknown" title="Sampling of /proc and the analyzer's own CPU load">Sampling: …</span>
+      <span id="pill-medium" class="pill pill-unknown" title="Long-term recording on an external medium">Medium: …</span>
+      <span id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</span>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <nav class="rangebar" aria-label="Time range">
+    <div class="presets" role="group" aria-label="Range presets">
+      <button type="button" class="btn btn-seg" data-preset="900">15 min</button>
+      <button type="button" class="btn btn-seg" data-preset="3600">1 h</button>
+      <button type="button" class="btn btn-seg" data-preset="21600">6 h</button>
+      <button type="button" class="btn btn-seg" data-preset="86400">24 h</button>
+      <button type="button" class="btn btn-seg" data-preset="604800">7 d</button>
+      <button type="button" class="btn btn-seg" data-preset="2592000">30 d</button>
+    </div>
+    <label class="inline">From <input type="datetime-local" id="range-from" step="60"></label>
+    <label class="inline">To <input type="datetime-local" id="range-to" step="60"></label>
+    <button type="button" id="btn-apply" class="btn">Apply</button>
+    <span id="range-info" class="muted small" aria-live="polite"></span>
+    <span class="spacer"></span>
+    <label class="inline">Export
+      <select id="export-level" aria-label="Export level">
+        <option value="apps">Apps</option>
+        <option value="processes">Processes</option>
+        <option value="threads">Threads</option>
+        <option value="system">System</option>
+      </select>
+    </label>
+    <select id="export-format" aria-label="Export format">
+      <option value="csv">CSV</option>
+      <option value="json">JSON</option>
+    </select>
+    <button type="button" id="btn-export" class="btn">Download</button>
+  </nav>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" class="tab" data-tab="overview" aria-selected="true">Overview</button>
+    <button type="button" role="tab" class="tab" data-tab="apps" aria-selected="false">Apps</button>
+    <button type="button" role="tab" class="tab" data-tab="leaks" aria-selected="false">Leaks</button>
+    <button type="button" role="tab" class="tab" data-tab="events" aria-selected="false">Events</button>
+    <button type="button" role="tab" class="tab" data-tab="settings" aria-selected="false">Settings</button>
+  </nav>
+
+  <main>
+    <!-- Overview -->
+    <section id="tab-overview" class="tabpanel" role="tabpanel">
+      <div class="tiles" id="tiles"></div>
+      <div class="grid2">
+        <div class="card"><h2>CPU load</h2><p class="sub">% per core and in total</p><div class="chart" id="ch-sys-cpu"></div></div>
+        <div class="card"><h2>System memory</h2><p class="sub">MB used and available</p><div class="chart" id="ch-sys-mem"></div></div>
+        <div class="card"><h2>Memory of the largest apps</h2><p class="sub" id="sub-top-mem">MB anon</p><div class="chart" id="ch-top-mem"></div></div>
+        <div class="card"><h2>CPU of the busiest apps</h2><p class="sub">% of one core</p><div class="chart" id="ch-top-cpu"></div></div>
+        <div class="card"><h2>Pressure stall</h2><p class="sub">% of time tasks waited for CPU, memory or I/O (avg10)</p><div class="chart" id="ch-sys-psi"></div></div>
+        <div class="card"><h2>Growing memory</h2><p class="sub" id="sub-growing">Over the selected range</p><div id="growing-list" class="growing"></div></div>
+      </div>
+    </section>
+
+    <!-- Apps -->
+    <section id="tab-apps" class="tabpanel" role="tabpanel" hidden>
+      <div class="card">
+        <div class="card-head"><h2>Apps</h2><span class="muted small">CPU in % of one core · memory in MB · click an app for details</span></div>
+        <div class="table-wrap"><table class="data" id="apps-table">
+          <thead><tr>
+            <th data-sort="name">App</th><th data-sort="kind">Kind</th><th data-sort="processes" class="num">Proc.</th>
+            <th data-sort="threads" class="num">Threads</th><th data-sort="cpu" class="num">CPU %</th>
+            <th data-sort="anonMb" class="num">Anon</th><th data-sort="rssMb" class="num">RSS</th>
+            <th data-sort="pssMb" class="num">PSS</th><th data-sort="swapMb" class="num">Swap</th>
+            <th data-sort="growth" class="num">Growth MB/h</th>
+          </tr></thead>
+          <tbody><tr><td colspan="10" class="muted">Loading…</td></tr></tbody>
+        </table></div>
+      </div>
+      <div id="app-detail" hidden>
+        <div class="card">
+          <div class="card-head"><h2 id="app-detail-title">App</h2><span id="app-detail-info" class="muted small"></span>
+            <label class="inline small"><input type="checkbox" id="opt-minmax"> show min/max</label></div>
+          <div class="grid3">
+            <div><h3>Memory</h3><p class="sub">MB</p><div class="chart" id="ch-app-mem"></div></div>
+            <div><h3>CPU</h3><p class="sub">% of one core</p><div class="chart" id="ch-app-cpu"></div></div>
+            <div><h3>Threads and processes</h3><p class="sub">count</p><div class="chart" id="ch-app-count"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Processes</h2><span class="muted small">now · click a process for its charts and threads</span></div>
+          <div class="table-wrap"><table class="data" id="proc-table">
+            <thead><tr><th class="num">PID</th><th>Name</th><th>Service</th><th class="num">CPU %</th><th class="num">Anon</th>
+              <th class="num">RSS</th><th class="num">PSS</th><th class="num">Swap</th><th class="num">Peak</th>
+              <th class="num">Threads</th><th>Scheduling</th><th>Started</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+        <div class="card" id="proc-detail" hidden>
+          <div class="card-head"><h2 id="proc-detail-title">Process</h2><span id="proc-detail-cmd" class="muted small mono"></span></div>
+          <div class="grid3">
+            <div><h3>Memory</h3><p class="sub">MB</p><div class="chart" id="ch-proc-mem"></div></div>
+            <div><h3>CPU</h3><p class="sub">% of one core</p><div class="chart" id="ch-proc-cpu"></div></div>
+            <div><h3>Thread CPU</h3><p class="sub">% of one core · tick threads below (up to 8)</p><div class="chart" id="ch-thread-cpu"></div></div>
+          </div>
+          <div class="table-wrap"><table class="data" id="thread-table">
+            <thead><tr><th></th><th class="num">TID</th><th>Name</th><th class="num">CPU %</th><th>Policy</th>
+              <th class="num">RT prio</th><th class="num">Nice</th><th class="num">Core</th><th>State</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Leaks -->
+    <section id="tab-leaks" class="tabpanel" role="tabpanel" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Memory growth</h2>
+          <label class="inline">Level <select id="leak-level"><option value="apps">Apps</option><option value="processes">Processes</option></select></label>
+          <label class="inline">Metric <select id="leak-metric"><option value="anon">anon</option><option value="pss">PSS</option><option value="rss">RSS</option></select></label>
+          <label class="inline" id="leak-app-wrap" hidden>App <select id="leak-app"><option value="">all</option></select></label>
+        </div>
+        <p class="muted small" id="leak-explain">The line is fitted through the lowest values of the range, so a garbage collector's ups and downs don't count; growth is in MB per hour, fit 1 = perfectly steady.</p>
+        <div class="table-wrap"><table class="data" id="leak-table">
+          <thead><tr><th>Verdict</th><th>App</th><th>Process</th><th class="num">Now</th><th class="num">Start → end</th>
+            <th class="num">Growth MB/h</th><th class="num">Fit</th><th class="num">Span</th><th class="num">Full in</th>
+            <th class="num">Threads/h</th><th class="num">Restarts</th></tr></thead>
+          <tbody><tr><td colspan="11" class="muted">Loading…</td></tr></tbody>
+        </table></div>
+      </div>
+      <div class="card" id="leak-detail" hidden>
+        <div class="card-head"><h2 id="leak-detail-title">Trend</h2><span id="leak-detail-info" class="muted small"></span></div>
+        <div class="chart chart-tall" id="ch-leak"></div>
+      </div>
+    </section>
+
+    <!-- Events -->
+    <section id="tab-events" class="tabpanel" role="tabpanel" hidden>
+      <div class="card">
+        <div class="card-head"><h2>Events</h2><span class="muted small">restarts, updates and markers in the selected range - also shown as lines in the charts</span></div>
+        <form id="marker-form" class="actions">
+          <input type="text" id="marker-text" maxlength="200" placeholder="Marker text, e.g. test started" aria-label="Marker text">
+          <button type="submit" id="btn-marker" class="btn btn-primary">Add marker</button>
+          <span id="marker-state" class="muted small" aria-live="polite"></span>
+        </form>
+        <div class="table-wrap"><table class="data" id="events-table">
+          <thead><tr><th>Time</th><th>Type</th><th>App</th><th>Service</th><th>Text</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="tab-settings" class="tabpanel" role="tabpanel" hidden>
+      <div class="grid2">
+        <div class="card" id="recording">
+          <h2>Recording on an external medium</h2>
+          <p class="muted small">Writes one CSV row per app (and process) and minute to
+            <span class="mono">&lt;medium&gt;/ctrlx-system-analyzer/</span> - for ranges longer than the RAM history,
+            restarts and reboots. Nothing is written to the internal flash. Unmount the medium in
+            Settings → Storage before you remove it.</p>
+          <div class="fields">
+            <div class="field"><label for="rec-medium">Medium</label><select id="rec-medium"><option value="">Off</option></select></div>
+            <div class="field"><label class="checkbox" for="rec-threads"><input type="checkbox" id="rec-threads">Record threads too</label></div>
+          </div>
+          <div class="actions">
+            <button type="button" id="btn-rec-save" class="btn btn-primary">Save</button>
+            <button type="button" id="btn-rec-refresh" class="btn">Look for media</button>
+            <span id="rec-state" class="muted small" aria-live="polite"></span>
+          </div>
+          <dl class="kv" id="rec-status"></dl>
+        </div>
+        <div class="card">
+          <h2>Status</h2>
+          <dl class="kv" id="status-list"></dl>
+          <p id="st-error" class="error" hidden></p>
+        </div>
+      </div>
+      <div class="card" id="settings">
+        <div class="card-head">
+          <h2>Settings</h2>
+          <span class="muted">Stored in ctrlX app data · saved and loaded with configurations</span>
+        </div>
+        <form id="settings-form" novalidate>
+          <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
+          <ul id="settings-errors" class="error-list" hidden></ul>
+          <div class="actions">
+            <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+            <button type="button" id="btn-revert" class="btn">Revert</button>
+            <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
+            <span id="save-state" class="muted" aria-live="polite"></span>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <script src="vendor/uPlot.iife.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

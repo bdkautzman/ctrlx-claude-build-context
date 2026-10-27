@@ -39,7 +39,7 @@ and a settings JSON in ctrlX app data.
    This one-time shakedown validates the parts of the kit that could not be tested without a device
    (listed under "Unverified assumptions" in gotchas.md).
 
-## Status (2026-10-25)
+## Status (2026-10-27)
 
 Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (arm64):
 * template: build, install (`tools/ctrlx.py install --service`), Data Layer, reverse proxy + scopes,
@@ -50,6 +50,8 @@ Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (ar
 * template `templates/python-webapp` 0.1.7 (settings validator hook, `minItems`/`itemPattern`)
 * generated PDFs are checked like UI screenshots: `tools/pdf_check.py` (PDFium renders the pages to PNG)
 * network access of a strict snap with the `network` plug, mapped for `ctrlx-network-scanner` (gotchas #61-#65)
+* `/proc` access of a strict snap with `system-observe` (connected by the ctrlX installer, gotchas #67), mapped for
+  `ctrlx-system-analyzer` (cost per sample: #68)
 
 Open items:
 * template candidates from `ctrlx-amr-fleet`: settings rule `format: "color"` with color fields in the
@@ -57,6 +59,8 @@ Open items:
   (that app's `/view-config` pattern, gotchas #55); a help menu (`?`) with a step-by-step tutorial that
   marks each control (ring overlay + card, `tests/ui_scenario.py` checks it)
 * still unverified parts of the kit: gotchas.md → "Unverified assumptions"
+* `ctrlx-system-analyzer`: not yet on the real CORE (arm64 cost per sample, RT tasks there) and not yet with a real
+  USB stick / SD card (`/media/<name>` mount points and writing are tested locally only)
 * `ctrlx-network-scanner`: the whitelist/blacklist semantics (rating only) and the three default profiles are
   first versions - adjust after real use; IPv4 only; no ICMP/SYN scans possible in a strict snap (gotchas #61)
 * `ctrlx-amr-fleet`: map units (mm) and the fleet JSON format were chosen without a real PLC/fleet

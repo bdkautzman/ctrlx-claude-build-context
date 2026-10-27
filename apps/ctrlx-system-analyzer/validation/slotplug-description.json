@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/validation/slotplug-description/slotplug-description.v1.schema.json",
+  "$id": "https://boschrexroth.com/app-validation/slotplug-description.v1.json",
+  "type": "object",
+  "title": "Slot and Plug Description",
+  "description": "All used slots and plugs of ctrlx-system-analyzer",
+  "slots": [
+    {
+      "name": "package-assets",
+      "purpose": "Provides the package manifest, FOSS info and translations to the ctrlX Device Admin (menus, reverse proxy, scopes, app data)."
+    },
+    {
+      "name": "package-run",
+      "purpose": "Shares the folder with the web server Unix socket so the ctrlX reverse proxy can forward requests to the app."
+    }
+  ],
+  "plugs": [
+    {
+      "name": "network",
+      "purpose": "Network client access required by the ctrlX Data Layer client/provider library."
+    },
+    {
+      "name": "network-bind",
+      "purpose": "Allows the app to create and listen on its web server Unix socket."
+    },
+    {
+      "name": "datalayer",
+      "purpose": "Content interface to the ctrlX Data Layer (IPC) to provide the app's Data Layer nodes."
+    },
+    {
+      "name": "active-solution",
+      "purpose": "Access to the active configuration (app data) to store and load the app settings JSON file."
+    },
+    {
+      "name": "system-observe",
+      "purpose": "Read-only access to /proc of all processes and threads (CPU time, memory incl. PSS, I/O, scheduling, cgroup) and to /proc/pressure - the data this diagnostic app analyzes. Connected by the ctrlX installer."
+    },
+    {
+      "name": "removable-media",
+      "purpose": "Optional long-term recording: appends CSV files to <medium>/ctrlx-system-analyzer/ on a USB stick or SD card the user selects, so nothing is written cyclically to the internal flash."
+    }
+  ]
+}

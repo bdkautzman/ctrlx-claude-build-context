@@ -375,3 +375,58 @@ App `ctrlx-network-scanner` (network inventory: discovery, ports, services, PDF 
     same profile on the COREvirtual without the "no TCP ping for addresses that did not answer ARP" rule
     took 77 s for 508 addresses (2.4 k TCP attempts in discovery alone), with it 20 s (767 attempts, same
     4 hosts): on directly connected networks ARP decides, TCP pings are only for routed targets. History: ~1.5 KB per scan (gzip JSON).
+
+Probe for `ctrlx-system-analyzer` (per-app/process/thread CPU and memory), 2026-10-27:
+
+67. **The ctrlX installer connects `system-observe` and `removable-media` of an unsigned strict snap itself**
+    (COREvirtual, ctrlX OS 4.6, snapd 2.72; throwaway probe snap installed with `tools/ctrlx.py install`,
+    i.e. the package-manager REST API the web UI uses). `snap connections` shows both as `manual`, like the
+    content interfaces of the other apps; no `snap connect` needed. Neither is in the installer's plug
+    denylist (`/snap/rexroth-deviceadmin/current/denylist.json`, 78 entries). Order: the daemon starts with
+    both plugs NOT connected, ~3 s later the installer connects them and the service is restarted - so an
+    app must not cache "no access" from its first seconds. What a strict root daemon reads from `/proc` of
+    *other* processes (automationcore, PID 1), without -> with `system-observe`: always readable: the `/proc`
+    PID list, `status` (VmRSS/RssAnon/VmHWM/Threads), `stat`, `statm`, `cgroup` (`name=systemd` line =
+    `snap.<snap>.<app>.service`), `cmdline`, `task/` + `task/<tid>/stat`, `fd/` count, `/proc/stat`,
+    `/proc/meminfo`; only with the plug: `smaps_rollup` (PSS), `io`, `attr/current` (AppArmor label),
+    `schedstat`, `/proc/pressure/*`. `/media` (removable media mount points) needs `removable-media`.
+    ctrlX OS 4.6 runs cgroup v1 (hybrid); the Data Layer has only system-wide metrics
+    (`framework/metrics/system/*`, `system/resources/{cpu,memory}`) and the automationcore's own threads
+    (`framework/metrics/cpu-load`, last 50 s).
+
+App `ctrlx-system-analyzer` (CPU/memory history per app, process and thread; leak analysis), 2026-10-27:
+
+68. **Cost of reading /proc for every process and thread in Python** (collector of ctrlx-system-analyzer
+    0.1.0, sample = /proc/stat + meminfo + pressure, per process stat + status, per thread task/<tid>/stat):
+    COREvirtual with 177-179 processes / 744-755 threads: 29-36 ms CPU per sample (0.6 % of one core at
+    5 s); the emulated build VM with 154 processes / 300 threads: 250-500 ms. `smaps_rollup` (PSS) is the
+    expensive file - the kernel walks the process's page tables (123 ms of a 400 ms sample in the build
+    VM for 22 processes) - so PSS is read only every 30 s per process. Read /proc files with one
+    `os.read` (stop when a read returns less than asked: a second read just to see EOF doubled the
+    syscalls) and look keys up with `bytes.find` instead of splitting `status` into lines.
+    Real CORE (arm64) not measured yet: expect ~6x the COREvirtual (#58).
+69. **Python `array` rings allocate their full capacity at once** → a history of ~760 series (raw 2 h at
+    5 s + 1-minute 24 h + 10-minute 7 days, min/avg/max) is 22 MB right after the start, and the app's
+    RSS is 60 MB from the first minutes (ctrlx-system-analyzer on the COREvirtual). App Guide 6.2.1 asks
+    for < 75 MB RAM: the arrays have a budget setting (`history.maxMemoryMb`, default 28 MB: the app
+    itself needs ~45 MB RSS; measured flat at 68.5 MB with 23.5 MB of history after 40 min) that drops
+    ended processes' series first. Short-lived processes would otherwise grow it without bound.
+70. **Vendoring a JavaScript library without Node.js** (the build VM has no `node`/`npm`): the npm
+    registry is reachable through the VM's proxy - `curl https://registry.npmjs.org/<pkg>` gives the
+    versions, publish dates and the tarball's `dist.integrity` (sha512, base64); download the tarball,
+    compare the hash, copy `dist/*.min.js` + CSS into the app's `www/vendor/` and add a fossinfo entry
+    with the LICENSE text (uPlot 1.6.32, MIT, 51 KB, for ctrlx-system-analyzer). The static file
+    server serves subfolders of `www/` as they are.
+71. **Short-lived processes made the analyzer's own memory grow 55 MB/h** (ctrlx-system-analyzer 0.1.0
+    before the fix, COREvirtual, 2026-10-27): a test loop started `sleep 10` every 10 s; each lived
+    through 2 samples (5 s interval) and got its own history series - 6 metrics x ~35 KB of
+    preallocated rings (#69) = ~210 KB per `sleep`. The leak analysis flagged the analyzer itself as
+    "growing" (anon 15 -> 61 MB in 30 min) - correct, the budget would have stopped it at 40 MB. Fix: own
+    series only for processes/threads that have run for >= 60 s (shorter ones count for their app);
+    ended processes with too little data are left out of the leak table (there were 118 `sleep` rows).
+72. **What a real slow leak looks like in RssAnon** (test on the COREvirtual: a bash loop appending 20 KB
+    to a string every 10 s): not a straight line and not a regular saw tooth - steady growth (0.4 ->
+    17.5 MB in 30 min, ~33 MB/h) with single samples far below (6.5 / 4.7 MB) when glibc hands freed
+    memory back. A rolling-minimum envelope followed those dips (fit R^2 0.74, only "possible"); a
+    rolling 10th percentile ignores them (0.97) but is worse for regular GC saw teeth (0.76 vs 0.996).
+    The analysis now fits both and uses the steadier one (ctrlx-system-analyzer `analysis.steadiest`).
