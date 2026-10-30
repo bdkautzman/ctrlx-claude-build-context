@@ -144,6 +144,20 @@ class AnalysisTest(unittest.TestCase):
         self.assertAlmostEqual(r["growthMbPerHour"], 30, delta=4)
         self.assertLess(r["startMb"], r["endMb"])
 
+    def test_minute_data_with_a_dip_every_ten_minutes_is_growing(self):
+        # read back from the USB stick on the real CORE: 1-minute minimums, 33 points, each 10th a dip
+        times, mins = self.series(0.55, lambda t: (10 + 34 * t / 3600) * (0.45 if t % 600 == 60 else 1))
+        r = analysis.assess(times, mins, RULES)
+        self.assertEqual(r["verdict"], "growing")
+        self.assertAlmostEqual(r["growthMbPerHour"], 34, delta=4)
+
+    def test_despike_keeps_saw_teeth_and_drops(self):
+        saw = [100 + (i % 10) * 2 for i in range(40)]
+        self.assertEqual(analysis.despike(saw), saw)
+        self.assertEqual(analysis.despike([10, 11, 12, 3, 14, 15, 16]), [10, 11, 12, 12, 14, 15, 16])
+        drop = [50] * 10 + [20] * 10
+        self.assertEqual(analysis.despike(drop), drop)
+
     def test_flat_is_stable_and_noise_is_not_growing(self):
         times, mins = self.series(2, lambda t: 50.0)
         self.assertEqual(analysis.assess(times, mins, RULES)["verdict"], "stable")

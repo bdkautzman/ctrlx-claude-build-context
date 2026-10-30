@@ -269,6 +269,8 @@ def _make_handler(store, datalayer, services):
                     "title": config.APP_TITLE,
                     "version": config.app_version(),
                     "uptimeSeconds": int(time.monotonic() - _START_TIME),
+                    # the page takes "now" from the device: its clock may be off (a CORE without NTP)
+                    "serverTime": time.time(),
                     "settings": store.status(),
                     "datalayer": datalayer.status(),
                     "collector": collector.status(),

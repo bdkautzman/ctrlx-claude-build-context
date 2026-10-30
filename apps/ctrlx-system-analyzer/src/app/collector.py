@@ -106,7 +106,7 @@ class Collector:
         self._lock = threading.Lock()
         self._snapshot = None
         self._stats = {"samples": 0, "lastSampleMs": 0.0, "lastCpuMs": 0.0, "avgCpuMs": 0.0,
-                       "pssAvailable": None, "pressureAvailable": None, "error": None}
+                       "pssAvailable": None, "pressure": None, "error": None}
         self._cpu_ms = deque(maxlen=12)
         self._stop = threading.Event()
         self._wake = threading.Event()
@@ -318,7 +318,9 @@ class Collector:
             "lastCpuMs": round(cpu_ms, 1),
             "avgCpuMs": round(sum(self._cpu_ms) / len(self._cpu_ms), 1),
             "pssAvailable": pss_ok if self.pss_on else None,
-            "pressureAvailable": psi["memory"] is not None,
+            # ok | missing (kernel without PSI, e.g. the real CORE) | unreadable (no system-observe)
+            "pressure": "ok" if psi["memory"] is not None
+                        else "missing" if not os.path.isdir(root + "/pressure") else "unreadable",
             "error": None,
         })
         if self._stats["samples"] % 120 == 0:

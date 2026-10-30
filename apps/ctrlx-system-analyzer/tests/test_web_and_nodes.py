@@ -8,7 +8,7 @@ import tempfile
 import time
 import unittest
 
-from app import auth, config
+from app import auth, config, grouping
 from app.datalayer_nodes import NodeRegistry, NodeSpec, NodeWriteError, build_node_specs
 from app.datalayer_service import DataLayerService
 from app.main import Services
@@ -168,6 +168,7 @@ class WebApiTest(unittest.TestCase):
         status, body = self.req("GET", self.api + "/status", scopes=(config.SCOPE_READ,))
         self.assertEqual(status, 200)
         self.assertEqual(body["collector"]["samples"], 4)
+        self.assertAlmostEqual(body["serverTime"], time.time(), delta=5)
         self.assertIn("tiers", body["history"])
         self.assertEqual(body["recording"]["state"], "off")
         status, body = self.req("GET", self.api + "/overview", scopes=(config.SCOPE_READ,))
@@ -220,6 +221,16 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual(status, 400)
         status, _ = self.req("PUT", self.api + "/values/status/heartbeat", {"value": 1})
         self.assertEqual(status, 400)
+
+    def test_analyzer_start_counts_as_restart_of_its_app(self):
+        ev = self.services.events.add(time.time() - 20, "analyzer", "started",
+                                      grouping.Group("snap:alpha", "alpha", "snap", "control", "alpha", True))
+        try:
+            status, body = self.req("GET", self.api + "/analysis?level=apps", scopes=(config.SCOPE_READ,))
+            alpha = [r for r in body["results"] if r["entity"] == "app.snap:alpha"][0]
+            self.assertEqual(alpha["restarts"], 1)
+        finally:
+            self.services.events._events.remove(ev)
 
     def test_media(self):
         status, body = self.req("GET", self.api + "/media", scopes=(config.SCOPE_READ,))

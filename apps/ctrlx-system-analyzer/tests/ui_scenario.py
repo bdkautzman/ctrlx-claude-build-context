@@ -99,5 +99,5 @@ def device_tour(ui):
             if row.count():
                 row.click()
                 ui.wait_ready()
-                ui.page.locator("#ch-app-mem canvas").wait_for()
+                ui.page.locator("#ch-app-mem canvas, #ch-app-mem .empty").first.wait_for()
         ui.shot(name)

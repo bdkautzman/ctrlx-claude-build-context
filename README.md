@@ -51,7 +51,7 @@ Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (ar
 * generated PDFs are checked like UI screenshots: `tools/pdf_check.py` (PDFium renders the pages to PNG)
 * network access of a strict snap with the `network` plug, mapped for `ctrlx-network-scanner` (gotchas #61-#65)
 * `/proc` access of a strict snap with `system-observe` (connected by the ctrlX installer, gotchas #67), mapped for
-  `ctrlx-system-analyzer` (cost per sample: #68)
+  `ctrlx-system-analyzer` (cost per sample: #68; real CORE layout, cgroup v2, no PSI, clock: #73-#75)
 
 Open items:
 * template candidates from `ctrlx-amr-fleet`: settings rule `format: "color"` with color fields in the
@@ -59,8 +59,8 @@ Open items:
   (that app's `/view-config` pattern, gotchas #55); a help menu (`?`) with a step-by-step tutorial that
   marks each control (ring overlay + card, `tests/ui_scenario.py` checks it)
 * still unverified parts of the kit: gotchas.md → "Unverified assumptions"
-* `ctrlx-system-analyzer`: not yet on the real CORE (arm64 cost per sample, RT tasks there) and not yet with a real
-  USB stick / SD card (`/media/<name>` mount points and writing are tested locally only)
+* `ctrlx-system-analyzer`: leak verdicts so far only from 30-60 min test runs (synthetic leak) - no multi-hour/day
+  ranges yet; an SD card as medium not tested (a USB stick was)
 * `ctrlx-network-scanner`: the whitelist/blacklist semantics (rating only) and the three default profiles are
   first versions - adjust after real use; IPv4 only; no ICMP/SYN scans possible in a strict snap (gotchas #61)
 * `ctrlx-amr-fleet`: map units (mm) and the fleet JSON format were chosen without a real PLC/fleet

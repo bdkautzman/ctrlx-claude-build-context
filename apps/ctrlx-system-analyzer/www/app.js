@@ -133,12 +133,19 @@
     app: null, proc: null, threads: new Set(), sort: { key: "rssMb", dir: -1 },
     leakLevel: "apps", leakMetric: "anon", leakApp: "", leakEntity: null,
     canWrite: false, status: null, overview: null, group: null, analysis: null, events: [],
-    source: null, busy: false, timer: null,
+    source: null, busy: false, timer: null, clockOffset: 0,
   };
 
+  // "now" of the device: all data is stamped with the device clock, which may be off (no NTP)
+  function deviceNow() { return Date.now() / 1000 + state.clockOffset; }
+  function clockNote() {
+    const off = state.clockOffset;
+    if (Math.abs(off) < 120) return "";
+    return "device clock " + (off < 0 ? "behind" : "ahead of") + " this computer by " + fmtDuration(Math.abs(off)) + " - times are the device's";
+  }
   function updateRange() {
     if (state.preset) {
-      state.to = Date.now() / 1000;
+      state.to = deviceNow();
       state.from = state.to - state.preset;
     }
   }
@@ -271,7 +278,9 @@
   // ---- status / pills --------------------------------------------------------
   async function refreshStatus() {
     try {
+      const asked = Date.now() / 1000;
       const s = await api("GET", "/status");
+      if (typeof s.serverTime === "number") state.clockOffset = s.serverTime - (asked + Date.now() / 1000) / 2;
       state.status = s;
       state.canWrite = !!s.canWrite;
       document.title = s.title;
@@ -309,7 +318,8 @@
       ["CPU per sample", c.lastCpuMs + " ms (average " + c.avgCpuMs + " ms)"],
       ["Processes / threads", (c.processes ?? "–") + " / " + (c.threadCount ?? "–")],
       ["PSS readable", c.pssAvailable === null ? "off" : c.pssAvailable ? "yes" : "no (system-observe plug?)"],
-      ["Pressure readable", c.pressureAvailable ? "yes" : "no (system-observe plug?)"],
+      ["Pressure stall info", c.pressure === "ok" ? "yes" : c.pressure === "missing" ? "not in this device's kernel" : "not readable (system-observe plug?)"],
+      ["Device clock", fmtTime(deviceNow()) + (clockNote() ? " · " + clockNote() : "")],
       ["History RAM", fmtBytes(h.bytes) + " of " + fmtBytes(h.maxBytes) + " · " + h.series + " series" + (h.refused ? " · " + h.refused + " refused (budget)" : "")],
       ["Every sample", covers(tier("raw"))], ["1-minute", covers(tier("minute"))], ["10-minute", covers(tier("tenminute"))],
       ["Settings source", s.settings.source + (s.settings.persisted ? "" : " (not saved)")],
@@ -343,8 +353,10 @@
       tile("CPU now", fmtPct(sys.cpu) + " %", sys.coreCount + " cores: " + sys.cores.map((c) => fmtPct(c)).join(" / ")),
       tile("Memory used", fmtMb(sys.memUsedMb) + " MB", "of " + fmtMb(sys.memTotalMb) + " MB"),
       tile("Available", fmtMb(sys.memAvailableMb) + " MB", sys.swapTotalMb ? "swap used " + fmtMb(sys.swapUsedMb) + " MB" : "no swap"),
-      tile("Memory pressure", sys.pressure.memory === null ? "–" : fmtPct(sys.pressure.memory) + " %",
-        "CPU " + (sys.pressure.cpu === null ? "–" : fmtPct(sys.pressure.cpu)) + " · I/O " + (sys.pressure.io === null ? "–" : fmtPct(sys.pressure.io)) + " %"),
+      sys.pressure.memory === null
+        ? tile("Memory pressure", "n/a", st && st.collector.pressure === "missing" ? "not in this device's kernel" : "not readable")
+        : tile("Memory pressure", fmtPct(sys.pressure.memory) + " %",
+          "CPU " + (sys.pressure.cpu === null ? "–" : fmtPct(sys.pressure.cpu)) + " · I/O " + (sys.pressure.io === null ? "–" : fmtPct(sys.pressure.io)) + " %"),
       tile("Apps", String(ov.apps.length), ov.counts.processes + " processes · " + ov.counts.threads + " threads"),
       tile("Analyzer load", own === null ? "–" : fmtPct(own) + " %", "of one core"));
 
@@ -364,7 +376,9 @@
     renderChart("ch-sys-mem", { unit: "MB", events: markers, series: [{ label: "used", color: PALETTE[0] }, { label: "available", color: PALETTE[1] }] },
       columns(resp, [["sys.memused", "avg"], ["sys.memavail", "avg"]]));
     const psi = [["sys.psicpu", "CPU"], ["sys.psimem", "memory"], ["sys.psiio", "I/O"]].filter(([s]) => hasData(resp, s));
-    renderChart("ch-sys-psi", { unit: "%", events: markers, empty: "Not readable (system-observe plug).",
+    renderChart("ch-sys-psi", { unit: "%", events: markers,
+      empty: st && st.collector.pressure === "missing" ? "Not available: this device's kernel has no pressure stall information (/proc/pressure)."
+        : st && st.collector.pressure === "unreadable" ? "Not readable (system-observe plug)." : "No data in this range.",
       series: psi.map(([, l], i) => ({ label: l, color: PALETTE[i] })) }, columns(resp, psi.map(([s]) => [s, "avg"])));
 
     $("sub-top-mem").textContent = "MB " + metric + " · the 8 largest in the range";
@@ -831,7 +845,8 @@
       $("range-info").textContent = src && src.times
         ? (src.source === "medium" ? "from the medium · 1-minute values" : "RAM · " + (src.tier === "raw" ? "every sample (" + src.step + " s)" : src.tier === "minute" ? "1-minute values" : "10-minute values"))
           + (src.oldest && src.oldest > state.from + 60 ? " · data since " + fmtTime(src.oldest) : "")
-        : "";
+          + (clockNote() ? " · " + clockNote() : "")
+        : clockNote();
     } catch (e) {
       if (e.status !== 401) showBanner("Cannot load data: " + e.message);
     } finally {
@@ -909,7 +924,7 @@
     // right after the app started, a 1 h range would squeeze the data into its right edge
     const tiers = state.status ? state.status.history.tiers : [];
     const oldest = Math.min(...tiers.filter((t) => t.oldest).map((t) => t.oldest));
-    if (isFinite(oldest) && Date.now() / 1000 - oldest < 900) state.preset = 900;
+    if (isFinite(oldest) && deviceNow() - oldest < 900) state.preset = 900;
     let tab = "overview";
     try { tab = sessionStorage.getItem(TOKEN_KEY + ".tab") || "overview"; } catch (e) { /* storage blocked */ }
     if (location.hash === "#settings") tab = "settings";

@@ -302,7 +302,7 @@ App `ctrlx-amr-fleet` 0.2.0 (styling, read-only users, home screen widget), 2026
     between checks) - wait with `page.wait_for_function` instead, and don't churn the DOM (fixed in
     the widget: rows are rebuilt only when something visible changed).
 58. **How much slower is a real ctrlX CORE than the COREvirtual for a Python app?** Measured with
-    ctrlx-amr-fleet 0.2.2 (2026-10-23; CORE = ARM, 2 cores, rexroth-arch01; COREvirtual on a Windows PC,
+    ctrlx-amr-fleet 0.2.2 (2026-10-23; CORE = ARM, 2 cores for apps (4, see #73), rexroth-arch01; COREvirtual on a Windows PC,
     4 cores): parsing a 184k-line map 5.0 s vs 0.8 s (~6x), CPU for the same simulation load 25 % vs 5 %
     of a core (~5x). The emulated build VM is another ~6x slower than the CORE (~35x vs the COREvirtual).
     Plan CPU-heavy work (big files, per-cycle loops) for the CORE, not for the COREvirtual. SSH CPU/RSS of
@@ -367,7 +367,7 @@ App `ctrlx-network-scanner` (network inventory: discovery, ports, services, PDF 
     the default gateway returns systemd-resolved's synthetic name `_gateway` (filter names starting with `_`);
     a Data Layer string node used as a command (`scan/start`) that rejects a value in `on_write` answers a REST
     write with HTTP 400 `DL_INVALID_VALUE` and keeps its old value, as designed (#50).
-66. **Cost of a network scan on a real ctrlX CORE** (arm64, 2 cores; ctrlx-network-scanner 0.1.0, 2026-10-25):
+66. **Cost of a network scan on a real ctrlX CORE** (arm64, 2 cores for apps (4, see #73); ctrlx-network-scanner 0.1.0, 2026-10-25):
     "Quick inventory" of a /24 (254 addresses, 4 hosts up, ~75 common TCP ports, 100 attempts/s, 32 parallel)
     took 15 s and 588 connection attempts: neighbor-table discovery ~10 s (2 ARP batches of 128 + 2 s wait
     each), port scan ~5 s. App process: CPU max 9.7 %, average 4.7 % of one core; RSS 38.7 -> 42.2 MB.
@@ -404,7 +404,8 @@ App `ctrlx-system-analyzer` (CPU/memory history per app, process and thread; lea
     VM for 22 processes) - so PSS is read only every 30 s per process. Read /proc files with one
     `os.read` (stop when a read returns less than asked: a second read just to see EOF doubled the
     syscalls) and look keys up with `bytes.find` instead of splitting `status` into lines.
-    Real CORE (arm64) not measured yet: expect ~6x the COREvirtual (#58).
+    Real CORE (arm64, 215 processes / 431 threads, 2026-10-30): 123-136 ms CPU per sample = 2.7 % of
+    one core at 5 s - ~4x the COREvirtual.
 69. **Python `array` rings allocate their full capacity at once** → a history of ~760 series (raw 2 h at
     5 s + 1-minute 24 h + 10-minute 7 days, min/avg/max) is 22 MB right after the start, and the app's
     RSS is 60 MB from the first minutes (ctrlx-system-analyzer on the COREvirtual). App Guide 6.2.1 asks
@@ -430,3 +431,33 @@ App `ctrlx-system-analyzer` (CPU/memory history per app, process and thread; lea
     memory back. A rolling-minimum envelope followed those dips (fit R^2 0.74, only "possible"); a
     rolling 10th percentile ignores them (0.97) but is worse for regular GC saw teeth (0.76 vs 0.996).
     The analysis now fits both and uses the steadier one (ctrlx-system-analyzer `analysis.steadiest`).
+    At 1-minute resolution (read back from a USB stick on the real CORE, 2026-10-30) that was not
+    enough: every minute's MINIMUM catches the dip of that minute, a dip about every 10 min, and a 30-
+    point range leaves a 2-point rolling window (fit 0.48). Fix: a downward-only Hampel filter first
+    (value < median - 3 MAD of its 7 neighbours -> median; `analysis.despike`): 0.93; regular saw teeth,
+    restart drops and flat series are unchanged.
+
+Real ctrlX CORE (arm64, rexroth-arch01, ctrlX OS 4.6.5/4.6.6), ctrlx-system-analyzer 0.1.0/0.1.1, 2026-10-30:
+
+73. **The CORE has 4 cores; apps get 2 of them.** Kernel command line `irqaffinity=0 rcu_nocbs=2-3
+    nohz_full=2-3`; every normal process runs in the cpuset 0-1 (`Cpus_allowed_list: 0-1`, so `nproc` in an
+    SSH shell says 2, `nproc --all` 4). Cores 2-3 belong to the automationcore's real-time threads
+    (sysHwWdg FIFO 90, schedMain FIFO 89, SystemHandlerHP RR 91, ...). `/proc/stat` lists all 4 cores, so a
+    "CPU %" of the whole device understates how busy the app cores are: watch cores 0-1.
+74. **Real CORE vs COREvirtual kernel**: the CORE runs cgroup v2 (`systemd.unified_cgroup_hierarchy=1`,
+    `/sys/fs/cgroup` is cgroup2fs; `/proc/<pid>/cgroup` has only the `0::/system.slice/<unit>` line), the
+    COREvirtual cgroup v1 hybrid (`1:name=systemd:` line) - read both. The CORE's kernel has no pressure
+    stall information at all (`/proc/pressure` missing; the COREvirtual has it). Both: snapd connects
+    `system-observe` / `removable-media` of an unsigned snap through the installer (#67 holds for arm64).
+75. **The CORE's clock can be days off** (NTP inactive: 7 days behind on 2026-10-30, 14 h on 2026-10-22,
+    #45). A web page that computes "the last hour" from the browser's clock and asks the app for
+    device-stamped data gets an empty range. Let the server say what time it is (`serverTime` in the
+    status response) and compute ranges from that (ctrlx-system-analyzer 0.1.1); show times as the
+    device's and say how far its clock is off.
+76. **A USB stick on the real CORE** (FAT32, mounted in Settings > Storage, 2026-10-30): it appears as
+    `/media/sda1` - named after the block device, not the stick's label - with `vfat` options
+    `fmask=0022,dmask=0022` and owner root: only root may write, which the snap daemons are.
+    `os.path.ismount("/media/sda1")` is true inside a strict snap with `removable-media`, and
+    `os.statvfs` gives size/free. Appending CSV rows once a minute (ctrlx-system-analyzer, 58 files)
+    worked; FAT32 rounds every file up to its cluster size (`du` 1.3 MB for 0.6 MB written).
+

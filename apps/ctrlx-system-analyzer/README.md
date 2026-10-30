@@ -54,7 +54,8 @@ budget): 60 MB RSS after 2 min, 68.5 MB from 40 min on (23.5 MB history, 906 ser
 last 25 min of the test.
 
 **External medium** (setting `recording.medium`, chosen in *Settings → Recording*): ctrlX OS mounts
-USB sticks and SD cards under `/media/<name>` (*Settings → Storage*). Every minute the app appends
+USB sticks and SD cards under `/media/<name>` (*Settings → Storage*; a USB stick on the real CORE:
+`/media/sda1`, named after the device, not the stick's label). Every minute the app appends
 CSV rows (min/avg/max per metric) to
 
     <medium>/ctrlx-system-analyzer/<YYYY-MM-DD>/system.csv
@@ -75,7 +76,8 @@ For each app (or process) over the selected range: the lower envelope of the mem
 least-squares line → growth in MB/h and the fit R² (1 = perfectly steady). The envelope: per-bucket
 minimum, then over a rolling window of 1/12 of the range either the minimum (the bottoms of
 garbage-collector saw teeth) or the 10th percentile (growth with single deep dips, as a process that
-sometimes hands memory back) - whichever gives the steadier line.
+sometimes hands memory back) - whichever gives the steadier line. Single dips far below their
+neighbours are filled in first (Hampel filter), which matters at 1-minute resolution.
 *growing* = growth ≥ `leak.minMbPerHour` (1 MB/h) and fit ≥ `leak.minFit` (0.8) over at least
 `leak.minSpanMinutes` (30 min); *possible* = growth only. A restart inside the range starts the fit
 anew after it. "Full in" = available system memory / growth. Thread count growth (threads/h) is
@@ -110,10 +112,20 @@ threads or system for the range as CSV or JSON.
 
 ## Cost
 
-On the COREvirtual and the build VM see the CHANGELOG; the app shows its own CPU per sample
-(*Sampling* pill, Data Layer `collector/sample-cpu-ms`). PSS is read only every 30 s because the
-kernel walks the page tables for it. With threads off (`collector.threads`) a sample reads only
-the processes.
+| Device | Processes / threads | CPU per sample | at 5 s | RSS |
+|---|---|---|---|---|
+| real ctrlX CORE (arm64, 4 cores, apps on cores 0-1) | 213-215 / 425-437 | 122-136 ms | 2.4-2.7 % of one core | 52 MB after 2 min, 57 MB after 35 min |
+| COREvirtual (amd64, 4 cores) | 176-180 / 744-1100 | 29-36 ms | 0.6 % | 60 MB after 2 min, 68.5 MB from 40 min on |
+
+The app shows its own CPU per sample (*Sampling* pill, Data Layer `collector/sample-cpu-ms`). PSS is
+read only every 30 s because the kernel walks the page tables for it. With threads off
+(`collector.threads`) a sample reads only the processes. Recording on a USB stick (real CORE, with
+threads): ~33 KB per minute written, i.e. ~47 MB per day; on FAT32 every file also takes at least
+one cluster.
+
+**Device clock**: samples are stamped with the device's clock. A CORE without NTP can be days off
+(the test CORE: 7 days behind); the page takes "now" from the device, says how far its clock is off,
+and shows all times as the device's - also the date folders and `time` column on the medium.
 
 ## Develop
 

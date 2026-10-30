@@ -2,6 +2,30 @@
 
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 
+## 0.1.1
+
+Found on the real ctrlX CORE (arm64, 2026-10-30):
+- The page takes "now" from the device (`serverTime` in `/status`): the CORE's clock was 7 days behind
+  (NTP off), so every preset range showed an empty week-old window. A note in the range bar and the
+  status list says how far the device clock is off; all times shown are the device's.
+- The CORE's kernel has no pressure stall information (`/proc/pressure` missing): the overview says so
+  instead of blaming the `system-observe` plug (`collector.pressure`: ok / missing / unreadable).
+- UI scenario: on a device an app's chart may be empty.
+- The analyzer's own start event belongs to its app: its leak-table row now counts its restarts
+  (on the CORE it said 0 after two restarts) and fits only the data since the last one.
+- Leak analysis fills in single dips far below their neighbours (Hampel filter) before fitting: read
+  back from the USB stick (1-minute minimums) the CORE's test leak had a dip every ~10 min and was only
+  "possible" (fit 0.48); with the filter "growing" (0.93). Saw teeth and restart drops are unchanged.
+
+Verified on the real CORE (arm64, ctrlX OS with automationcore 4.6.5, 2026-10-30): the installer
+connects both plugs; 213-215 processes / 425-437 threads at 122-136 ms CPU per 5 s sample (2.4-2.7 %
+of one core); RSS 52 MB after 2 min, 57 MB after 35 min; RT threads of the automationcore with
+policy/priority/core (cores 2-3); cgroup v2 grouping; UI through the reverse proxy (ui_check --device
+core); Data Layer nodes. Leak test: a bash process growing ~34 MB/h rated "growing" (fit 0.98) after
+30 min at process and app level and in `analysis/growing`. Recording to a USB stick (FAT32,
+`/media/sda1`): all file kinds written, ~33 KB/min with threads; after an app restart the range
+before it came back from the stick (charts, leak table, events).
+
 ## 0.1.0
 
 First version (2026-10-27), from the user's design decisions:

@@ -6,7 +6,10 @@
    a rolling window over ENVELOPE_PARTS of the range (a 3 h range: 15 min - longer than most teeth):
    its minimum (regular saw teeth) and its 10th percentile (growth with single deep dips, e.g. a
    process that sometimes hands memory back - measured on the COREvirtual: R^2 0.74 with the minimum,
-   0.97 with the percentile). The steadier of the two (higher R^2) is used.
+   0.97 with the percentile). The steadier of the two (higher R^2) is used. Before that, single dips
+   are filled in (Hampel filter, downward only): at 1-minute resolution every minute's minimum
+   catches a dip, and a 30-point range leaves the rolling window too short to skip them (measured on
+   the real CORE from the USB stick: fit 0.48 -> 0.93). Saw-tooth bottoms repeat, so they stay.
 2. Least-squares line through the baseline -> growth in MB/h and the fit quality R^2 (1 = a straight
    line, 0 = no trend).
 3. Verdict: "growing" when growth >= leak.minMbPerHour AND R^2 >= leak.minFit over at least
@@ -46,6 +49,18 @@ def envelope(ts, vs, parts=ENVELOPE_PARTS, quantile=0.0):
         return ts[k - 1:], [min(vs[i - k + 1:i + 1]) for i in range(k - 1, len(vs))]
     pick = int(quantile * (k - 1) + 0.5)
     return ts[k - 1:], [sorted(vs[i - k + 1:i + 1])[pick] for i in range(k - 1, len(vs))]
+
+
+def despike(vs, half=3, k=3.0):
+    """Replace values far BELOW the median of their neighbours (> k median deviations) by that median."""
+    out = list(vs)
+    for i in range(len(vs)):
+        window = sorted(vs[max(0, i - half):i + half + 1])
+        med = window[len(window) // 2]
+        mad = sorted(abs(x - med) for x in window)[len(window) // 2]
+        if vs[i] < med - k * max(mad, 0.01 * abs(med)):
+            out[i] = med
+    return out
 
 
 def steadiest(ts, vs):
@@ -101,7 +116,7 @@ def assess(times, mins, rules, available_mb=None, restart_times=(), threads=None
               "line": None}
     if len(bt) < 6 or span_s < rules["minSpanMinutes"] * 60:
         return result
-    slope, intercept, r2, et, ev = steadiest(bt, bv)
+    slope, intercept, r2, et, ev = steadiest(bt, despike(bv))
     growth = slope * 3600.0
     result.update({"startMb": round(ev[0], 2), "endMb": round(ev[-1], 2), "growthMbPerHour": round(growth, 3),
                    "fit": round(r2, 3),

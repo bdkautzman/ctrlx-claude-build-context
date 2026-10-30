@@ -12,7 +12,7 @@
 
 name: ctrlx-system-analyzer
 title: System Analyzer
-version: 0.1.0
+version: 0.1.1
 summary: CPU and memory of every ctrlX app, process and thread over time
 description: |
   <!--

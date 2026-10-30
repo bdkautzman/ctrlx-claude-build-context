@@ -71,7 +71,7 @@ class CollectorTest(unittest.TestCase):
         self.assertFalse(h.has("app.kernel.anon"))
         self.assertEqual(self.c.describe("proc.snap:alpha." + pkey)["name"], "rexroth-automat")
         st = self.c.status()
-        self.assertEqual((st["samples"], st["pssAvailable"], st["pressureAvailable"]), (2, True, True))
+        self.assertEqual((st["samples"], st["pssAvailable"], st["pressure"]), (2, True, "ok"))
 
     def test_new_process_counts_from_its_start(self):
         self.c.sample(BTIME + 1000)
@@ -125,8 +125,14 @@ class CollectorTest(unittest.TestCase):
         proc = snap["groups"]["snap:alpha"]["processList"][0]
         self.assertEqual(proc["threadList"], [])
         self.assertIsNone(proc["pssMb"])
-        self.assertFalse(self.c.status()["pressureAvailable"])
+        self.assertEqual(self.c.status()["pressure"], "unreadable")
         self.assertIsNone(self.c.status()["pssAvailable"])
+
+    def test_kernel_without_pressure_stall_information(self):
+        import shutil
+        shutil.rmtree(os.path.join(self.tmp.name, "pressure"))   # the real CORE's kernel has no /proc/pressure
+        self.c.sample(BTIME + 1000)
+        self.assertEqual(self.c.status()["pressure"], "missing")
 
     def test_ended_process_is_dropped_and_clock_jump_back(self):
         self.c.sample(BTIME + 1000)

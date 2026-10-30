@@ -13,7 +13,7 @@ from app import analysis
 from app.history import downsample
 from app.medium import APP_METRICS, PROC_METRICS, SYSTEM_METRICS, THREAD_METRICS, local_time, metric_columns
 
-RESTART_TYPES = ("restarted", "started", "stopped")
+RESTART_TYPES = ("restarted", "started", "stopped", "analyzer")   # analyzer: its own (re)start
 MAX_EXPORT_CELLS = 2_000_000
 
 

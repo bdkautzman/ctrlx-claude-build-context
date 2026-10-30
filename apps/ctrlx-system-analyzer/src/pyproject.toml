@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 # keep in sync with snap/snapcraft.yaml (name, version) - tools/check.sh verifies the name
 name = "ctrlx-system-analyzer"
-version = "0.1.0"
+version = "0.1.1"
 description = "CPU and memory of every ctrlX app, process and thread over time"
 requires-python = ">=3.10"
 # Same pins as the ctrlX AUTOMATION SDK 4.6.0 Python samples.

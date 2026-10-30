@@ -18,7 +18,7 @@ import signal
 import threading
 import time
 
-from app import config, logsetup
+from app import config, grouping, logsetup
 from app.collector import Collector, EventLog
 from app.datalayer_service import DataLayerService
 from app.history import History
@@ -128,7 +128,10 @@ def main():
     services.collector.on_sample.append(lambda snap: _update_nodes(datalayer.registry, snap, services))
     datalayer.start()
 
-    services.events.add(time.time(), "analyzer", "System Analyzer {} started".format(config.app_version()))
+    # tied to the analyzer's own app: the leak fit of its row starts anew after it (RESTART_TYPES)
+    services.events.add(time.time(), "analyzer", "System Analyzer {} started".format(config.app_version()),
+                        grouping.Group("snap:" + config.SNAP_NAME, config.SNAP_NAME, "snap", "service",
+                                       config.SNAP_NAME, True), "service")
     services.recorder.start()
     services.collector.start()
 
