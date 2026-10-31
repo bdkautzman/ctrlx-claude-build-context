@@ -461,3 +461,90 @@ Real ctrlX CORE (arm64, rexroth-arch01, ctrlX OS 4.6.5/4.6.6), ctrlx-system-anal
     `os.statvfs` gives size/free. Appending CSV rows once a minute (ctrlx-system-analyzer, 58 files)
     worked; FAT32 rounds every file up to its cluster size (`du` 1.3 MB for 0.6 MB written).
 
+
+App `ctrlx-core-connector` 0.2.0 (formerly `ctrlx-core-monitor`: Data Layer browser, KVD nodes, widget), 2026-10-31:
+
+77. **A Data Layer remote stays at `SEC_INVALID_SESSION` after the other device's clock was set.** The real
+    CORE's clock was 7 days behind; the user set it (Logbook "Time settings changed successfully", 16:24:18
+    UTC) and from that second every read through the COREvirtual's remote `cm-real-core` answered
+    `SEC_INVALID_SESSION` (REST: 401 `DL_SEC_INVALIDSESSION`) - still 9 min later. Deleting
+    `devices/remotes/cm-real-core` and creating it again (the app's reconcile does that within 30 s) fixed it
+    at once. ctrlx-core-connector now recreates a remote by itself on `SEC_INVALID_SESSION` /
+    `SEC_INVALID_TOKEN_CONTENT` / `SEC_NO_TOKEN` (at most every 30 s).
+78. **Result names differ between the APIs.** REST and the C library say `DL_INVALID_ADDRESS`,
+    `DL_SEC_INVALIDSESSION`; Python's `ctrlxdatalayer.variant.Result.name` is `INVALID_ADDRESS`,
+    `SEC_INVALID_SESSION` (and `SEC_NO_TOKEN` is spelled `sec_noSEC_NO_TOKEN_token` in the 3.6 enum).
+    ctrlx-core-monitor compared `result.name` with `"DL_..."`, so its error texts ("not connected", "login
+    rejected") never showed on a device - only the raw name. Normalize (strip `DL_`) before comparing.
+79. **Data Layer client: JSON read/write, metadata and bulk** (ctrlx-datalayer 3.5 client, ctrlX OS 4.6,
+    measured from the build VM through the COREvirtual's remote to the real CORE):
+    * `read_json_sync(conv, addr, -1)` gives `{"type":"int32","value":77}` for simple types and arrays, but
+      the plain object for flatbuffers (`{"hostname": ...}` for `system/info`, no wrapper).
+    * `write_json_sync` wants the same forms: `{"type":"int32","value":12}` (a bare `13` → `FAILED`
+      "1: 2: error: declaration expected"); flatbuffers as the plain object (a `{"type":"object","value":{...}}`
+      wrapper → `FAILED` "unknown field: type"). The `error` Variant carries that text.
+    * Metadata as JSON: `metadata_sync` + `conv.get_schema(C_DLR_SCHEMA.METADATA)` +
+      `conv.converter_generate_json_complex(data, schema, -1)`. Through a remote every reference
+      `targetAddress` carries the remote prefix (`devices/remotes/cm-x/types/datalayer/int32`); the remote's
+      root `devices/remotes/cm-x` has the metadata of the remote connection itself (Resource), not of a folder.
+    * `ctrlxdatalayer.bulk.Bulk(client)` `.metadata(addrs)` / `.browse(addrs)` / `.read([BulkReadRequest(a)])`
+      then `.get_response()` (use the responses inside the `with Bulk(...)` block; they are freed on close).
+      60 nodes: bulk read 55-72 ms, bulk metadata 150-160 ms; 60 single `read_json_sync` 1.6-1.8 s (~7 ms
+      each, metadata ~10 ms). The broker's limit is `maxBulkRequest` 1000 (server settings).
+    * The operating state is `scheduler/admin/state` → `{"state": "OPERATING"}`, readable through remotes.
+80. **KVD (`rexroth-kvd` 4.6.3 COREvirtual / 4.6.5 real CORE) watches its `nodes.json` - and restarts for
+    every change.** An entry added to or removed from `<active configuration>/kvd/nodes.json` (Solutions
+    WebDAV `PUT /solutions/webdav/appdata/kvd/nodes.json`, or the file itself, also written via temp file +
+    rename) is applied without a load command - but KVD logs `restarting ... stopped ... running`: for ~1 s
+    **all** its nodes (and its own `kvd/...` root) are gone; an add through ctrlx-core-connector takes ~1.8 s.
+    The other nodes keep their current values (a written 12 stayed 12). Three traps, seen 2026-10-31:
+    * A change made **during** such a restart is missed: after 8 deletes in a row on the real CORE the file
+      was clean, but KVD still showed `cctest/folder` until the file was saved again (unchanged).
+    * An entry KVD can't convert **makes the KVD process exit**: a `uint64` initial value of 2^64-1 (KVD reads
+      numbers as float64: `1.8446744073709552e+19 ... value not aUINT64 (DL_FAILED)`) → "failed to connect",
+      exit 1, systemd restarts it 10 s later (`restart-delay: 10s`) and it exits again while the entry is in
+      the file. Keep 64-bit initial values within ±2^53; larger values can be written once the node exists.
+    * Checking "is the node gone?" right after a change hits the restart window and says yes too early.
+    * KVD keeps the values of deleted nodes in its database: a node created again at the same address
+      starts with its last value, not with the initial value of the new entry (`kvd/value-count` counts them).
+    ctrlx-core-connector therefore changes one entry at a time per core, waits until KVD runs again (`kvd`
+    root back) and shows the change, saves once more if KVD runs but missed it, and takes an entry out at
+    once when KVD exited. KVD's own nodes `kvd/db`, `kvd/value-count`, `kvd/verbose` show that it runs.
+    Its manifest also registers `/kvd/api/v1/load|save` as Solutions commands - not needed for this.
+    Entry schema: `/snap/rexroth-kvd/current/configs/schemas/node.v1.0.schema.json` on the device (types incl.
+    `ar*` arrays, `metadata.nodeClass` Variable/Resource/Collection/Folder, `metadata.operations.write`,
+    `mode`, `volatile`).
+81. **Solutions WebDAV ignores `If-Match`**: a PUT of `appdata/kvd/nodes.json` with a wrong ETag in
+    `If-Match` still answered 201 (and set a new ETag). No optimistic locking: serialize your own edits and
+    re-read the file right before changing it.
+82. **First start after the install: the app data folder is there, but "Permission denied".** ctrlx-core-connector
+    0.2.0 waited for `$SNAP_COMMON/solutions/activeConfiguration` (visible after 12 s), then `os.makedirs` of
+    its own folder raised `PermissionError` and the process crashed; systemd started it again 1 s later and
+    then it worked (content interface connected while the app already ran, like #28; the AppArmor rules come
+    after the mount). Harmless for the template (it creates the file on the next start) but an app that
+    does something once on the first start (here: import another app's settings) must not decide
+    "nothing to import" on that error: treat `OSError` as "not ready yet" and try again
+    (`apps/ctrlx-core-connector/src/app/main.py` `_load_settings`).
+83. **Array types are named `array-of-<type>` in the type tree**: metadata of an `arint16` node references
+    `types/datalayer/array-of-int16` (also `array-of-double`, `array-of-string`, `array-of-timestamp`), while
+    KVD's nodes.json, REST values and `read_json` say `arint16`. Map one to the other.
+84. **Package ids in the package-manager API are `snap_<name>`**: `GET /package-manager/api/v1/packages` lists
+    `{"id": "snap_ctrlx-core-monitor", "name": "ctrlx-core-monitor", ...}` (also `snap_rexroth-automationcore`).
+    A check `"ctrlx-core-monitor" in ids` is always false - compare `name` (`tools/ctrlx.py packages` prints it).
+85. **Uninstalling an app keeps its app data**: the uninstall is a package-manager task with the `snap_` id
+    (#84; the OpenAPI example's `rexroth-firewall` has no prefix), done in SERVICE state like an install (not tried
+    in OPERATING): `tools/ctrlx.py state SERVICE`, then `tools/ctrlx.py api POST /package-manager/api/v1/tasks
+    --data '{"action": "uninstall", "parameters": {"id": "snap_<name>"}}'` (201 with the task `id`; poll
+    `GET .../tasks/<id>` until `done`), then `state OPERATING`. Seen 2026-10-31 (ctrlX OS 4.6): the app's Data
+    Layer root is gone, but **its folder in the active configuration (`<snap>/settings.json`) stays** - incl.
+    plain-text passwords - and is saved with every configuration. Delete it in Settings → Manage app data, or
+    `tools/ctrlx.py api DELETE /solutions/webdav/appdata/<snap>/` (204; the folder with its files).
+86. **A ctrlX OS 3.6 CORE without `system/info/hostname`, `uptime`, `architecture` and `system/apps`** (seen
+    2026-10-31 through a remote from the COREvirtual, 192.168.1.10): its `system/info` held only `ledDevice` and
+    `setup-in-progress` (= false); `framework/metrics/system/*` and `scheduler/admin/state` were there. #44 saw
+    those `system/info` nodes on a 3.6 device - don't rely on them. A read of a missing node through a remote
+    answers `INVALID_ADDRESS`, the same as a read through a remote that is not mounted, so an app that requires
+    one such node reports a working connection as "not connected". A failed login and a failed certificate check
+    answer `SEC_UNAUTHORIZED` instead (tested with a made-up user on 3.6 and 4.6). The user's plain
+    `tcp://user:pw@ip` remote connected to that 3.6 core; the app's `...?sslport=443&NoCheckCertificate=true`
+    form connected to the same device on 2026-10-22.

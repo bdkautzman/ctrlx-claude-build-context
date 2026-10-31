@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Core Connector</title>
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<!-- data-ui-ready: app.js sets "true" when the cores are shown; tools/ui_check.py waits for it -->
+<body data-ui-ready="false">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-tree" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="10" width="7" height="5" rx="1"/><rect x="14" y="17" width="7" height="5" rx="1"/><path d="M6.5 8v11.5H14M6.5 12.5H14"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1 id="app-title">Core Connector</h1>
+      <span id="app-version" class="muted"></span>
+    </div>
+    <div class="topbar-right">
+      <span id="conn" class="pill pill-unknown" title="Data Layer connection of this app">Data Layer: …</span>
+      <!-- hidden until /status says the user may change settings (read-only users never see it) -->
+      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" hidden title="Settings"
+              aria-label="Settings" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-sliders"/></svg><span class="btn-label">Settings</span></button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+  <div id="app-error" class="banner banner-warn" hidden></div>
+
+  <main class="page">
+    <section class="card" aria-labelledby="cores-h">
+      <div class="card-head">
+        <h2 id="cores-h">Cores <span id="cores-count" class="muted"></span>
+          <span class="info" tabindex="0" role="img" aria-label="About connections"
+                data-tip="Connections are ctrlX Data Layer remote connections (devices/remotes/cm-<name>) and are stored in the app data of this device."></span></h2>
+        <button type="button" id="btn-add" class="btn btn-primary" title="Add a connection to another ctrlX CORE">+ Add core</button>
+      </div>
+      <p class="muted small hint">Click a core to browse its Data Layer. Its name opens its ctrlX web UI in a new tab.</p>
+      <div id="cores" class="cores"><p class="muted">Loading…</p></div>
+    </section>
+  </main>
+
+  <!-- settings: slides in from the right (like the AMR Fleet View) -->
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+  <aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="settings-h" aria-hidden="true" inert>
+    <div class="card-head drawer-head">
+      <h2 id="settings-h">Settings</h2>
+      <button type="button" id="btn-close-settings" class="tool tool-bare" title="Close" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="muted drawer-note">Stored in ctrlX app data · saved and loaded with configurations</p>
+    <form id="settings-form" novalidate>
+      <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
+      <ul id="settings-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+        <button type="button" id="btn-revert" class="btn">Revert</button>
+        <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
+        <span id="save-state" class="muted" aria-live="polite"></span>
+      </div>
+    </form>
+  </aside>
+
+  <dialog id="add-dialog" aria-labelledby="add-h">
+    <form id="add-form" method="dialog" novalidate>
+      <h2 id="add-h">Add core</h2>
+      <div class="fields fields-dialog">
+        <div class="field"><label for="a-name">Name
+            <span class="info" tabindex="0" role="img" aria-label="Name format"
+                  data-tip="Letters, digits and '-', max. 24 characters."></span></label>
+          <input id="a-name" name="name" type="text" maxlength="24" required placeholder="Line-8-Core" autocomplete="off"></div>
+        <div class="field"><label for="a-host">IP address / host name
+            <span class="info info-end" tabindex="0" role="img" aria-label="HTTPS port"
+                  data-tip="HTTPS port 443 is used. For another port add it with a colon, e.g. 192.168.1.1:8443 (a COREvirtual: the PC's IP address and its forwarded port)."></span></label>
+          <input id="a-host" name="host" type="text" required placeholder="192.168.1.1" autocomplete="off" spellcheck="false"></div>
+        <div class="field"><label for="a-user">User</label>
+          <input id="a-user" name="user" type="text" required value="boschrexroth" autocomplete="off"></div>
+        <div class="field"><label for="a-password">Password
+            <span class="info info-end" tabindex="0" role="img" aria-label="Password storage"
+                  data-tip="The password is stored in this device's app data (settings.json) and is never shown again."></span></label>
+          <input id="a-password" name="password" type="password" required autocomplete="new-password"></div>
+        <div class="field field-wide"><label class="checkbox" for="a-skipCertificateCheck">
+          <input id="a-skipCertificateCheck" name="skipCertificateCheck" type="checkbox" checked>
+          Skip certificate check</label></div>
+      </div>
+      <ul id="add-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-add-ok" class="btn btn-primary" value="add">Add</button>
+        <button type="button" id="btn-add-cancel" class="btn">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="common.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

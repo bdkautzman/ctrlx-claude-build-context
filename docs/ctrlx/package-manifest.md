@@ -80,6 +80,6 @@ so they must be below the proxy url and inside `restricted`. Protocol: `app-data
 * `certificatestores` + slot `package-certificates` (key/cert management UI)
 * `apps.rexroth-setup.settings` (device backup/restore of settings) → `upstream-sdk-4.6.0/persist-device-settings.md`
 * `uiExtensions.dashboard` (home screen widgets as Web Components) - how to write one:
-  `web-ui-and-reverse-proxy.md` → "Home screen widgets"; example `apps/ctrlx-amr-fleet`
+  `web-ui-and-reverse-proxy.md` → "Home screen widgets"; examples `apps/ctrlx-amr-fleet`, `apps/ctrlx-core-connector`
 * `documentation` (API docs in the help menu), `dependencies.dependsOn` (informational)
 * `i18n` tags + `i18n/<name>.package-manifest.de.json` translations

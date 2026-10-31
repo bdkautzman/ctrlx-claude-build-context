@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Layer - Core Connector</title>
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<!-- browse.html?core=<name> (or _local = this device). data-ui-ready: "false" while the tree or a node loads -->
+<body data-ui-ready="false" class="browse-page">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-variable" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M5 5h14v14H5z"/></symbol>
+    <symbol id="i-resource" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></symbol>
+    <symbol id="i-collection" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><rect x="3" y="15" width="18" height="5" rx="1"/><path d="M7 9v6M17 9v6"/></symbol>
+    <symbol id="i-type" viewBox="0 0 24 24"><path d="M5 6h14M12 6v13M9 19h6"/></symbol>
+    <symbol id="i-method" viewBox="0 0 24 24"><path d="M8 4c-2 0-3 1-3 3v2c0 1.5-1 3-2 3 1 0 2 1.5 2 3v2c0 2 1 3 3 3M16 4c2 0 3 1 3 3v2c0 1.5 1 3 2 3-1 0-2 1.5-2 3v2c0 2-1 3-3 3"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M7 4l5 5 5-5M7 20l5-5 5 5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand">
+      <a href="./" id="btn-back" class="tool tool-bare" title="Back to all cores" aria-label="Back to all cores"><svg class="ic"><use href="#i-back"/></svg></a>
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1><span class="brand-name">Core Connector</span><span class="crumb-sep" aria-hidden="true">›</span><span id="core-title">…</span></h1>
+      <span id="core-state" class="pill pill-unknown">…</span>
+    </div>
+    <div class="topbar-right">
+      <span id="op-state" class="pill" hidden title="ctrlX operating state of this core"></span>
+      <span id="kvd-pill" class="pill pill-kvd" hidden title="The Key Value Database app runs on this core: nodes can be added">KVD</span>
+      <a id="web-link" class="btn btn-small btn-with-icon" target="_blank" rel="noopener noreferrer" title="Open the ctrlX web UI of this core in a new tab"><svg class="ic"><use href="#i-external"/></svg><span class="btn-label">Web UI</span></a>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="browser">
+    <section class="tree-pane" aria-label="Data Layer tree">
+      <div class="tree-tools">
+        <input id="filter" type="search" placeholder="Filter loaded nodes" aria-label="Filter loaded nodes" autocomplete="off">
+        <button type="button" id="btn-collapse" class="tool tool-bare" title="Collapse all" aria-label="Collapse all"><svg class="ic"><use href="#i-collapse"/></svg></button>
+        <button type="button" id="btn-reload" class="tool tool-bare" title="Reload the tree" aria-label="Reload the tree"><svg class="ic"><use href="#i-refresh"/></svg></button>
+        <button type="button" id="btn-add-node" class="btn btn-small btn-primary btn-with-icon" hidden title="Add a node to the Key Value Database of this core"><svg class="ic"><use href="#i-plus"/></svg><span>Add node</span></button>
+      </div>
+      <div id="tree" class="tree" role="tree" aria-label="Data Layer nodes" tabindex="0"></div>
+      <div id="tree-status" class="tree-status muted small" aria-live="polite"></div>
+    </section>
+
+    <section class="detail-pane" aria-label="Selected node">
+      <form id="goto-form" class="goto" novalidate>
+        <label for="goto" class="muted small">Address</label>
+        <input id="goto" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. framework/metrics/system">
+        <button type="submit" class="btn btn-small">Go</button>
+        <button type="button" id="btn-copy" class="tool tool-bare" title="Copy the address" aria-label="Copy the address"><svg class="ic"><use href="#i-copy"/></svg></button>
+      </form>
+      <div id="detail" class="detail"><p class="muted">Select a node in the tree.</p></div>
+    </section>
+  </main>
+
+  <dialog id="node-dialog" aria-labelledby="node-h">
+    <form id="node-form" method="dialog" novalidate>
+      <h2 id="node-h">Add node</h2>
+      <p class="muted small">Defined in <code>kvd/nodes.json</code> (app data) of <b id="n-core"></b> - the Key Value Database
+        creates it right away and keeps its value across restarts.</p>
+      <p class="note small">KVD restarts its nodes for every change: <b>all KVD nodes of this core are unavailable for about
+        a second</b> (a PLC reading them sees errors meanwhile).</p>
+      <div class="fields fields-dialog">
+        <div class="field field-wide"><label for="n-parent">Parent folder</label>
+          <input id="n-parent" name="parent" type="text" spellcheck="false" autocomplete="off" placeholder="(top level)"></div>
+        <div class="field"><label for="n-name">Name</label>
+          <input id="n-name" name="name" type="text" spellcheck="false" autocomplete="off" maxlength="128" required placeholder="e.g. setpoint"></div>
+        <div class="field"><label for="n-nodeClass">Kind</label>
+          <select id="n-nodeClass" name="nodeClass"><option value="Variable">Variable</option><option value="Folder">Folder</option></select></div>
+        <div class="field var-only"><label for="n-type">Type</label>
+          <select id="n-type" name="type">
+            <optgroup label="Values">
+              <option>bool8</option><option>int8</option><option>uint8</option><option>int16</option><option>uint16</option>
+              <option>int32</option><option>uint32</option><option>int64</option><option>uint64</option>
+              <option>float32</option><option selected>float64</option><option>string</option>
+            </optgroup>
+            <optgroup label="Arrays">
+              <option>arbool8</option><option>arint8</option><option>aruint8</option><option>arint16</option><option>aruint16</option>
+              <option>arint32</option><option>aruint32</option><option>arint64</option><option>aruint64</option>
+              <option>arfloat32</option><option>arfloat64</option><option>arstring</option>
+            </optgroup>
+          </select></div>
+        <div class="field var-only"><label for="n-value">Initial value</label>
+          <input id="n-value" name="value" type="text" spellcheck="false" autocomplete="off">
+          <div class="help" id="n-value-help"></div></div>
+        <div class="field var-only"><label for="n-unit">Unit</label>
+          <input id="n-unit" name="unit" type="text" maxlength="32" autocomplete="off" placeholder="e.g. mm/s"></div>
+        <div class="field field-wide"><label for="n-description">Description</label>
+          <input id="n-description" name="description" type="text" maxlength="1000" autocomplete="off"></div>
+        <div class="field field-wide var-only"><label class="checkbox" for="n-readOnly">
+          <input id="n-readOnly" name="readOnly" type="checkbox"> Read-only (can't be written over the Data Layer)</label></div>
+      </div>
+      <p class="small address-preview">Address: <code id="n-address"></code></p>
+      <ul id="node-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-node-ok" class="btn btn-primary">Add</button>
+        <button type="button" id="btn-node-cancel" class="btn">Cancel</button>
+        <span id="node-state" class="muted" aria-live="polite"></span>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="common.js"></script>
+  <script src="browse.js"></script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/package-manifest/package-manifest.v1.7.schema.json",
+  "version": "1.0.0",
+  "id": "ctrlx-core-connector",
+  "scopes-declaration": [
+    {
+      "identifier": "ctrlx-core-connector.web",
+      "name": "Core Connector",
+      "description": "Permissions for Core Connector",
+      "scopes": [
+        {
+          "identifier": "ctrlx-core-connector.web.all.r",
+          "name": "View Core Connector",
+          "description": "View the connected ctrlX COREs, browse their Data Layer and see the app settings"
+        },
+        {
+          "identifier": "ctrlx-core-connector.web.all.rw",
+          "name": "Manage Core Connector",
+          "description": "Add and remove core connections, change the app settings, write Data Layer values and add/delete Key Value Database nodes on the connected cores (with the rights of each connection's user)"
+        }
+      ]
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "ctrlx-core-connector.web",
+        "url": "/ctrlx-core-connector",
+        "binding": "unix://{$SNAP_DATA}/package-run/ctrlx-core-connector/web.sock",
+        "restricted": [
+          "/ctrlx-core-connector/api"
+        ]
+      }
+    ]
+  },
+  "menus": {
+    "sidebar": [
+      {
+        "id": "ctrlx-core-connector",
+        "title": "Core Connector",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-core-connector/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-core-connector.web.all.r",
+          "ctrlx-core-connector.web.all.rw"
+        ],
+        "items": []
+      }
+    ],
+    "overview": [
+      {
+        "id": "ctrlx-core-connector-overview",
+        "title": "Core Connector",
+        "description": "Status of other ctrlX COREs, Data Layer browser, Key Value Database nodes",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-core-connector/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-core-connector.web.all.r",
+          "ctrlx-core-connector.web.all.rw"
+        ],
+        "items": []
+      }
+    ]
+  },
+  "commands": {
+    "activeConfiguration": {
+      "save": [
+        {
+          "id": "ctrlx-core-connector",
+          "subject": "Core Connector settings",
+          "url": "/ctrlx-core-connector/api/v1/appdata/save"
+        }
+      ],
+      "load": [
+        {
+          "id": "ctrlx-core-connector",
+          "subject": "Core Connector settings",
+          "url": "/ctrlx-core-connector/api/v1/appdata/load"
+        }
+      ]
+    }
+  },
+  "configuration": {
+    "appDirectories": [
+      {
+        "name": "ctrlx-core-connector",
+        "description": "Core Connector connections and settings",
+        "icon": "bosch-ic-components",
+        "copyOnLoad": true,
+        "writeProtected": false
+      }
+    ],
+    "appPrivateFiles": [
+      "^ctrlx-core-connector/.*\\.tmp$"
+    ]
+  },
+  "uiExtensions": {
+    "dashboard": [
+      {
+        "order": 110,
+        "src": "/ctrlx-core-connector/widgets.js",
+        "tag": "ctrlx-core-connector-widget",
+        "title": "Connected cores",
+        "description": "This device and the connected ctrlX COREs with their operating state",
+        "image": "/ctrlx-core-connector/widget.svg",
+        "initialSize": {
+          "cols": 4,
+          "rows": 3
+        },
+        "minSize": {
+          "cols": 3,
+          "rows": 2
+        },
+        "maxSize": {
+          "cols": 8,
+          "rows": 8
+        },
+        "permissions": [
+          "ctrlx-core-connector.web.all.r",
+          "ctrlx-core-connector.web.all.rw"
+        ],
+        "categories": [
+          "Devices"
+        ]
+      }
+    ]
+  }
+}

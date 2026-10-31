@@ -93,9 +93,17 @@ node with JSON is the simplest contract (no flatbuffers schema to share). Patter
 * `NoCheckCertificate=true` is required for devices with self-signed certificates (else
   `DL_SEC_UNAUTHORIZED`; gotchas #40). Reading the config back masks credentials (`tcp://***:***@`).
 * The Data Layer persists remotes itself (`hasSave: datalayer/admin/cfg/save`, part of configurations).
+* Remote names may contain capital letters (`devices/remotes/cm-Line-8-Core` created, read through and removed
+  on ctrlX OS 4.6, 2026-10-31).
 * `datalayer/reverse-connections` is the opposite direction: *this* device's Data Layer appears on
   the remote device under the given name.
+* A remote can get stuck at `SEC_INVALID_SESSION` (e.g. after the other device's clock was set); it does not
+  recover by itself - delete and recreate it (gotchas #77). Python result names have no `DL_` prefix (#78).
+* Browsing/reading/writing other nodes with a client (JSON forms, metadata as JSON, bulk requests - one bulk
+  call per folder is ~25x faster through a remote than node by node): gotchas #79, example
+  `apps/ctrlx-core-connector` (`src/app/datalayer_service.py` `ClientAdapter`, `src/app/browser.py`).
 * Useful nodes on any device: `system/info/{hostname,ctrlxOsVersion,architecture,uptime}`,
+  `scheduler/admin/state` (`{"state": "OPERATING" | "SETUP" | "SERVICE"}`),
   `framework/metrics/system/{cpu-utilisation-percent,memused-percent,memused-mb,memtotal-mb}`,
   `system/apps/installed/<snap>` (object, `release.version`). ctrlX OS 3.6 differs: no
   `system/info/ctrlxOsVersion`, app nodes named `snap_<snap>` (gotchas #44).
