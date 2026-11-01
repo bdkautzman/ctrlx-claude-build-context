@@ -1,9 +1,10 @@
-// Core Connector - start page: one tile per core (this device first), settings in a drawer.
-// Helpers (token, api, el, ...) are in common.js. Plain JS, no build step, no CDN.
+// Core Connector - start page: one tile per core (this device first), settings in a drawer, help menu
+// with the tutorial (it continues in the Data Layer browser). Helpers (token, api, el, help/tutorial, ...)
+// are in common.js. Plain JS, no build step, no CDN.
 "use strict";
 
 (function () {
-  const { $, api, el, icon, showBanner, fmtDuration, webUrl, coreTitle } = window.CC;
+  const { $, api, el, icon, showBanner, fmtDuration, webUrl, coreTitle, setupHelp, LOCAL_ID } = window.CC;
 
   function humanize(key) { return key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()); }
 
@@ -343,6 +344,48 @@
   $("btn-add").onclick = openAdd;
   $("add-form").onsubmit = submitAdd;
   $("btn-add-cancel").onclick = () => dialog.close();
+
+  // ---- tutorial (help menu) ------------------------------------------------------------------
+  const localTile = () => document.querySelector(".tile-local");
+  const otherTile = () => document.querySelector(".tile:not(.tile-local)");
+  setupHelp([
+    { title: "Welcome",
+      text: "This tour shows the controls of Core Connector: this page with the cores, then the Data Layer " +
+        "browser. Step through it with the arrows (or the ← → keys); the control of each step blinks. " +
+        "Everything stays usable - try the controls while the tour is open." },
+    { title: "Cores", target: () => $("cores"),
+      text: "One tile per ctrlX CORE: this device first - it is always there and can't be removed - then the " +
+        "cores added here. The heading counts how many of them deliver data, this device included." },
+    { title: "Status of a core", target: localTile,
+      text: "Host name, IP address, operating state (OPERATING, SETUP, SERVICE), firmware, architecture, " +
+        "uptime, CPU and memory, read as often as set in Settings (Poll interval). A value a core does not " +
+        "provide shows “–”." },
+    { title: "Web UI", target: () => localTile() && localTile().querySelector(".core-link"),
+      text: "The name of a core opens its own ctrlX web UI in a new tab." },
+    { title: "Connection", target: () => [...document.querySelectorAll(".tile .tile-head > .pill")],
+      text: "connected, connecting…, error or offline. When a connection fails, a red line below the values " +
+        "says why - e.g. “login rejected” for a wrong user or password." },
+    { title: "Add core", when: () => canWrite, target: () => $("btn-add"),
+      text: "Connects another ctrlX CORE: a name, its IP address or host name (another HTTPS port after a " +
+        "colon, e.g. 192.168.1.1:8443), user and password. The app creates the Data Layer remote connection " +
+        "devices/remotes/cm-<name> on this device for it." },
+    { title: "Remove", when: () => canWrite && !!otherTile(), target: () => otherTile().querySelector(".tile-foot .btn"),
+      text: "Removes the connection to that core (and its remote connection). The core itself is not changed." },
+    { title: "Settings", when: () => canWrite, target: () => $("btn-settings"),
+      text: "Log level, how often the cores are read, and how often the Data Layer browser reads its values. " +
+        "Only users who may change settings see this button." },
+    { title: "Data Layer", target: () => $("conn"),
+      text: "The connection of this app to the Data Layer of this device - the other cores are reached " +
+        "through it as well." },
+    { title: "Home screen widget",
+      text: "Core Connector also brings a widget for the ctrlX home screen, “Connected cores”: every core with " +
+        "its operating state and a button that opens this app. Add it to the home screen from its widget list." },
+    { title: "Help", target: () => $("btn-help"), text: "Start this tour again, or open the app's page on GitHub." },
+    { title: "Data Layer browser", target: () => localTile() && localTile().querySelector(".browse-link"),
+      text: "Click a tile - anywhere except its name - or “Browse Data Layer” to see the Data Layer of that " +
+        "core. “Show me” opens it for this device and continues the tour there.",
+      act: () => { location.href = browseUrl(LOCAL_ID) + "&tour=1"; } },
+  ]);
 
   (async function init() {
     await refreshStatus();

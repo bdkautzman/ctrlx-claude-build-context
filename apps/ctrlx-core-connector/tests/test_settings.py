@@ -54,6 +54,14 @@ class ValidateTest(unittest.TestCase):
         self.assertTrue(any(e.startswith("general.logLevel") for e in errors))
         self.assertTrue(any(e.startswith("general.pollIntervalMs") for e in errors))
 
+    def test_browser_read_interval(self):
+        defaults = load_defaults()
+        normalized, errors = validate({"general": {"logLevel": "INFO"}}, defaults, RULES)   # file from 0.2.3
+        self.assertEqual((errors, normalized["browser"]["refreshMs"]), ([], 1000))
+        for value, ok in ((500, True), (60000, True), (499, False), (60001, False), ("1000", False)):
+            _, errors = validate({"browser": {"refreshMs": value}}, defaults, RULES)
+            self.assertEqual(not errors, ok, (value, errors))
+
     def test_integral_float_accepted_for_int(self):
         defaults = load_defaults()
         normalized, errors = validate({"general": {"pollIntervalMs": 1500.0}}, defaults, RULES)

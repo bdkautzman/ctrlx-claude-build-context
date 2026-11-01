@@ -1,16 +1,16 @@
 // Core Connector - Data Layer browser of one core (browse.html?core=<name>, "_local" = this device).
 // Tree on the left (children loaded on expand, simple values shown and refreshed while visible),
-// details of the selected node on the right (metadata, live value, write), KVD nodes add/delete.
+// details of the selected node on the right (metadata, live value, write), KVD nodes add/delete,
+// help menu with the tutorial (also started by the start page's tutorial: ?tour=1).
 // Paths are relative to the core's root; the server maps them to devices/remotes/cm-<name>/...
 "use strict";
 
 (function () {
-  const { $, api, el, icon, showBanner, webUrl, coreTitle, LOCAL_ID } = window.CC;
+  const { $, api, el, icon, showBanner, webUrl, coreTitle, setupHelp, LOCAL_ID } = window.CC;
 
   const coreId = new URLSearchParams(location.search).get("core") || LOCAL_ID;
   const CORE_API = "/cores/" + encodeURIComponent(coreId);
-  const TREE_REFRESH_MS = 2000;
-  const DETAIL_REFRESH_MS = 1000;
+  let readMs = 1000;           // settings browser.refreshMs: tree values and the selected node's value
   const MAX_REFRESH_ROWS = 300;
   const ICONS = { Folder: "folder", Variable: "variable", Resource: "resource", Collection: "collection", Type: "type", Method: "method" };
 
@@ -75,6 +75,18 @@
     try { canWrite = !!(await api("GET", "/status")).canWrite; } catch (e) { /* banner from api() */ }
   }
 
+  // the read interval (settings, readable for every user of the app) - checked again every 5 s
+  async function loadReadInterval() {
+    try {
+      const ms = (await api("GET", "/settings")).browser.refreshMs;
+      if (Number.isFinite(ms) && ms > 0) readMs = ms;
+    } catch (e) { /* keep the last one */ }
+  }
+  // fn every readMs, the next run planned when this one is done (a slow core never piles up reads)
+  function every(fn) {
+    (function next() { setTimeout(async () => { try { await fn(); } finally { next(); } }, readMs); })();
+  }
+
   async function loadKvd() {
     try {
       const k = await api("GET", CORE_API + "/kvd");
@@ -84,7 +96,7 @@
     }
     $("kvd-pill").hidden = !kvd.available;
     $("kvd-pill").title = kvd.error ? "Key Value Database: " + kvd.error
-      : "The Key Value Database app runs on this core: nodes can be added";
+      : "Nodes can be added on this core: the Key Value Database app runs on it";
     $("kvd-pill").classList.toggle("pill-warn", !!kvd.error);
     const addBtn = $("btn-add-node");
     addBtn.hidden = !(kvd.available && canWrite);
@@ -94,11 +106,17 @@
   }
 
   // ---- tree ----------------------------------------------------------------
+  // a node a user added (defined in the Key Value Database's nodes.json): a person icon
+  function userMark() {
+    const title = "Added by a user (Key Value Database)";
+    return el("span", { class: "tag-kvd", title, role: "img", "aria-label": title }, icon("user", "ic-fill"));
+  }
+
   function setTags(n, path) {
     const e = n.entry;
     n.tagsEl.replaceChildren();
     if (e.type) n.tagsEl.append(el("span", { class: "tag", text: e.type.startsWith("types/") ? e.type.split("/").pop() : e.type, title: e.type }));
-    if (kvd.nodes.has(path)) n.tagsEl.append(el("span", { class: "tag tag-kvd", text: "KVD", title: "Defined in KVD's nodes.json" }));
+    if (kvd.nodes.has(path)) n.tagsEl.append(userMark());
     if (e.operations && e.operations.write) n.tagsEl.append(el("span", { class: "tag tag-w", text: "W", title: "Writable" }));
   }
 
@@ -220,7 +238,7 @@
     $("tree-status").textContent = hits + " of " + nodes.size + " loaded nodes match";
   }
 
-  // values of the visible tree rows, every TREE_REFRESH_MS
+  // values of the visible tree rows, every readMs
   let refreshing = false;
   async function refreshTreeValues() {
     if (refreshing || document.hidden) return;
@@ -334,7 +352,7 @@
       el("h2", { class: "detail-name", text: d.path ? nameOf(d.path) : "(root)" }),
       m.nodeClass ? el("span", { class: "pill pill-unknown", text: m.nodeClass }) : null,
       (d.type || d.valueType) ? el("span", { class: "tag", text: d.type || d.valueType }) : null,
-      kvd.nodes.has(d.path) ? el("span", { class: "tag tag-kvd", text: "KVD", title: "Defined in KVD's nodes.json" }) : null);
+      kvd.nodes.has(d.path) ? userMark() : null);
     const parts = [head];
     if (m.description) parts.push(el("p", { class: "detail-desc", text: m.description }));
 
@@ -565,16 +583,68 @@
   $("node-form").onchange = syncNodeForm;
   $("btn-node-cancel").onclick = () => dialog.close();
 
+  // ---- tutorial (help menu) ------------------------------------------------------------------
+  const EXAMPLE_NODE = "framework/metrics/system/cpu-utilisation-percent";   // on ctrlX OS 3.6 and 4.x
+  const shownRow = (sel) => [...$("tree").querySelectorAll(sel)].map((e) => e.closest(".row"))
+    .find((r) => r && r.getClientRects().length) || null;
+  const kvdEditing = () => kvd.available && canWrite;
+  const readText = () => readMs % 1000 ? readMs + " ms" : readMs === 1000 ? "second" : readMs / 1000 + " seconds";
+  const firstKvdNode = () => [...kvd.nodes].filter((p) => !p.includes("*")).sort()[0];   // not KVD's "a/**" patterns
+  const help = setupHelp([
+    { title: "Data Layer browser",
+      text: () => "The Data Layer of " + (core ? coreTitle(core) : "this core") + ", like the Data Layer view of " +
+        "the ctrlX web UI. Step through the tour with the arrows (or the ← → keys); the control of each step " +
+        "blinks. Everything stays usable while the tour is open." },
+    { title: "Tree", target: () => $("tree"),
+      text: () => "Every node of the core. The arrow in front of a folder opens it (also a double-click, or the → " +
+        "key); its children are loaded then. Simple values are shown and read every " + readText() + " while " +
+        "they are visible (Settings → Data Layer browser). Marks: the type, W (writable), and a person for " +
+        "a node a user added (Key Value Database)." },
+    { title: "Filter and reload", target: () => [$("filter"), $("btn-collapse"), $("btn-reload")],
+      text: "Filter the loaded nodes by name, close all folders, or load the tree again." },
+    { title: "Address", target: () => $("goto-form"),
+      text: "Type an address and press Enter or “Go”: the folders on the way open and the node is selected. " +
+        "The button next to it copies the address of the selected node." },
+    { title: "Details", target: () => $("detail"), act: () => gotoPath(EXAMPLE_NODE),
+      text: () => "The selected node: its value (read every " + readText() + "), node class, operations, types and references. " +
+        "Click the empty part of the tree to deselect it. “Show me” selects the CPU load of the core." },
+    { title: "Write", when: () => canWrite,
+      target: () => document.querySelector(".write-form") || shownRow(".tag-w"),
+      canAct: () => !!shownRow(".tag-w"), act: () => select(shownRow(".tag-w").dataset.path),
+      text: "A writable node (tag W) gets a “Write” field in its details: numbers, true/false and text as " +
+        "they are, arrays and objects as JSON. “Write” sends the value to the core at once. “Show me” " +
+        "selects a writable node - it writes nothing." },
+    { title: "Add node", target: () => $("btn-add-node"),
+      text: () => "“Add node” is there for every core with the Key Value Database app (KVD) installed - its " +
+        "status shows “Editable”: add a variable - any type, with initial value, unit, description, " +
+        "read-only - or a folder. KVD restarts its nodes for every change: all of them are unavailable for " +
+        "about a second." + (!canWrite ? " Adding needs the permission “Manage Core Connector”."
+          : !kvd.available ? " This core has no KVD: the button is not shown here." : "") },
+    { title: "Delete KVD node", when: kvdEditing,
+      target: () => $("btn-delete-node") || shownRow(".tag-kvd"),
+      canAct: () => !!firstKvdNode(), act: () => gotoPath(firstKvdNode()),
+      text: "Nodes with the person mark were added by a user (KVD's nodes.json); “Delete KVD node” in their " +
+        "details removes one. KVD keeps its last value: a node added again at that address starts with it. " +
+        "“Show me” selects such a node - it deletes nothing." },
+    { title: "This core", target: () => [$("core-state"), $("op-state"), $("kvd-pill")],
+      text: "The connection to this core, its operating state, and “Editable” when nodes can be added (the " +
+        "Key Value Database app runs on it)." },
+    { title: "Web UI", target: () => $("web-link"), text: "Opens the ctrlX web UI of this core in a new tab." },
+    { title: "Back", target: () => $("btn-back"), text: "Back to the list of all cores." },
+    { title: "Help", target: () => $("btn-help"), text: "Start this tour again, or open the app's page on GitHub." },
+  ]);
+
   (async function init() {
     busy(1);
     try {
-      await loadStatus();
+      await Promise.all([loadStatus(), loadReadInterval()]);
       await Promise.all([loadCore(), loadChildren(""), loadKvd()]);
       const start = location.hash.length > 1 ? decodeURIComponent(location.hash.slice(1)) : "";
       if (start) await gotoPath(start);
     } finally { busy(-1); }
-    setInterval(loadCore, 5000);
-    setInterval(refreshTreeValues, TREE_REFRESH_MS);
-    setInterval(refreshDetail, DETAIL_REFRESH_MS);
+    if (help.handedOver) help.start();   // continued from the start page's tutorial
+    setInterval(() => { loadCore(); loadReadInterval(); }, 5000);
+    every(refreshTreeValues);
+    every(refreshDetail);
   })();
 })();

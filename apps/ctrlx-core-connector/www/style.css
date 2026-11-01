@@ -206,7 +206,9 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 .tags { display: inline-flex; gap: 3px; flex: none; }
 .tag { font-size: 11px; line-height: 16px; padding: 0 5px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted);
   font-family: var(--mono); white-space: nowrap; }
-.tag-kvd { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, white); font-family: inherit; font-weight: 600; }
+.tag-kvd { display: inline-flex; align-items: center; color: var(--text); }   /* person icon: added by a user (KVD) */
+.tag-kvd .ic { width: 14px; height: 14px; }
+.ic-fill { fill: currentColor; stroke: none; }
 .tag-w { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, white); font-family: inherit; }
 
 .detail-pane { min-height: 0; min-width: 0; overflow: auto; padding: 12px 20px 32px; }
@@ -236,6 +238,49 @@ pre.value.error { color: var(--warn); }
 .refs .kv { margin-top: 6px; }
 .kvd-actions { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 20px; }
 
+/* ---- help menu (as in the AMR Fleet View) ---- */
+.menu-wrap { position: relative; display: flex; }
+.topbar-right .btn-help { width: 30px; justify-content: center; padding: 0; }
+.btn-help .ic { width: 16px; height: 16px; }
+.btn-help[aria-expanded="true"] { background: var(--hover); }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 200px; padding: 4px;
+  display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0, 0, 0, .16); }
+.menu[hidden] { display: none; }
+.menu [role="menuitem"] { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 4px;
+  background: none; color: var(--text); font: inherit; font-size: 14px; text-align: left; text-decoration: none;
+  cursor: pointer; white-space: nowrap; }
+.menu [role="menuitem"]:hover, .menu [role="menuitem"]:focus-visible { background: var(--hover); outline: none; }
+.menu .ic { width: 16px; height: 16px; color: var(--muted); flex: none; }
+
+/* ---- tutorial: card at the bottom of the window (top only when it would hide the control completely), ring
+   over the control and under the card (z-index 24 < 25; above the drawer, 20) ---- */
+.tour { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 25;
+  width: min(520px, calc(100% - 24px)); padding: 10px 12px 12px 16px; background: var(--card);
+  border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+.tour[hidden] { display: none; }
+.tour.at-top { bottom: auto; top: 60px; }
+.tour-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-right: -4px; }
+.tour h3 { margin: 0 0 4px; font-size: 15px; color: var(--text); text-transform: none; letter-spacing: normal; }
+.tour p { margin: 0 0 12px; }
+.tour-nav { display: flex; align-items: center; gap: 8px; }
+.tour-nav .spacer { flex: 1; }
+.btn-arrow { min-width: 40px; height: 32px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-arrow .ic { width: 16px; height: 16px; }
+.tour-done { display: none; }
+.tour.last #tour-next .ic { display: none; }
+.tour.last .tour-done { display: inline; }
+.tour-ring { position: fixed; z-index: 24; pointer-events: none; border: 3px solid var(--accent); border-radius: 8px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent); }
+.tour-ring[hidden] { display: none; }
+.tour-ring.blink { animation: tour-blink 1.1s ease-in-out infinite; }   /* as long as the step is shown */
+@keyframes tour-blink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent); }
+  50% { opacity: .2; box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .tour-ring.blink { animation: none; } }
+
 @media (max-width: 760px) {
   .topbar { padding: 8px 12px; }
   .page { padding: 12px; }
@@ -246,4 +291,13 @@ pre.value.error { color: var(--warn); }
   .detail-pane { overflow: visible; }
   .btn-label { display: none; }
   .crumb-sep, .brand-name { display: none; }
+  .tour { bottom: 8px; width: calc(100% - 16px); }
+  .tour.at-top { top: 8px; }
+  .hint { margin-top: 8px; }
+}
+/* phone width: one row of top bar (no version, buttons side by side) */
+@media (max-width: 600px) {
+  #app-version { display: none; }
+  .topbar { gap: 8px; }
+  .topbar-right { flex-wrap: nowrap; gap: 6px; }
 }

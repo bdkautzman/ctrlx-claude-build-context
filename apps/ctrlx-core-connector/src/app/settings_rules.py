@@ -46,6 +46,15 @@ RULES = {
         "max": 60000,
         "help": "How often the status of the connected cores is read.",
     },
+    # Read by the Data Layer browser page (browse.js, via GET /settings) - not used by the server.
+    "browser": {"label": "Data Layer browser"},
+    "browser.refreshMs": {
+        "label": "Read interval [ms]",
+        "min": 500,
+        "max": 60000,
+        "help": "How often the Data Layer browser reads the values it shows: the visible values in the tree "
+                "and the value of the selected node.",
+    },
     # Connections to other ctrlX COREs. Edited with the + dialog of the web UI (or by hand in
     # "Manage app data"); hidden in the generic settings form.
     "cores": {

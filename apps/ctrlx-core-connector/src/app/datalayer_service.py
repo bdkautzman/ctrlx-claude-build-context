@@ -286,14 +286,16 @@ class ClientAdapter:
 
     def read_json(self, address):
         """Value as the JSON converter writes it: {"type": t, "value": v} for simple types,
-        the plain object for flatbuffers (gotchas #79)."""
+        the plain object for flatbuffers (gotchas #79); None for a node without a value (a KVD
+        collection reads OK with an empty string, gotchas #87)."""
         from ctrlxdatalayer.variant import Result
         with self._lock:
             result, data = self._client.read_json_sync(self._system.json_converter(), address, -1)
             with data:
                 if result != Result.OK:
                     raise DataLayerError(result.name)
-                return json.loads(data.get_string())
+                text = data.get_string()
+        return json.loads(text) if text and text.strip() else None
 
     def write_json(self, address, text):
         """Write a JSON value: '{"type": "int32", "value": 5}' or a flatbuffers object '{...}'."""

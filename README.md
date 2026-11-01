@@ -55,14 +55,16 @@ Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (ar
 * Data Layer browsing/writing of other devices through remotes (JSON forms, bulk requests, stuck sessions) and
   Key Value Database nodes via `kvd/nodes.json`, mapped for `ctrlx-core-connector` (gotchas #77-#84);
   uninstalling an app keeps its app data (#85);
-  a ctrlX OS 3.6 core without `system/info` host name/uptime (#86)
+  a ctrlX OS 3.6 core without `system/info` host name/uptime (#86);
+  a KVD collection's empty value (#87)
 
 Open items:
 * template candidates from `ctrlx-amr-fleet`: settings rule `format: "color"` with color fields in the
   generated settings form (`minItems` / `itemPattern` are in the template since 0.1.7); a "settings only for users who may change them" option
   (that app's `/view-config` pattern, gotchas #55); a help menu (`?`) with a step-by-step tutorial that
-  marks each control (ring overlay + card, `tests/ui_scenario.py` checks it); the settings drawer (slides in
-  from the right) and the home screen widget are now in two apps (`ctrlx-amr-fleet`, `ctrlx-core-connector`)
+  marks each control (ring overlay + card, `tests/ui_scenario.py` checks it); the help menu + tutorial, the
+  settings drawer (slides in from the right) and the home screen widget are now in two apps (`ctrlx-amr-fleet`,
+  `ctrlx-core-connector` - there the tutorial is a reusable `setupHelp(steps)` in `www/common.js`, spanning two pages)
 * still unverified parts of the kit: gotchas.md → "Unverified assumptions"
 * `ctrlx-system-analyzer`: leak verdicts so far only from 30-60 min test runs (synthetic leak) - no multi-hour/day
   ranges yet; an SD card as medium not tested (a USB stick was)

@@ -118,6 +118,15 @@ class BrowserTest(unittest.TestCase):
             self.br.node(R, "nope")
         self.assertEqual(ctx.exception.result, "INVALID_ADDRESS")
 
+    def test_node_without_value(self):
+        # KVD's sample collection: readable, but the value is empty - details without a value, no error
+        self.dl.nodes[R + "plant/collection"] = {"nodeClass": "Collection", "empty": True}
+        info = self.br.node(R, "plant/collection")
+        self.assertEqual(info["metadata"]["nodeClass"], "Collection")
+        self.assertNotIn("value", info)
+        self.assertNotIn("valueError", info)
+        self.assertEqual(self.br.value(R, "plant/collection"), {})
+
     def test_write(self):
         out = self.br.write(R, "plant/speed", {"value": "12"})
         self.assertEqual(out["value"], 12)

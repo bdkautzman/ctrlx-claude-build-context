@@ -2,6 +2,42 @@
 
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 
+## 0.2.4
+
+- **Setting "Data Layer browser → Read interval [ms]"** (`browser.refreshMs`, 500-60000, default 1000): how
+  often the browser reads the visible tree values and the selected node's value (were fixed: 2 s / 1 s - the
+  tree now also reads every second by default). The page picks up a change within 5 s; the next read is
+  planned when the last one is done. Older settings files get the default.
+- Browser: "**Editable**" instead of "KVD" in the top bar (nodes can be added: the Key Value Database app runs
+  on the core); a **person icon** instead of the "KVD" tag marks a node a user added.
+- Tutorial: the card stays at the bottom unless it would hide the step's control completely; the blinking
+  ring is drawn under the card (step "Tree" had it over the card). "Add node" is now explained on every
+  core (available wherever the KVD app is installed); texts name the new marks and the read intervals.
+- Fix: the details of a node without a value - KVD's sample `samples/kvd/collection` - failed with "Cannot read
+  this node" (HTTP 400 "Expecting value"): the read returns an empty JSON text (gotchas #87). Shown without a
+  value now. The tutorial's "Show me" for KVD nodes skips KVD's `…/**` patterns.
+
+Verified 2026-11-01 on the COREvirtual (amd64) and the real CORE (arm64), clean builds: `tools/ui_check.py
+--device` on both (card at the bottom with the ring under it on "Tree", person icon in tree and details,
+"Editable", the read interval in the settings drawer); `samples/kvd/collection` details without a value on
+both cores and through a remote (COREvirtual → real CORE). The user's ctrlX OS 3.6 core, added on the
+COREvirtual, shows "connected" (0.2.2).
+
+## 0.2.3
+
+- **Help button** in the top bar of both pages (as in the AMR Fleet View): the app's page on GitHub and a
+  **tutorial** - a card that steps through the controls (arrows or ← →, Escape ends) while the control of
+  each step blinks; everything stays usable meanwhile. Start page: cores, a core's status, web UI link,
+  connection state, add/remove (users who may change settings), settings, Data Layer, home screen widget,
+  help; its last step's "Show me" opens the browser of this device and continues there: tree, filter,
+  address, details ("Show me" selects the CPU load), write and KVD steps (selecting only - nothing is
+  written or deleted), this core's state, web UI, back, help. Shared code in `www/common.js` (`setupHelp`).
+- Phone width: the top bar stays one row (no version number); the hint below "+ Add core" no longer touches it.
+
+Verified 2026-10-31 on the COREvirtual (amd64) and the real CORE (arm64), clean builds: `tools/ui_check.py
+--device` steps through both tutorials (start page 12 steps, browser 12 steps with the write and KVD steps),
+the handover to the browser, "Show me" on "Details", the ring over the control, keyboard and 390 px width.
+
 ## 0.2.2
 
 - **ctrlX OS 3.6 core shown as "not connected (INVALID_ADDRESS)"** although its remote connection worked: that

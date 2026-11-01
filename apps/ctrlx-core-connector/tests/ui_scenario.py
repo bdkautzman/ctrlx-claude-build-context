@@ -8,9 +8,15 @@ Locally the Data Layer is off: tiles show "offline" and the browser page its "no
 from the API, allowed below). On a device the browser page of this device is opened, folders are expanded
 through the tree, a node is selected through the address field and deselected with a click below the tree -
 nothing is written there.
+
+Help menu and tutorial: the GitHub link, every step of the start page's tutorial, its last step's "Show me"
+continues the tutorial in the browser of this device, every step there, keyboard (arrows, Escape).
 """
 
 import json
+import re
+
+GITHUB_URL = "https://github.com/bdkautzman/ctrlx-claude-build-context/tree/main/apps/ctrlx-core-connector"
 
 WIDGET_PAGE = """<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;font:14px system-ui,sans-serif;background:#eef0f2;color:#1f2328">
@@ -41,12 +47,15 @@ def run(ui):
         add_dialog(ui)
 
     widget(ui)
+    if ui.local:
+        ui.allow_http(503)   # no Data Layer locally: the browser page's API calls answer 503
+    tutorial(ui)
 
     # a click on the tile (not on its name link) opens the Data Layer browser
+    first = page.locator(".tile").first
     first.locator(".kv").click()
     page.wait_for_url("**/browse.html?core=_local")
     if ui.local:
-        ui.allow_http(503)   # no Data Layer locally
         page.locator(".row-msg.error").wait_for()
         ui.shot("browse-offline")
         return
@@ -57,6 +66,7 @@ def settings_drawer(ui):
     page = ui.page
     page.click("#btn-settings")
     page.wait_for_selector("#drawer.open #f-general-pollIntervalMs")
+    assert page.input_value("#f-browser-refreshMs") == "1000" or not ui.local, "the browser's read interval"
     page.wait_for_timeout(400)                             # slide-in animation
     ui.shot("settings")
     page.keyboard.press("Escape")
@@ -108,10 +118,16 @@ def browse_device(ui):
     page.wait_for_selector('.row.selected[data-path="framework/metrics/system/cpu-utilisation-percent"]')
     ui.shot("browse")
     if page.locator("#btn-add-node").is_visible():         # KVD runs on this device: its controls (nothing is changed)
-        kvd_row = page.locator(".row:has(.tag-kvd)").first
-        if kvd_row.count():
-            kvd_row.click()
+        assert page.inner_text("#kvd-pill") == "Editable"
+        kvd_nodes = sorted(p for p in ui.api("GET", "/cores/_local/kvd").get("nodes") or [] if "*" not in p)
+        if kvd_nodes:                                      # open one through the address field (may be in a folder)
+            page.fill("#goto", kvd_nodes[0])
+            page.press("#goto", "Enter")
+            row = page.locator('.row.selected[data-path="{}"]'.format(kvd_nodes[0]))
+            row.wait_for()
+            assert row.locator(".tag-kvd svg use").get_attribute("href") == "#i-user", "a person marks user nodes"
             page.locator("#btn-delete-node").wait_for()
+            ui.wait_ready()
             ui.shot("browse-kvd-node")
         page.click("#btn-add-node")
         page.fill("#n-name", "ui-check-example")
@@ -125,3 +141,109 @@ def browse_device(ui):
     page.wait_for_function("!document.querySelector('#tree .row.selected')")
     assert page.input_value("#goto") == "" and "Select a node" in page.locator("#detail").text_content()
     ui.shot("browse-deselected")
+
+
+def tutorial(ui):
+    """Help menu, the start page's tutorial, handed over to the browser of this device, back to the start page."""
+    page = ui.page
+    menu = page.locator("#help-menu")
+    page.click("#btn-help")
+    menu.wait_for()
+    link = page.locator("#help-github")
+    assert (link.get_attribute("href"), link.get_attribute("target")) == (GITHUB_URL, "_blank")
+    ui.shot("help")
+    page.keyboard.press("Escape")
+    assert menu.is_hidden()
+    titles = step_through(ui, shot_at="Status of a core",
+                          ring_at={"Web UI": page.locator(".tile-local .core-link")})
+    assert titles[0] == "Welcome" and titles[-1] == "Data Layer browser", titles
+    assert ("Add core" in titles) == ("Settings" in titles) == (ui.role != "reader"), titles
+    page.click("#tour-try")                                # "Show me": continues in the browser
+    page.wait_for_url("**/browse.html?core=_local")        # ?tour=1 is taken off the address
+    tour = page.locator("#tour")
+    tour.wait_for()
+    assert page.inner_text("#tour-title") == "Data Layer browser"
+    assert page.inner_text("#tour-count").startswith("Step 1 of ")
+    page.click("#tour-close")
+    ui.wait_ready()
+    browse_titles = step_through(ui, shot_at="Tree", act_at=None if ui.local else "Details",
+                                 ring_at={"Back": page.locator("#btn-back"), "Tree": page.locator("#tree")},
+                                 at_bottom=("Tree", "Details"))
+    assert "Add node" in browse_titles or ui.role == "reader", "explains Add node on every core"
+    assert browse_titles[0] == "Data Layer browser" and browse_titles[-1] == "Help", browse_titles
+    page.click("#btn-help")                                # keyboard: arrows step, Escape ends
+    page.click("#btn-tutorial")
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press("ArrowLeft")
+    assert page.inner_text("#tour-title") == browse_titles[1]
+    page.keyboard.press("Escape")
+    assert tour.is_hidden() and page.locator("#tour-ring").is_hidden()
+    page.go_back()
+    page.wait_for_selector(".tile")
+    ui.wait_ready()
+    tutorial_narrow(ui)
+
+
+def tutorial_narrow(ui):
+    """390 px: the card fills the width at the bottom, the ring still marks the control."""
+    page = ui.page
+    size = page.viewport_size
+    page.set_viewport_size({"width": 390, "height": 844})
+    try:
+        page.click("#btn-help")
+        page.click("#btn-tutorial")
+        while page.inner_text("#tour-title") != "Web UI":
+            page.click("#tour-next")
+        check_ring_over(ui, page.locator(".tile-local .core-link"))
+        card = page.locator("#tour").bounding_box()
+        assert card["x"] >= 0 and card["x"] + card["width"] <= 390, card
+        ui.shot("tutorial-narrow")
+        page.click("#tour-close")
+    finally:
+        page.set_viewport_size(size)
+
+
+def step_through(ui, shot_at=None, act_at=None, ring_at=None, at_bottom=()):
+    """Start the tutorial from the help menu, click through every step ("Done" at the end), return the titles.
+    at_bottom: steps whose control the card covers only partly - the card stays at the bottom, over the ring."""
+    page = ui.page
+    page.click("#btn-help")
+    page.click("#btn-tutorial")
+    assert page.locator("#help-menu").is_hidden()
+    tour = page.locator("#tour")
+    tour.wait_for()
+    count = int(re.search(r"of (\d+)$", page.inner_text("#tour-count")).group(1))
+    titles = []
+    for i in range(count):
+        assert page.inner_text("#tour-count") == "Step {} of {}".format(i + 1, count)
+        titles.append(page.inner_text("#tour-title"))
+        if titles[-1] in (ring_at or {}):
+            check_ring_over(ui, ring_at[titles[-1]])
+        if titles[-1] in at_bottom:
+            assert "at-top" not in (tour.get_attribute("class") or ""), titles[-1] + ": the card stays at the bottom"
+            z = page.evaluate("[document.getElementById('tour-ring'), document.getElementById('tour')]"
+                              ".map(e => Number(getComputedStyle(e).zIndex))")
+            assert z[0] < z[1], "the ring is under the card: {}".format(z)
+        if titles[-1] == act_at:
+            page.click("#tour-try")
+            page.wait_for_selector("#tree .row.selected")
+            ui.wait_ready()
+        if titles[-1] == shot_at:
+            ui.shot("tutorial-" + re.sub(r"\W+", "-", shot_at.lower()))
+        if i < count - 1:
+            page.click("#tour-next")
+    if titles[-1] != "Data Layer browser":                  # (the start page's last step: "Show me" follows)
+        page.click("#tour-next")                            # "Done"
+        assert tour.is_hidden() and page.locator("#tour-ring").is_hidden(), "Done ends the tutorial"
+    return titles
+
+
+def check_ring_over(ui, target):
+    ring = ui.page.locator("#tour-ring")
+    assert ring.is_visible(), "the step's control is marked"
+    assert ring.evaluate("e => getComputedStyle(e).animationIterationCount") == "infinite", "blinks while the step is shown"
+    r, t = ring.bounding_box(), target.bounding_box()
+    e = 2   # the ring keeps 2 px from the window's edges (a control touching them: the tree)
+    assert r["x"] <= t["x"] + e and r["y"] <= t["y"] + e and r["x"] + r["width"] >= t["x"] + t["width"] - e \
+        and r["y"] + r["height"] >= t["y"] + t["height"] - e, (r, t)

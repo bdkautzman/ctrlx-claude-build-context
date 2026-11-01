@@ -24,6 +24,12 @@
     <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M7 4l5 5 5-5M7 20l5-5 5 5"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><path d="M12 17.3h.01"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="7.6" r="4.4"/><path d="M3.6 20.4c0-4.3 3.8-7.4 8.4-7.4s8.4 3.1 8.4 7.4c0 .7-.5 1.1-1.1 1.1H4.7c-.6 0-1.1-.4-1.1-1.1z"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></symbol>
   </svg>
 
@@ -36,8 +42,17 @@
     </div>
     <div class="topbar-right">
       <span id="op-state" class="pill" hidden title="ctrlX operating state of this core"></span>
-      <span id="kvd-pill" class="pill pill-kvd" hidden title="The Key Value Database app runs on this core: nodes can be added">KVD</span>
+      <span id="kvd-pill" class="pill pill-kvd" hidden title="Nodes can be added on this core: the Key Value Database app runs on it">Editable</span>
       <a id="web-link" class="btn btn-small btn-with-icon" target="_blank" rel="noopener noreferrer" title="Open the ctrlX web UI of this core in a new tab"><svg class="ic"><use href="#i-external"/></svg><span class="btn-label">Web UI</span></a>
+      <div class="menu-wrap">
+        <button type="button" id="btn-help" class="btn btn-small btn-help" title="Help" aria-label="Help"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu"><svg class="ic"><use href="#i-help"/></svg></button>
+        <div id="help-menu" class="menu" role="menu" aria-label="Help" hidden>
+          <a role="menuitem" id="help-github" href="https://github.com/bdkautzman/ctrlx-claude-build-context/tree/main/apps/ctrlx-core-connector"
+             target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-external"/></svg>App page on GitHub</a>
+          <button type="button" role="menuitem" id="btn-tutorial"><svg class="ic"><use href="#i-play"/></svg>Tutorial</button>
+        </div>
+      </div>
     </div>
   </header>
 

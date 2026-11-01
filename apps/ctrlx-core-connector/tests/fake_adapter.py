@@ -84,7 +84,7 @@ class FakeAdapter:
         self.calls.append(("metadata", address))
         node = self._node(address)
         cls = node["nodeClass"]
-        readable = cls in ("Variable", "Resource")
+        readable = cls in ("Variable", "Resource") or node.get("empty", False)
         meta = {"nodeClass": cls, "description": node.get("description", ""), "unit": node.get("unit", ""),
                 "displayFormat": "Auto", "extensions": [], "references": [],
                 "operations": {"read": readable, "write": readable and node.get("write", False), "create": False,
@@ -107,6 +107,8 @@ class FakeAdapter:
 
     def read_json(self, address):
         node = self._node(address)
+        if node.get("empty"):
+            return None   # read OK, empty value (a KVD collection on ctrlX OS 4.6)
         if node["nodeClass"] not in ("Variable", "Resource"):
             raise DataLayerError("INVALID_ADDRESS")
         vtype = node.get("type")

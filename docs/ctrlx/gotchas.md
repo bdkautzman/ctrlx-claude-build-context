@@ -548,3 +548,7 @@ App `ctrlx-core-connector` 0.2.0 (formerly `ctrlx-core-monitor`: Data Layer brow
     answer `SEC_UNAUTHORIZED` instead (tested with a made-up user on 3.6 and 4.6). The user's plain
     `tcp://user:pw@ip` remote connected to that 3.6 core; the app's `...?sslport=443&NoCheckCertificate=true`
     form connected to the same device on 2026-10-22.
+87. **A KVD collection reads OK with an empty value** (ctrlX OS 4.6, KVD 4.6.5 sample `samples/kvd/collection`):
+    REST answers `""`, `read_json_sync` returns OK with an empty string - `json.loads("")` then raised and the
+    browser's node details failed with HTTP 400 "Expecting value". Treat an empty JSON text as "no value".
+    KVD's node list (`nodes.json`) also holds patterns like `samples/kvd/implicit/**` and `.../*` - not addresses.

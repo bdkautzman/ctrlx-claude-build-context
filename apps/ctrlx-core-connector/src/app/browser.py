@@ -193,9 +193,12 @@ class Browser:
 
     def _value(self, client, address):
         try:
-            vtype, value = _split_json(client.read_json(address))
+            raw = client.read_json(address)
         except DataLayerError as exc:
             return {"valueError": exc.result, "valueErrorDetail": str(exc) if str(exc) != exc.result else ""}
+        if raw is None:
+            return {}   # readable, but no value (a KVD collection): details without a value box
+        vtype, value = _split_json(raw)
         value = dltypes.json_safe(value)
         if len(json.dumps(value)) > MAX_VALUE_JSON:
             return {"valueType": vtype or "object", "valueError": "TOO_LARGE",

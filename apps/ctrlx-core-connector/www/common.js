@@ -77,5 +77,127 @@ window.CC = (function () {
   function webUrl(core) { return core.local ? location.origin + "/" : core.webUrl; }
   function coreTitle(core) { return core.local ? "This device" : core.name; }
 
-  return { API, LOCAL_ID, token, $, api, el, icon, showBanner, fmtDuration, webUrl, coreTitle };
+  // ---- help menu and tutorial (as in the AMR Fleet View) ----------------------------------------
+  // The help button in the top bar opens a menu: the app's page on GitHub and the tutorial - a card at the
+  // bottom of the window that steps through the controls of the page; the control of each step blinks (a
+  // ring laid over it, position: fixed, so nothing clips it; it stays under the card). The card stays at the
+  // bottom unless it would hide the control completely. Everything stays usable while the card is open;
+  // "Show me" does the step's action. Each page passes its steps:
+  //   {title, text: string | () => string, target: () => element | element[] | null,
+  //    when: () => bool (step shown?), act: () => void ("Show me"), canAct: () => bool (button shown?)}
+  function setupHelp(steps) {
+    const helpBtn = $("btn-help"), helpMenu = $("help-menu");
+    function setHelpMenu(open) {
+      helpMenu.hidden = !open;
+      helpBtn.setAttribute("aria-expanded", String(open));
+      if (open) helpMenu.querySelector("[role=menuitem]").focus();
+    }
+    helpBtn.addEventListener("click", () => setHelpMenu(helpMenu.hidden));
+    helpMenu.addEventListener("click", () => setHelpMenu(false));     // an item was chosen
+    helpMenu.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") { ev.stopPropagation(); setHelpMenu(false); helpBtn.focus(); return; }
+      if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+      ev.preventDefault();
+      const items = [...helpMenu.querySelectorAll("[role=menuitem]")];
+      const i = items.indexOf(document.activeElement);
+      items[(i + (ev.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus();
+    });
+    document.addEventListener("pointerdown", (ev) => {
+      if (!helpMenu.hidden && !ev.target.closest(".menu-wrap")) setHelpMenu(false);
+    });
+
+    const navBtn = (id, cls, label, ...kids) => el("button", { type: "button", id, class: cls, title: label, "aria-label": label }, ...kids);
+    const prev = navBtn("tour-prev", "btn btn-arrow", "Previous step", icon("left"));
+    const next = navBtn("tour-next", "btn btn-primary btn-arrow", "Next step", icon("right"), el("span", { class: "tour-done", text: "Done" }));
+    const close = navBtn("tour-close", "tool tool-bare", "End the tutorial", icon("close"));
+    const tryBtn = el("button", { type: "button", id: "tour-try", class: "btn btn-small", hidden: true, text: "Show me" });
+    const card = el("div", { id: "tour", class: "tour", role: "dialog", "aria-labelledby": "tour-title",
+      "aria-describedby": "tour-text", hidden: true },
+    el("div", { class: "tour-head" }, el("span", { id: "tour-count", class: "muted" }), close),
+    el("h3", { id: "tour-title" }), el("p", { id: "tour-text", "aria-live": "polite" }),
+    el("div", { class: "tour-nav" }, prev, next, el("span", { class: "spacer" }), tryBtn));
+    const ring = el("div", { id: "tour-ring", class: "tour-ring", hidden: true, "aria-hidden": "true" });
+    document.body.append(card, ring);
+
+    let tour = null;   // {i, step}
+    const shown = () => steps.filter((st) => !st.when || st.when());
+    function render() {
+      const list = shown();
+      tour.i = Math.max(0, Math.min(tour.i, list.length - 1));
+      const st = tour.step = list[tour.i];
+      $("tour-count").textContent = "Step " + (tour.i + 1) + " of " + list.length;
+      $("tour-title").textContent = st.title;
+      $("tour-text").textContent = typeof st.text === "function" ? st.text() : st.text;
+      prev.disabled = tour.i === 0;
+      const last = tour.i === list.length - 1;
+      card.classList.toggle("last", last);
+      next.setAttribute("aria-label", last ? "End the tutorial" : "Next step");
+      next.title = last ? "End the tutorial" : "Next step";
+      tryBtn.hidden = !st.act || (st.canAct && !st.canAct());
+      ring.classList.remove("blink");
+      void ring.offsetWidth;                  // restart the blinking
+      ring.classList.add("blink");
+      place();
+    }
+    // every frame while open: the ring follows its control (tiles updated, tree loaded, scrolled)
+    function place() {
+      if (!tour) return;
+      const t = tour.step.target ? tour.step.target() : null;
+      const els = (Array.isArray(t) ? t : [t]).filter((e) => e && e.getClientRects().length);
+      if (!els.length) { ring.hidden = true; card.classList.remove("at-top"); return; }
+      const rs = els.map((e) => e.getBoundingClientRect());
+      const x0 = Math.max(2, Math.min(...rs.map((r) => r.left)) - 4), y0 = Math.max(2, Math.min(...rs.map((r) => r.top)) - 4);
+      const x1 = Math.min(innerWidth - 2, Math.max(...rs.map((r) => r.right)) + 4);
+      const y1 = Math.min(innerHeight - 2, Math.max(...rs.map((r) => r.bottom)) + 4);
+      Object.assign(ring.style, { left: x0 + "px", top: y0 + "px", width: (x1 - x0) + "px", height: (y1 - y0) + "px" });
+      ring.hidden = false;
+      // the card moves to the top only when it would hide the control completely (its place at the bottom)
+      const cw = card.offsetWidth, ch = card.offsetHeight;
+      const cx0 = (innerWidth - cw) / 2, cy1 = innerHeight - 8, cy0 = cy1 - ch - 8;
+      const hides = x0 >= cx0 && x1 <= cx0 + cw && y0 >= cy0 && y1 <= cy1;
+      card.classList.toggle("at-top", hides);
+    }
+    function loop() { if (tour) { place(); requestAnimationFrame(loop); } }
+    function start() {
+      const running = !!tour;
+      tour = { i: 0, step: null };
+      card.hidden = false;
+      render();
+      if (!running) requestAnimationFrame(loop);
+      next.focus();
+    }
+    function end() {
+      tour = null;
+      card.hidden = true;
+      ring.hidden = true;
+    }
+    function step(delta) {
+      if (tour.i + delta >= shown().length) { end(); return; }
+      tour.i = Math.max(0, tour.i + delta);
+      render();
+    }
+    prev.addEventListener("click", () => step(-1));
+    next.addEventListener("click", () => step(1));
+    close.addEventListener("click", end);
+    tryBtn.addEventListener("click", () => { if (tour && tour.step.act) tour.step.act(); });
+    $("btn-tutorial").addEventListener("click", start);
+    // ← → step, Escape ends - not while typing, in the tree (it has its own arrow keys) or in a dialog/drawer
+    document.addEventListener("keydown", (ev) => {
+      if (!tour || !["ArrowLeft", "ArrowRight", "Escape"].includes(ev.key) || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+      if (ev.target.closest("input, textarea, select, [role=tree], dialog, .drawer")) return;
+      if (ev.key === "Escape" && document.querySelector("dialog[open], .drawer.open")) return;
+      ev.preventDefault();
+      if (ev.key === "Escape") end(); else step(ev.key === "ArrowRight" ? 1 : -1);
+    });
+    // a tour handed over from another page ("Show me" on the start page): browse.html?...&tour=1
+    const url = new URL(location.href);
+    const handedOver = url.searchParams.get("tour") === "1";
+    if (handedOver) {
+      url.searchParams.delete("tour");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+    return { start, end, refresh: () => { if (tour) render(); }, handedOver };
+  }
+
+  return { API, LOCAL_ID, token, $, api, el, icon, showBanner, fmtDuration, webUrl, coreTitle, setupHelp };
 })();

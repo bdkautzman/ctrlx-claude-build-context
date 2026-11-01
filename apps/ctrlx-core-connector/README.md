@@ -8,15 +8,19 @@ ctrlX OS 4.6 app (snap, `core24`, Python) for **this device and other ctrlX CORE
   new tab; a **click anywhere else on the tile opens the Data Layer browser** of that core.
 * **Data Layer browser** (`browse.html?core=<name>`, `_local` = this device), similar to the ctrlX Data
   Layer view: tree with lazily loaded children (filter, collapse, keyboard: arrows, Enter), simple values
-  and types right in the tree (refreshed every 2 s while visible), details of the selected node (metadata,
-  operations, references, value refreshed every second, objects as JSON), address field to jump to a node,
+  and types right in the tree (read while visible), details of the selected node (metadata, operations,
+  references, live value, objects as JSON) - both read every `browser.refreshMs` (1 s by default, Settings →
+  Data Layer browser), address field to jump to a node,
   **write** values (typed by the node's write type; flatbuffers objects as JSON).
-* **Key Value Database (KVD) nodes**: when the core runs the KVD app (`rexroth-kvd`), **Add node** creates
-  a variable (any scalar or array type, initial value, unit, description, read-only) or a folder, and
-  **Delete KVD node** removes one that is defined in KVD's `nodes.json`.
+* **Key Value Database (KVD) nodes**: when the core runs the KVD app (`rexroth-kvd`; the browser shows
+  **Editable** in its top bar), **Add node** creates a variable (any scalar or array type, initial value, unit,
+  description, read-only) or a folder, and **Delete KVD node** removes one that is defined in KVD's
+  `nodes.json`. Such nodes carry a person icon in the tree ("added by a user").
 * **Home screen widget** "Connected cores": every core with its operating state, an **Open** button for the
   app; a remote core's name opens its web UI.
-* Settings (log level, poll interval) in a drawer that slides in from the right.
+* Settings (log level, poll interval, the browser's read interval) in a drawer that slides in from the right.
+* **Help** button in the top bar (both pages): the app's page on GitHub and a **tutorial** that steps
+  through the controls of the start page and continues in the Data Layer browser (as in the AMR Fleet View).
 
 Formerly **Core Monitor** (`ctrlx-core-monitor` 0.1.x): see "Moving from Core Monitor" below.
 
@@ -82,6 +86,7 @@ loaded with ctrlX configurations:
 {
   "settingsVersion": 1,
   "general": { "logLevel": "INFO", "pollIntervalMs": 2000 },
+  "browser": { "refreshMs": 1000 },
   "cores": [
     { "name": "line-1", "host": "192.168.1.7", "user": "boschrexroth", "password": "...",
       "sslPort": 443, "skipCertificateCheck": true }
@@ -140,7 +145,7 @@ Data Layer errors come back as `{"title": "Data Layer: <RESULT>"}` (404 `INVALID
 python3 -m unittest discover -s tests -t .     # tests, any PC (fake Data Layer in tests/fake_adapter.py)
 ./run-local.sh                                  # http://127.0.0.1:8080/ctrlx-core-connector/ (no Data Layer)
 ../../tools/check.sh .
-python3 ../../tools/ui_check.py . [--device]    # start page, settings drawer, add dialog, widget, browser
+python3 ../../tools/ui_check.py . [--device]    # start page, settings drawer, add dialog, widget, help + tutorial, browser
 ./build-snap-amd64.sh && ../../tools/ctrlx.py install ./*_amd64.snap --service
 ```
 
@@ -156,5 +161,5 @@ from its local settings (an empty list deletes them).
 | `src/app/datalayer_service.py` | provider glue + `ClientAdapter` (read, browse, metadata, bulk, JSON read/write, remotes) |
 | `src/app/migrate.py` | one-time import of Core Monitor's settings |
 | `src/app/web_server.py` | routes |
-| `www/` | `index.html`/`app.js` tiles + settings drawer, `browse.html`/`browse.js` browser, `widgets.js` home screen widget, `common.js` token/API helpers |
+| `www/` | `index.html`/`app.js` tiles + settings drawer, `browse.html`/`browse.js` browser, `widgets.js` home screen widget, `common.js` token/API helpers, help menu + tutorial (each page passes its steps) |
 | `tests/` | unit tests; `ui_scenario.py` for `tools/ui_check.py` |

@@ -4,5 +4,8 @@
     "logLevel": "INFO",
     "pollIntervalMs": 2000
   },
+  "browser": {
+    "refreshMs": 1000
+  },
   "cores": []
 }

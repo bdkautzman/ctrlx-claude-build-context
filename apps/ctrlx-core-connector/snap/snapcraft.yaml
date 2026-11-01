@@ -12,7 +12,7 @@
 
 name: ctrlx-core-connector
 title: Core Connector
-version: 0.2.2
+version: 0.2.4
 summary: Connect to other ctrlX COREs - status, Data Layer browser, KVD nodes
 description: |
   <!--
