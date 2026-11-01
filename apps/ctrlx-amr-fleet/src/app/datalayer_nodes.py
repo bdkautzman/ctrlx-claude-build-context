@@ -35,6 +35,9 @@ class NodeSpec:
     max_length: Optional[int] = None
     # called with the validated value BEFORE it is stored; raise NodeWriteError to reject it
     on_write: Optional[Callable[[Any], None]] = field(default=None, repr=False)
+    # returns the current value instead of the stored one (None: the stored one) - for values that
+    # are expensive to keep up to date and rarely read
+    reader: Optional[Callable[[], Any]] = field(default=None, repr=False)
 
 
 class NodeWriteError(Exception):
@@ -98,6 +101,10 @@ class NodeRegistry:
         return self.root + "/" + name
 
     def get(self, name):
+        reader = self._specs[name].reader
+        value = reader() if reader else None
+        if value is not None:
+            return value
         with self._lock:
             return self._values[name]
 
@@ -131,6 +138,9 @@ class NodeRegistry:
     def snapshot(self):
         with self._lock:
             values = dict(self._values)
+        for name, spec in self._specs.items():
+            if spec.reader:
+                values[name] = self.get(name)
         return {
             name: {
                 "address": self.address(name),
@@ -144,8 +154,11 @@ class NodeRegistry:
         }
 
 
-def build_node_specs(settings, version, on_fleet_write=None):
-    """The nodes of this app. on_fleet_write(text) takes a fleet JSON (FleetState.receive)."""
+def build_node_specs(settings, version, on_fleet_write=None, fleet_reader=None):
+    """The nodes of this app. on_fleet_write(text) takes a fleet JSON (FleetState.receive; raises
+    NodeWriteError('readonly') in the per-AMR input modes); fleet_reader() -> the merged fleet as
+    JSON in the per-AMR modes, else None. The per-AMR nodes fleet/amr/** are served by
+    datalayer_service.py from amr_inputs.py (one wildcard node - their number changes at runtime)."""
     def fleet_write(text):
         if on_fleet_write is None:
             return
@@ -162,11 +175,13 @@ def build_node_specs(settings, version, on_fleet_write=None):
         NodeSpec("settings/active", "string", "{}",
                  description="Active settings as JSON (read-only, change via web UI or app data)"),
         NodeSpec("fleet/amrs", "string", "", writable=True, max_length=FLEET_JSON_MAX_LENGTH,
-                 on_write=fleet_write,
+                 on_write=fleet_write, reader=fleet_reader,
                  description='All AMRs as one JSON string, e.g. {"amrs":[{"id":"AMR-01","x":1250,'
                              '"y":30480,"rotation":90}]}: x/y in map units, rotation counter-clockwise '
                              'from +x in fleet.rotationUnit; optional name, state, battery, info (object). '
-                             'Invalid JSON is rejected. Runtime only (not persisted).'),
+                             'Invalid JSON is rejected. Runtime only (not persisted). Input mode '
+                             'fleet.input = amr-json / amr-fields: read-only, shows the fleet merged '
+                             'from fleet/amr/<id>.'),
         NodeSpec("fleet/count", "uint64", 0, description="Number of AMRs in the last accepted fleet JSON"),
         NodeSpec("fleet/updates", "uint64", 0, description="Accepted writes to fleet/amrs since the app started"),
         NodeSpec("fleet/rejected", "uint64", 0, description="Rejected writes to fleet/amrs since the app started"),

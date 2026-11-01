@@ -552,3 +552,25 @@ App `ctrlx-core-connector` 0.2.0 (formerly `ctrlx-core-monitor`: Data Layer brow
     REST answers `""`, `read_json_sync` returns OK with an empty string - `json.loads("")` then raised and the
     browser's node details failed with HTTP 400 "Expecting value". Treat an empty JSON text as "no value".
     KVD's node list (`nodes.json`) also holds patterns like `samples/kvd/implicit/**` and `.../*` - not addresses.
+88. **A node set that changes at runtime: one wildcard provider node instead of hundreds** (verified on the
+    COREvirtual 4.6, 2026-11-01, ctrlx-amr-fleet 0.4.0: `fleet/amr/<id>/<value>` for an AMR list). `register_node`
+    takes wildcards ("wildcards allowed", SDK sample `datalayer.provider.sub`): one `ProviderNode` registered at
+    `<path>/**` gets browse / read / write / metadata for EVERY address below `<path>` - its callbacks see the full
+    address and decide: `on_browse` answers the children (`Variant.set_array_string`), `on_metadata` a Folder or a
+    Variable with `types/datalayer/<type>`, an unknown address `Result.INVALID_ADDRESS` (REST: 404). The ctrlX
+    broker then shows it like registered nodes: the parent lists `<path>`'s name, REST browse / metadata / read /
+    write work, `fleet/amr/AMR-09/x` for an id not in the list is 404. The app also registered `<path>` itself (a
+    second node) for the folder; whether `/**` alone covers `<path>` was not tested. Unregistering removes the whole
+    subtree at once. Cost: one node and a few metadata variants instead of 1400 registrations (200 AMRs x 7 values).
+89. **The template's `PUT /settings` replaces ALL settings: missing keys get the defaults, not the current values.**
+    A UI test cleanup that sent `{"fleet": {"input": "fleet-json"}}` switched the app's simulation off (its default)
+    and a later step waited 90 s for AMRs. Tools and tests: `GET /settings`, change the copy, `PUT` the whole object
+    (`apps/ctrlx-amr-fleet/scripts/perf_test.py` does). The web UI always sends the whole form.
+90. **Each Data Layer write into a Python provider costs ~0.24 ms CPU on a real CORE** (~0.05 ms on the COREvirtual;
+    measured 2026-11-01 with ctrlx-amr-fleet 0.4.0, writes from the build VM through REST
+    `PUT /automation/api/v2/bulk?type=write`, up to 500 per request). The app's own Python per write was ~0.03 ms of
+    it; the rest is the `ctrlxdatalayer` callback path (ctypes, Variant). So 1000 writes/s = ~24 % of a CORE core in
+    the app alone, and 200 AMRs x 5 values x 5/s (5000 writes/s) did not get through at all (2100/s, whole device
+    31 % of 2 cores incl. the REST server). One write of a 200-AMR JSON (5/s) cost 7 %. Design PLC interfaces with
+    few large writes (a JSON or flatbuffers node), or values written only on change. REST bulk: per entry its
+    own `result` (`DL_OK`); 500 writes took ~70-170 ms on the COREvirtual, ~160-390 ms on the CORE.

@@ -7,12 +7,14 @@
 Screenshots: start, details (expanded tile), follow (lock + heading-up), focus-small (zoomed far out right
 after the crosshair: small AMRs keep their shape, the enlarged outline pulses), path (driven path of the first
 AMR), help (menu open), tutorial / tutorial-narrow (the "Focus" step after "Show me", 1400 / 390 px wide),
-styling (unsaved preview of other colors), widget (the home screen widget on its own page, same origin
+styling (unsaved preview of other colors), inputs (input mode + AMR list after an upload, before Save), widget (the home screen widget on its own page, same origin
 as on the device).
 """
 
 import json
+import os
 import re
+import tempfile
 import time
 import urllib.error
 from urllib.parse import quote
@@ -47,6 +49,7 @@ def run(ui):
     help_and_tutorial(ui)
     if ui.role != "reader" and ui.local:
         styling(ui)
+        inputs(ui)
     widget(ui)
 
 
@@ -218,6 +221,50 @@ def styling(ui):
     page.fill("#f-style-accent", "#d4570a")
     page.keyboard.press("Escape")
     assert page.evaluate(accent) == default, "closing the settings drops an unsaved preview"
+
+
+def inputs(ui):
+    """Settings: input mode select (labels) and the AMR list - add, remove, upload a file, Save; restored after."""
+    page = ui.page
+    original_list = ui.api("GET", "/amr-list", as_admin=True)["ids"]
+    original = ui.api("GET", "/settings", as_admin=True)     # all of it: a partial PUT resets the rest
+    try:
+        with page.expect_response(lambda r: r.url.endswith("/api/v1/amr-list")):   # the editor stays from styling():
+            page.click("#btn-settings")                                             # wait until it is reloaded
+        page.wait_for_selector("#amr-ids .amr-id")
+        labels = page.locator("#f-fleet-input option").all_inner_texts()
+        assert labels[0].startswith("One JSON node for the whole fleet") and len(labels) == 3, labels
+        assert page.locator("#amr-ids .amr-id").count() == len(original_list)
+        page.fill("#amr-id-new", "AMR 5")                      # invalid: a space
+        page.click("#btn-amr-add")
+        assert page.locator("#amr-list-errors").is_visible()
+        page.fill("#amr-id-new", "AMR-05")
+        page.keyboard.press("Enter")                           # Enter adds, does not submit the form
+        assert page.locator("#amr-ids .amr-id").count() == len(original_list) + 1
+        assert "not saved" in page.inner_text("#amr-list-count")
+        page.locator('#amr-ids .amr-id[data-id="AMR-02"] button').click()
+        with tempfile.TemporaryDirectory() as tmp:
+            good = os.path.join(tmp, "fleet.csv")
+            with open(good, "w") as f:
+                f.write("# test fleet\nT-1,one\nT-2;two\nT 3\n")
+            page.set_input_files("#amr-list-file", good)
+            page.wait_for_selector("#amr-list-errors:not([hidden])")   # "T 3" is not valid: nothing loaded
+            assert "line 4" in page.inner_text("#amr-list-errors")
+            with open(good, "w") as f:
+                f.write("# test fleet\nT-1,one\nT-2;two\nT-3\n")
+            page.set_input_files("#amr-list-file", good)
+            page.wait_for_function("document.querySelectorAll('#amr-ids .amr-id').length === 3")
+        page.select_option("#f-fleet-input", "amr-fields")
+        ui.shot("inputs")
+        page.click("#btn-save")
+        page.wait_for_function("/^Saved/.test(document.getElementById('save-state').textContent)")
+        assert ui.api("GET", "/amr-list", as_admin=True)["ids"] == ["T-1", "T-2", "T-3"]
+        assert ui.api("GET", "/settings", as_admin=True)["fleet"]["input"] == "amr-fields"
+        assert "not saved" not in page.inner_text("#amr-list-count")
+        page.keyboard.press("Escape")
+    finally:
+        ui.api("PUT", "/amr-list", {"ids": original_list}, as_admin=True)
+        ui.api("PUT", "/settings", original, as_admin=True)
 
 
 def widget(ui):

@@ -16,6 +16,8 @@ Routes
   PUT  /<snap>/api/v1/settings       write  (validate, persist to app data, apply)
   POST /<snap>/api/v1/settings/reset write
   GET  /<snap>/api/v1/values         write  (Data Layer nodes of this app, incl. settings/active)
+  GET  /<snap>/api/v1/amr-list       write  AMR list of the per-AMR input modes (amr-list.txt in app data)
+  PUT  /<snap>/api/v1/amr-list       write  body {"ids": [...]} or {"text": "<file content>"} (an upload)
   PUT  /<snap>/api/v1/values/<name>  write  body {"value": ...}
   GET  /<snap>/api/v1/view-config    read   what the map view needs: style colors, units, AMR size, refresh, paths
   GET  /<snap>/api/v1/fleet[?since=<revision>]   read  AMRs; only status if the revision is unchanged
@@ -39,6 +41,7 @@ import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from app import appdata_commands, auth, config
+from app.amr_list import AmrListError, parse_list
 from app.fleet import PATH_STEP_M
 from app.datalayer_nodes import NodeWriteError
 from app.settings_store import SettingsError
@@ -66,16 +69,17 @@ class _TCPHTTPServer(http.server.ThreadingHTTPServer):
 
 
 class WebServer:
-    def __init__(self, store, datalayer, fleet, maps):
+    def __init__(self, store, datalayer, fleet, maps, amr_list=None):
         self.store = store
         self.datalayer = datalayer
         self.fleet = fleet
         self.maps = maps
+        self.amr_list = amr_list
         self._server = None
         self._thread = None
 
     def start(self):
-        handler = _make_handler(self.store, self.datalayer, self.fleet, self.maps)
+        handler = _make_handler(self.store, self.datalayer, self.fleet, self.maps, self.amr_list)
         if config.IN_SNAP:
             os.makedirs(config.SOCKET_DIR, exist_ok=True)
             try:
@@ -105,7 +109,7 @@ class WebServer:
                 pass
 
 
-def _make_handler(store, datalayer, fleet, maps):
+def _make_handler(store, datalayer, fleet, maps, amr_list):
     class Handler(http.server.BaseHTTPRequestHandler):
         server_version = config.SNAP_NAME
         sys_version = ""
@@ -278,6 +282,24 @@ def _make_handler(store, datalayer, fleet, maps):
                     status = 404 if exc.reason == "unknown" else 400
                     return self._problem(status, "Write rejected", str(exc))
                 return self._send_json(200, {"name": name, "value": value})
+
+            if route == "/amr-list" and amr_list is not None and method in ("GET", "PUT"):
+                auth.require(self.headers, write=True)      # part of the settings: not for read-only users
+                if method == "PUT":
+                    body = self._read_json()
+                    try:
+                        if isinstance(body, dict) and isinstance(body.get("text"), str):
+                            ids = parse_list(body["text"])
+                        elif isinstance(body, dict) and isinstance(body.get("ids"), list) \
+                                and all(isinstance(i, str) for i in body["ids"]):
+                            ids = body["ids"]
+                        else:
+                            return self._problem(400, 'Body must be {"ids": [...]} or {"text": "..."}')
+                        amr_list.save(ids)
+                    except AmrListError as exc:
+                        return self._problem(400, "Invalid AMR list", errors=exc.errors)
+                    log.info("AMR list changed via web UI (%d AMRs)", len(ids))
+                return self._send_json(200, dict(amr_list.status(), ids=amr_list.ids()))
 
             if route == "/view-config" and method == "GET":
                 auth.require(self.headers, write=False)

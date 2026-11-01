@@ -2,7 +2,9 @@
 and web server together.
 
 Data flow: Data Layer write to <snap>/fleet/amrs (or the simulation) -> FleetState.receive
-(validates) -> web UI polls GET /api/v1/fleet. The map file comes from MapSource (polled
+(validates) -> web UI polls GET /api/v1/fleet. Input modes amr-json / amr-fields (setting
+fleet.input): writes to <snap>/fleet/amr/<id>[/<value>] for the AMRs of amr-list.txt (app data) ->
+AmrInputs (validates, merges) -> FleetState.accept. The map file comes from MapSource (polled
 every 2 s, reloaded on change) and reaches the UI as PNG tiles (GET /api/v1/map/tiles/...).
 
 Startup order matters on ctrlX OS:
@@ -20,6 +22,8 @@ import threading
 import time
 
 from app import config, logsetup
+from app.amr_inputs import AmrInputs
+from app.amr_list import FILE_NAME as AMR_LIST_FILE, AmrList
 from app.datalayer_service import DataLayerService
 from app.fleet import FleetError, FleetState
 from app.map_source import MapSource
@@ -76,9 +80,13 @@ def main():
 
     fleet = FleetState()
     maps = MapSource(config.MAP_SEARCH_DIRS)
+    amr_list = AmrList(os.path.join(config.APPDATA_DIR, AMR_LIST_FILE), os.path.join(config.DEFAULTS_DIR, AMR_LIST_FILE))
+    amr_list.poll(store.storage_available(), store.load_in_progress())   # creates it from the default if missing
+    inputs = AmrInputs(fleet)
 
     # the Data Layer node settings/active gets redacted settings (`secret` rules masked)
-    datalayer = DataLayerService(store.get_redacted(), config.app_version(), on_fleet_write=fleet.receive)
+    datalayer = DataLayerService(store.get_redacted(), config.app_version(), on_fleet_write=inputs.write_fleet_json,
+                                 amr_inputs=inputs, fleet_reader=inputs.read_fleet_json)
     store.add_listener(lambda _s: datalayer.on_settings_changed(store.get_redacted()))
     fleet.add_listener(datalayer.on_fleet_changed)
     maps.add_listener(datalayer.on_map_changed)
@@ -97,24 +105,33 @@ def main():
     simulator.configure(settings)
     simulator.start()
 
+    def apply_inputs():
+        inputs.configure(store.get()["fleet"]["input"], amr_list.ids())
+        datalayer.on_input_changed()
+
     def apply_settings(s):
         fleet.configure(s["fleet"]["rotationUnit"], s["fleet"]["pathHistoryMinutes"], s["map"]["unitsPerMeter"])
         maps.configure(s["map"]["file"], s["map"]["resolution"])
         simulator.configure(s)
+        apply_inputs()
     fleet.configure(settings["fleet"]["rotationUnit"], settings["fleet"]["pathHistoryMinutes"],
                     settings["map"]["unitsPerMeter"])
+    apply_inputs()
     store.add_listener(apply_settings)
+    amr_list.add_listener(lambda _ids: apply_inputs())
 
-    web = WebServer(store, datalayer, fleet, maps)
+    web = WebServer(store, datalayer, fleet, maps, amr_list)
     web.start()
 
     while not stop.wait(POLL_INTERVAL_S):
         store.poll_external_change()
         maps.poll()
+        amr_list.poll(store.storage_available(), store.load_in_progress())
 
     log.info("Shutting down")
     web.stop()
     simulator.stop()
+    inputs.stop()
     datalayer.stop()
     log.info("Stopped")
     return 0

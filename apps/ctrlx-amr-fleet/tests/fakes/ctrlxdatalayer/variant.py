@@ -14,10 +14,18 @@ class Result(Enum):
 class VariantType(Enum):
     UNKNOWN = 0
     BOOL8 = 1
+    INT8 = 2
+    UINT8 = 3
+    INT16 = 4
+    UINT16 = 5
+    INT32 = 6
+    UINT32 = 7
     INT64 = 8
     UINT64 = 9
+    FLOAT32 = 10
     FLOAT64 = 11
     STRING = 12
+    ARRAY_STRING = 24
 
 
 class Variant:
@@ -51,6 +59,17 @@ class Variant:
     def set_uint64(self, d): return self._set(VariantType.UINT64, int(d))
     def set_float64(self, d): return self._set(VariantType.FLOAT64, float(d))
     def set_string(self, d): return self._set(VariantType.STRING, str(d))
+    def set_int32(self, d): return self._set(VariantType.INT32, int(d))
+    def set_float32(self, d): return self._set(VariantType.FLOAT32, float(d))
+    def set_array_string(self, d): return self._set(VariantType.ARRAY_STRING, list(d))
+    def get_int8(self): return self._value
+    def get_uint8(self): return self._value
+    def get_int16(self): return self._value
+    def get_uint16(self): return self._value
+    def get_int32(self): return self._value
+    def get_uint32(self): return self._value
+    def get_float32(self): return self._value
+    def get_array_string(self): return list(self._value)
     def get_bool8(self): return self._value
     def get_int64(self): return self._value
     def get_uint64(self): return self._value

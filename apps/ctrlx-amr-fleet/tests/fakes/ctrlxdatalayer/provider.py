@@ -38,10 +38,19 @@ class Provider:
         return Result.OK
 
     # --- test helpers: call the node callbacks like the broker would ---
+    def node_for(self, address):
+        """The node registered for an address: exactly, or by the longest "<prefix>/**" registration."""
+        if address in self.nodes:
+            return self.nodes[address]
+        for pattern in sorted((p for p in self.nodes if p.endswith("/**")), key=len, reverse=True):
+            if address.startswith(pattern[:-2]):
+                return self.nodes[pattern]
+        raise KeyError(address)
+
     def _call(self, address, name, *args):
         out = []
         cb = lambda result, data: out.append((result, None if data is None else data.clone()[1]))  # noqa: E731
-        getattr(self.nodes[address].cbs, name)(None, address, *args, cb)
+        getattr(self.node_for(address).cbs, name)(None, address, *args, cb)
         assert len(out) == 1, "callback must be called exactly once"
         return out[0]
 
@@ -53,3 +62,6 @@ class Provider:
 
     def metadata(self, address):
         return self._call(address, "on_metadata")
+
+    def browse(self, address):
+        return self._call(address, "on_browse")

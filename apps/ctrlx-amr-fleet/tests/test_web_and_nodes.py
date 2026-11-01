@@ -11,6 +11,7 @@ from urllib.parse import quote
 
 from app import auth, config
 from app.datalayer_nodes import NodeRegistry, NodeSpec, NodeWriteError, build_node_specs
+from app.amr_list import AmrList
 from app.datalayer_service import DataLayerService
 from app.fleet import FleetState
 from app.map_source import MapSource
@@ -102,7 +103,9 @@ class WebApiTest(unittest.TestCase):
         cls.maps.wait_idle(60)
         cls._port = config.DEV_HTTP_PORT
         config.DEV_HTTP_PORT = 0  # let the OS pick a free port
-        cls.web = WebServer(cls.store, cls.dl, cls.fleet, cls.maps)
+        cls.amr_list = AmrList(os.path.join(active, config.SNAP_NAME, "amr-list.txt"),
+                               os.path.join(os.path.dirname(DEFAULTS_FILE), "amr-list.txt"))
+        cls.web = WebServer(cls.store, cls.dl, cls.fleet, cls.maps, cls.amr_list)
         cls.web.start()
         cls.port = cls.web._server.server_address[1]
 
@@ -197,6 +200,26 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual(status, 404)
         status, _ = self.req("GET", url, scopes=None)
         self.assertEqual(status, 401)
+
+    def test_amr_list(self):
+        url = config.API_PREFIX + "/amr-list"
+        status, body = self.req("GET", url)
+        self.assertEqual((status, body["ids"], body["file"]), (200, ["AMR-01", "AMR-02", "AMR-03", "AMR-04"], "amr-list.txt"))
+        status, body = self.req("PUT", url, {"ids": ["T1", "T2"]})
+        self.assertEqual((status, body["ids"], body["count"]), (200, ["T1", "T2"], 2))
+        status, body = self.req("PUT", url, {"text": "# uploaded\nU1,first\nU2;second\n"})   # a file upload
+        self.assertEqual(body["ids"], ["U1", "U2"])
+        status, problem = self.req("PUT", url, {"text": "U1\nU 2\nU1"})
+        self.assertEqual(status, 400)
+        self.assertEqual([e.split(":")[0] for e in problem["errors"]], ["line 2", "line 3"])
+        status, _ = self.req("PUT", url, {"ids": "U1"})
+        self.assertEqual(status, 400)
+        self.assertEqual(self.amr_list.ids(), ["U1", "U2"])          # failed writes changed nothing
+        with open(os.path.join(self.tmp.name, "activeConfiguration", config.SNAP_NAME, "amr-list.txt")) as f:
+            self.assertIn("U2\n", f.read())                            # stored in the app data folder
+        for method, body in (("GET", None), ("PUT", {"ids": []})):
+            status, _ = self.req(method, url, body, scopes=(config.SCOPE_READ,))
+            self.assertEqual(status, 403)                               # part of the settings
 
     def test_read_only_users_get_no_settings(self):
         reader = (config.SCOPE_READ,)

@@ -1285,7 +1285,8 @@
       let input;
       if (Array.isArray(rule.enum)) {
         input = el("select", { id });
-        for (const opt of rule.enum) input.append(el("option", { value: String(opt), text: String(opt) }));
+        const labels = rule.enumLabels || {};      // what the select shows; the value is stored
+        for (const opt of rule.enum) input.append(el("option", { value: String(opt), text: labels[opt] || String(opt) }));
       } else if (typeof def === "boolean") {
         input = el("input", { id, type: "checkbox" });
       } else if (typeof def === "number") {
@@ -1300,7 +1301,7 @@
       input.dataset.kind = Array.isArray(def) ? "array" : typeof def;
       const field = typeof def === "boolean"
         ? el("div", { class: "field" }, el("label", { class: "checkbox", for: id }, input, document.createTextNode(label)))
-        : el("div", { class: "field" }, el("label", { for: id, text: label }), input);
+        : el("div", { class: "field" + (rule.enumLabels ? " field-wide" : "") }, el("label", { for: id, text: label }), input);
       if (rule.help) field.append(el("div", { class: "help", text: rule.help }));
       container.append(field);
     }
@@ -1411,6 +1412,91 @@
     return result;
   }
 
+  // ---- AMR list (per-AMR input modes, amr-list.txt in the app data): edited here, stored with Save -----
+  // Same rules as src/app/amr_list.py (the app checks again): one id per line, '#' = comment, in a CSV
+  // line the first field; ids 1..64 characters A-Z a-z 0-9 _ -, unique, at most 1000.
+  const AMR_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/, MAX_LIST = 1000;
+  let amrListSaved = [], amrListDraft = [];
+  function parseAmrList(text) {
+    const ids = [], errors = [], seen = new Set();
+    text.split(/\r?\n/).forEach((raw, i) => {
+      const line = raw.trim().replace(/^\ufeff/, "");
+      if (!line || line.startsWith("#")) return;
+      const id = line.split(/[,;\t]/)[0].trim().replace(/^"|"$/g, "");
+      if (!AMR_ID.test(id)) errors.push("line " + (i + 1) + ': "' + id.slice(0, 70) + '" is not a valid id (1..64 characters A-Z a-z 0-9 _ -)');
+      else if (seen.has(id)) errors.push("line " + (i + 1) + ': "' + id + '" is listed twice');
+      else { seen.add(id); ids.push(id); }
+    });
+    if (ids.length > MAX_LIST) errors.push("more than " + MAX_LIST + " AMRs");
+    return { ids, errors: errors.slice(0, 20) };
+  }
+  function amrListErrors(errors, note) {
+    const list = $("amr-list-errors");
+    list.replaceChildren(...errors.map((m) => el("li", { text: m })));
+    list.hidden = !errors.length;
+    $("amr-list-note").textContent = note || "";
+  }
+  function renderAmrList() {
+    const box = $("amr-ids");
+    box.replaceChildren(...amrListDraft.map((id) => {
+      const remove = el("button", { type: "button", class: "btn-icon", title: "Remove " + id, "aria-label": "Remove " + id }, icon("close"));
+      remove.disabled = !canWrite;
+      remove.addEventListener("click", () => { amrListDraft = amrListDraft.filter((x) => x !== id); renderAmrList(); });
+      return el("span", { class: "amr-id", "data-id": id }, document.createTextNode(id), remove);
+    }));
+    if (!amrListDraft.length) box.append(el("span", { class: "muted", text: "No AMRs in the list" }));
+    const changed = amrListDraft.join("\n") !== amrListSaved.join("\n");
+    $("amr-list-count").textContent = "(" + amrListDraft.length + (changed ? ", not saved" : "") + ")";
+    for (const id of ["amr-id-new", "btn-amr-add", "btn-amr-upload"]) $(id).disabled = !canWrite;
+  }
+  function addAmrId() {
+    const input = $("amr-id-new"), id = input.value.trim();
+    if (!id) return;
+    if (!AMR_ID.test(id)) { amrListErrors(['"' + id + '" is not a valid id (1..64 characters A-Z a-z 0-9 _ -)']); return; }
+    if (amrListDraft.includes(id)) { amrListErrors(['"' + id + '" is in the list already']); return; }
+    if (amrListDraft.length >= MAX_LIST) { amrListErrors(["at most " + MAX_LIST + " AMRs"]); return; }
+    amrListDraft = amrListDraft.concat([id]);
+    input.value = "";
+    amrListErrors([]);
+    renderAmrList();
+  }
+  async function uploadAmrList(file) {
+    const { ids, errors } = parseAmrList(await file.text());
+    if (errors.length) { amrListErrors(errors, file.name + " not loaded:"); return; }
+    amrListDraft = ids;
+    amrListErrors([], ids.length + " AMRs from " + file.name + " - Save stores them.");
+    renderAmrList();
+  }
+  function downloadAmrList() {
+    const text = "# AMR list of ctrlx-amr-fleet: one AMR id per line\n" + amrListDraft.map((id) => id + "\n").join("");
+    const a = el("a", { href: URL.createObjectURL(new Blob([text], { type: "text/plain" })), download: "amr-list.txt" });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  function amrListField() {
+    const file = el("input", { type: "file", id: "amr-list-file", accept: ".txt,.csv,text/plain,text/csv", hidden: true });
+    file.addEventListener("change", () => { if (file.files[0]) uploadAmrList(file.files[0]); file.value = ""; });
+    const input = el("input", { type: "text", id: "amr-id-new", placeholder: "AMR id, e.g. AMR-05", maxlength: "64",
+      "aria-label": "AMR id to add", spellcheck: "false" });
+    input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); addAmrId(); } });
+    const add = el("button", { type: "button", class: "btn btn-small", id: "btn-amr-add", text: "Add" });
+    add.addEventListener("click", addAmrId);
+    const upload = el("button", { type: "button", class: "btn btn-small", id: "btn-amr-upload", text: "Upload list…" });
+    upload.addEventListener("click", () => file.click());
+    const download = el("button", { type: "button", class: "btn btn-small btn-ghost", id: "btn-amr-download", text: "Download" });
+    download.addEventListener("click", downloadAmrList);
+    return el("div", { class: "field field-wide", id: "amr-list-field" },
+      el("label", { for: "amr-id-new" }, document.createTextNode("AMR list "), el("span", { id: "amr-list-count", class: "muted" })),
+      el("div", { class: "amr-ids", id: "amr-ids" }),
+      el("div", { class: "amr-list-tools" }, input, add, upload, download, file),
+      el("div", { class: "help", text: "The per-AMR input modes offer Data Layer nodes for these AMRs. A list file has one id per " +
+        "line ('#' starts a comment; in a CSV line the first field counts). Save stores it as amr-list.txt in the app data." }),
+      el("div", { class: "help", id: "amr-list-note" }),
+      el("ul", { class: "error-list", id: "amr-list-errors", hidden: true }));
+  }
+
   function showErrors(errors) {
     const list = $("settings-errors");
     list.replaceChildren(...(errors || []).map((m) => el("li", { text: m })));
@@ -1435,10 +1521,18 @@
           styleSet.querySelector("legend").after(el("div", { class: "fieldset-tools" }, btn,
             el("span", { class: "muted", text: "Changes show right away; Save keeps them for everyone." })));
         }
+        const inputField = $("f-fleet-input") && $("f-fleet-input").closest(".field");
+        if (inputField) inputField.after(amrListField());
       }
       loaded = await api("GET", "/settings");
       fillForm(loaded);
       showErrors([]);
+      if ($("amr-list-field")) {
+        amrListSaved = (await api("GET", "/amr-list")).ids;
+        amrListDraft = amrListSaved.slice();
+        amrListErrors([]);
+        renderAmrList();
+      }
     } catch (e) {
       $("settings-fields").replaceChildren(el("p", { class: "error", text: "Cannot load settings: " + e.message }));
     }
@@ -1448,6 +1542,16 @@
     ev.preventDefault();
     $("save-state").textContent = "Saving…";
     try {
+      if ($("amr-list-field") && amrListDraft.join("\n") !== amrListSaved.join("\n")) {   // first: a new mode finds its AMRs
+        try {
+          amrListSaved = (await api("PUT", "/amr-list", { ids: amrListDraft })).ids;
+          amrListErrors([]);
+          renderAmrList();
+        } catch (e) {
+          amrListErrors((e.data && e.data.errors) || [e.message], "AMR list not saved:");
+          throw e;
+        }
+      }
       loaded = await api("PUT", "/settings", readForm());
       viewConfigJson = "";
       applyViewConfig(viewConfigFrom(loaded));
@@ -1485,7 +1589,10 @@
   }
 
   $("settings-form").addEventListener("submit", saveSettings);
-  $("btn-revert").addEventListener("click", () => { fillForm(loaded); applyStyle(loaded.style); showErrors([]); $("save-state").textContent = ""; });
+  $("btn-revert").addEventListener("click", () => {
+    fillForm(loaded); applyStyle(loaded.style); showErrors([]); $("save-state").textContent = "";
+    if ($("amr-list-field")) { amrListDraft = amrListSaved.slice(); amrListErrors([]); renderAmrList(); }
+  });
   $("btn-defaults").addEventListener("click", resetDefaults);
   $("btn-settings").addEventListener("click", openSettings);
   $("btn-close-settings").addEventListener("click", closeSettings);

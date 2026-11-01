@@ -10,6 +10,7 @@
     "unitsPerMeter": 1000.0
   },
   "fleet": {
+    "input": "fleet-json",
     "rotationUnit": "deg",
     "staleAfterMs": 5000,
     "amrLengthM": 1.0,

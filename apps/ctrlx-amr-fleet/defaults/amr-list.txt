@@ -1,0 +1,6 @@
+# AMR list of ctrlx-amr-fleet: one AMR id per line (A-Z a-z 0-9 _ -, up to 64 characters).
+# Used by the per-AMR input modes (setting fleet.input): Data Layer nodes fleet/amr/<id>.
+AMR-01
+AMR-02
+AMR-03
+AMR-04

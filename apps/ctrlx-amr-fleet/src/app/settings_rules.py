@@ -18,6 +18,7 @@ Supported rule keys:
   maxItems/minItems: maximum/minimum array length
   itemPattern: arrays of strings - regular expression every element must match
   format:   "color" -> the web UI shows a color picker + hex field (strings and arrays of strings)
+  enumLabels: {value: text} for an enum - what the web UI's select shows (the value is stored)
   unique:   field name that must be unique within an array of objects (also used to match
             elements when restoring secrets)
   Example with all of them: apps/ctrlx-core-monitor/app/settings_rules.py ("cores").
@@ -64,6 +65,17 @@ RULES = {
                 "and the simulation speed.",
     },
     "fleet": {"label": "Fleet"},
+    "fleet.input": {
+        "label": "Input (how the AMRs reach the app)",
+        "enum": ["fleet-json", "amr-json", "amr-fields"],
+        "enumLabels": {"fleet-json": "One JSON node for the whole fleet (fleet/amrs)",
+                       "amr-json": "One JSON node per AMR (fleet/amr/<id>)",
+                       "amr-fields": "One node per value and AMR (fleet/amr/<id>/x, y, ...)"},
+        "help": "The per-AMR nodes exist for the AMRs of the AMR list below (amr-list.txt in the app "
+                "data). There, fleet/amrs is read-only and shows the merged fleet. Every node write costs the "
+                "app ~0.25 ms on a ctrlX CORE: 50 AMRs x 5 values x 5 per second = 30 % of a core - for big "
+                "fleets use one JSON node (200 AMRs: 7 %), write name / state / battery only on changes.",
+    },
     "fleet.rotationUnit": {
         "label": "Rotation unit",
         "enum": ["deg", "rad"],

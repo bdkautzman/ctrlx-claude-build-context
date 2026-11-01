@@ -71,6 +71,16 @@ node with JSON is the simplest contract (no flatbuffers schema to share). Patter
   format grow), `null` = optional field not set. Keep it in memory only (cyclic writes).
 * Document the format in the node description (shown in the Data Layer browser) and the app README.
 
+## Nodes per item: one wildcard provider node - verified 2026-11-01, see `apps/ctrlx-amr-fleet` 0.4.0
+
+When the nodes follow a list that changes at runtime (`fleet/amr/<id>/x` for every AMR of a list), register
+ONE `ProviderNode` at `<path>/**` (plus `<path>` for the folder) instead of a node per item and value: its
+callbacks get the full address; `on_browse` returns the children, `on_metadata` a Folder or a Variable with its
+type, an unknown address `INVALID_ADDRESS`. Register it only while needed and unregister to remove the whole
+subtree (gotchas #88). Keep the address logic in a pure-Python class (`amr_inputs.py`) for unit tests; accept any
+number type on writes (a PLC writes REAL or INT); merge many single writes into one state update when the
+writes pause, not per write.
+
 ## Client (reading other nodes) - verified 2026-10-21, see `apps/ctrlx-core-monitor`
 
 * Same `System` as the provider: `client = system.factory().create_client("ipc://")`; close it

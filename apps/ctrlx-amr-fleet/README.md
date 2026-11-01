@@ -1,10 +1,21 @@
 # AMR Fleet View (`ctrlx-amr-fleet`)
 
 ctrlX OS 4.6 app (snap, `core24`, Python) that shows **autonomous mobile robots (AMRs) live on a map
-of the site**. A PLC or fleet manager writes the position and heading of every AMR as one JSON string
-to a Data Layer node; the web UI draws them on the map with pan, zoom and a lock that follows one AMR.
+of the site**. A PLC or fleet manager writes the position and heading of every AMR to the Data Layer -
+the whole fleet as one JSON string, one JSON string per AMR, or one node per value and AMR; the web UI
+draws them on the map with pan, zoom and a lock that follows one AMR.
 
-## Feeding the AMRs: Data Layer node `ctrlx-amr-fleet/fleet/amrs` (string, writable)
+## Feeding the AMRs: input mode (setting `fleet.input`)
+
+| `fleet.input` | Data Layer nodes (writable) | One write is |
+|---|---|---|
+| `fleet-json` (default) | `ctrlx-amr-fleet/fleet/amrs` (string) | the whole fleet as JSON |
+| `amr-json` | `ctrlx-amr-fleet/fleet/amr/<id>` (string), one per AMR of the AMR list | one AMR as JSON |
+| `amr-fields` | `ctrlx-amr-fleet/fleet/amr/<id>/x`, `y`, `rotation`, `battery` (float64), `name`, `state` (string), `info` (string: a JSON object) | one value of one AMR |
+
+Chosen in the settings (Fleet → Input), stored in the app data with the other settings.
+
+### One node for the whole fleet (`fleet-json`): `ctrlx-amr-fleet/fleet/amrs`
 
 Write the **whole fleet** as one JSON string, as often as positions change (e.g. every 100–500 ms):
 
@@ -37,9 +48,42 @@ The app adds `speed` (map units per second, smoothed) from the change of positio
   `tools/ctrlx.py dl-write ctrlx-amr-fleet/fleet/amrs '"[{\"id\":\"A1\",\"x\":1000,\"y\":30000,\"rotation\":90}]"' --type string`,
   or the web API `PUT /ctrlx-amr-fleet/api/v1/values/fleet/amrs` with `{"value": "<fleet json>"}`.
 
-Other nodes (read-only): `fleet/count`, `fleet/updates` (accepted writes), `fleet/rejected`,
-`fleet/last-error`, `map/info` (active map as JSON), plus the template's `status/version`,
-`status/state`, `status/heartbeat`, `settings/active`.
+### Per-AMR nodes (`amr-json`, `amr-fields`)
+
+The nodes exist for the AMRs of the **AMR list**: `amr-list.txt` in the app's app data folder (saved and
+loaded with ctrlX configurations), created with AMR-01 … AMR-04 (the simulation's ids). In the settings
+(Fleet → AMR list) ids are added and removed one by one, or a list file is uploaded (and downloaded);
+*Save* stores the list together with the settings. File format: one id per line, `#` starts a comment,
+in a CSV line only the first field counts; ids are 1–64 characters `A-Z a-z 0-9 _ -`, unique, at most
+1000. An edit of the file in *Manage app data* is picked up within 2 s.
+
+```
+ctrlx-amr-fleet/fleet/amr/AMR-01 = {"x": 1250, "y": 30480, "rotation": 90, "state": "driving"}   (amr-json)
+ctrlx-amr-fleet/fleet/amr/AMR-01/x = 1250.0                                                     (amr-fields)
+```
+
+* An AMR appears once it has `x`, `y` and `rotation`; the JSON of `amr-json` has the fields of the table
+  above without `id` (an `id` must match the node). Number nodes take any number type (a PLC's REAL or
+  INT works). An empty string clears `name`, `state` or `info`.
+* All writes are merged: when the writes pause for 20 ms (a PLC writes the values of a cycle together),
+  at the latest 200 ms after the first one, the AMRs of the list go to the view as one update (in list
+  order) - an AMR is not shown with a new `x` and the old `y`.
+* An invalid write is rejected (`DL_INVALID_VALUE`, wrong type `DL_TYPE_MISMATCH`, an id that is not in
+  the list `DL_INVALID_ADDRESS`); the reason is in `fleet/last-error`, `fleet/rejected` counts it.
+* `fleet/amrs` is read-only in these modes (`DL_PERMISSION_DENIED`) and shows the merged fleet as JSON.
+  Reads of the per-AMR nodes return the current values (also of simulated AMRs).
+* An AMR removed from the list disappears; switching the mode starts with an empty fleet.
+* Inside the app one wildcard provider node serves `fleet/amr/**` (registered only in these modes), so the
+  AMR list can change at runtime without registering a node per AMR and value (200 AMRs = 1400 nodes).
+* **Cost**: every node write costs the app ~0.25 ms CPU on a ctrlX CORE (~0.05 ms on a COREvirtual), mostly in
+  the Data Layer library's callback path - see "Input modes" under Performance. For big fleets use one JSON
+  node; write `name`, `state`, `battery`, `info` only when they change.
+
+### Other nodes (read-only)
+
+`fleet/count`, `fleet/updates` (accepted updates), `fleet/rejected`, `fleet/last-error`, `map/info`
+(active map as JSON), plus the template's `status/version`, `status/state`, `status/heartbeat`,
+`settings/active`.
 
 ## The map
 
@@ -108,6 +152,7 @@ Open from the ctrlX sidebar or overview (**AMR Fleet View**).
 | `map.file` | `HMI_Map.txt` | map file name (app data first, then bundled maps) |
 | `map.resolution` | `0` | cell size in map units, 0 = automatic |
 | `map.unitsPerMeter` | `1000` | map units per meter (1000 = mm): scale bar, AMR size, simulation speed |
+| `fleet.input` | `fleet-json` | how the AMRs reach the app: `fleet-json`, `amr-json`, `amr-fields` (see above); AMR list: `amr-list.txt` |
 | `fleet.rotationUnit` | `deg` | `deg` or `rad` |
 | `fleet.staleAfterMs` | `5000` | grey out the AMRs when the data is older |
 | `fleet.amrLengthM` / `amrWidthM` | `1.0` / `0.7` | AMR footprint in m |
@@ -131,7 +176,8 @@ external writes; switching it off clears the fleet once.
 
 ## Web API (`/ctrlx-amr-fleet/api/v1`, token required)
 
-`GET /fleet[?since=<revision>]` (AMRs + status; only the status when nothing changed since that
+`GET` / `PUT /amr-list` (the AMR list; `PUT` with `{"ids": [...]}` or an uploaded file's `{"text": "..."}`,
+needs `.rw`) · `GET /fleet[?since=<revision>]` (AMRs + status; only the status when nothing changed since that
 revision) · `GET /fleet/path?id=<id>` (driven path of one AMR: `points` = `[x, y, age in s]`, oldest
 first; 404 for an unknown id) · `GET /view-config` (colors, units, AMR size, refresh, path history - all
 the view needs, also for read-only users) · `GET /map` (active map: file, source, error, cell size, extent, tile levels) ·
@@ -207,6 +253,32 @@ with a real PLC/fleet manager instead of the simulation expect ~5 % of a CORE co
 Locked onto an AMR at 200 AMRs the browser did not get faster: the map moves every frame (no cached
 layer), and the page now gets 5 instead of 3.6-4.7 updates/s, each rewriting all 200 rows of the AMR
 list (not yet measured separately).
+
+### Input modes (measured 2026-11-01, 0.4.0)
+
+`scripts/perf_test.py --device NAME --inputs fleet-json,amr-json,amr-fields`: the build VM writes a moving
+fleet through the device's REST bulk API 5 times per second (simulation off) - one node for the whole
+fleet, one JSON node per AMR, or x, y, rotation, battery, state per AMR. App CPU in % of one core:
+
+| real ctrlX CORE (ARM, 2 cores) | 10 AMRs | 50 AMRs | 200 AMRs |
+|---|---|---|---|
+| whole fleet as JSON (5 writes/s) | 1.1 % | 2.5 % | 7.2 % |
+| JSON per AMR (5 writes/s per AMR) | 2.6 % | 9.2 % | 31.6 % - reached 4.5 of 5 updates/s |
+| node per value (25 writes/s per AMR) | 6.6 % | 29.2 % | 50.8 % - reached 2.1 of 5 updates/s |
+
+| COREvirtual (x86, 4 cores) | 10 AMRs | 50 AMRs | 200 AMRs |
+|---|---|---|---|
+| whole fleet as JSON | 0.7 % | 0.8 % | 1.6 % |
+| JSON per AMR | 1.5 % | 2.6 % | 6.9 % |
+| node per value | 1.9 % | 5.8 % | 22.1 % at 4349 writes/s (4.35 of 5 updates/s) |
+
+* A node write costs the app ~0.24 ms on the CORE, ~0.05 ms on the COREvirtual; the app's own Python code
+  is ~0.03 ms of it (build VM benchmark), the rest is the Data Layer library's callback path. Memory stays
+  flat (CORE 36-37 MB, COREvirtual 55-57 MB); no failed or rejected writes; one fleet update per write cycle.
+* With 200 AMRs per value the device could not take 5000 writes/s (whole device 31 % of 2 cores, the
+  REST server's work included - a PLC writes over IPC without it, the app's cost stays).
+* Rule of thumb for a CORE: up to ~1000 node writes per second (e.g. 50 AMRs x 4 values x 5/s); beyond
+  that one JSON node.
 
 ## Develop
 

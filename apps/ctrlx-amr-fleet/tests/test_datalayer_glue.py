@@ -102,5 +102,104 @@ class GlueTest(unittest.TestCase):
         self.assertEqual(self.provider.nodes, {})  # unregistered on disconnect
 
 
+
+@unittest.skipIf(REAL, "real ctrlxdatalayer installed - this test targets the fake")
+class AmrTreeTest(unittest.TestCase):
+    """fleet/amr/** (per-AMR input modes): one wildcard node, registered only in those modes."""
+
+    def setUp(self):
+        from app import config
+        from app.amr_inputs import AmrInputs
+        from app.datalayer_service import DataLayerService
+        from app.fleet import FleetState
+        from ctrlxdatalayer import provider as fake_provider
+
+        fake_provider.ALL_PROVIDERS.clear()
+        self.config = config
+        self._orig = config.datalayer_connection_string
+        config.datalayer_connection_string = lambda: "ipc://"
+        with open(DEFAULTS_FILE, encoding="utf-8") as f:
+            settings = json.load(f)
+        self.fleet = FleetState()
+        self.inputs = AmrInputs(self.fleet, start_thread=False)
+        self.svc = DataLayerService(settings, "9.9.9", on_fleet_write=self.inputs.write_fleet_json,
+                                    amr_inputs=self.inputs, fleet_reader=self.inputs.read_fleet_json)
+        self.fleet.add_listener(self.svc.on_fleet_changed)
+        self.svc.start()
+        deadline = time.time() + 3
+        while time.time() < deadline and not self.svc.status()["connected"]:
+            time.sleep(0.02)
+        self.provider = fake_provider.ALL_PROVIDERS[-1]
+        self.base = config.DATALAYER_ROOT + "/fleet/amr"
+
+    def tearDown(self):
+        self.svc.stop()
+        self.config.datalayer_connection_string = self._orig
+
+    def set_mode(self, mode, ids=("AMR-01", "AMR-02")):
+        self.inputs.configure(mode, list(ids))
+        self.svc.on_input_changed()
+        want = mode != "fleet-json"
+        deadline = time.time() + 2
+        while time.time() < deadline and (self.base + "/**" in self.provider.nodes) != want:
+            time.sleep(0.01)
+        self.assertEqual(self.base + "/**" in self.provider.nodes, want)
+
+    def test_registered_only_in_per_amr_modes(self):
+        self.assertNotIn(self.base + "/**", self.provider.nodes)
+        self.set_mode("amr-fields")
+        self.assertIn(self.base, self.provider.nodes)
+        self.assertEqual(self.svc.status()["registered"], len(self.svc.registry.specs()) + 2)
+        self.set_mode("fleet-json")
+        self.assertNotIn(self.base, self.provider.nodes)
+
+    def test_amr_fields_through_the_provider(self):
+        from ctrlxdatalayer.variant import Result, Variant
+        self.set_mode("amr-fields")
+        result, names = self.provider.browse(self.base)
+        self.assertEqual((result, names.get_array_string()), (Result.OK, ["AMR-01", "AMR-02"]))
+        self.assertIn("rotation", self.provider.browse(self.base + "/AMR-01")[1].get_array_string())
+        self.assertEqual(self.provider.browse(self.base + "/AMR-07")[0], Result.INVALID_ADDRESS)
+        _, meta = self.provider.metadata(self.base + "/AMR-01/x")
+        self.assertEqual((meta.meta["name"], meta.meta["type_path"], meta.meta["write_allowed"]),
+                         ("x", "types/datalayer/float64", True))
+        self.assertFalse(self.provider.metadata(self.base + "/AMR-01")[1].meta["write_allowed"])   # a folder
+        for field, setter, value in (("x", "set_float32", 1.5), ("y", "set_int32", 2), ("rotation", "set_float64", 3.0)):
+            v = Variant()
+            getattr(v, setter)(value)
+            self.assertEqual(self.provider.write(self.base + "/AMR-02/" + field, v)[0], Result.OK, field)
+        self.inputs.flush()
+        self.assertEqual(self.fleet.amr("AMR-02"), {"id": "AMR-02", "x": 1.5, "y": 2.0, "rotation": 3.0})
+        self.assertEqual(self.provider.read(self.base + "/AMR-02/y")[1].get_float64(), 2.0)
+        self.assertEqual(self.svc.registry.get("fleet/count"), 1)
+        bad = Variant()
+        bad.set_float64(120.0)
+        self.assertEqual(self.provider.write(self.base + "/AMR-02/battery", bad)[0], Result.INVALID_VALUE)
+        self.assertIn("battery: must be 0..100", self.svc.registry.get("fleet/last-error"))
+        text = Variant()
+        text.set_string("1")
+        self.assertEqual(self.provider.write(self.base + "/AMR-02/x", text)[0], Result.TYPE_MISMATCH)
+        self.assertEqual(self.provider.write(self.base + "/AMR-09/x", bad)[0], Result.INVALID_ADDRESS)
+        whole = Variant()                                   # fleet/amrs: read-only here, shows the merge
+        whole.set_string("[]")
+        self.assertEqual(self.provider.write(self.svc.registry.address("fleet/amrs"), whole)[0],
+                         Result.PERMISSION_DENIED)
+        merged = json.loads(self.provider.read(self.svc.registry.address("fleet/amrs"))[1].get_string())
+        self.assertEqual([a["id"] for a in merged["amrs"]], ["AMR-02"])
+
+    def test_amr_json_through_the_provider(self):
+        from ctrlxdatalayer.variant import Result, Variant
+        self.set_mode("amr-json")
+        _, meta = self.provider.metadata(self.base + "/AMR-01")
+        self.assertEqual(meta.meta["type_path"], "types/datalayer/string")
+        v = Variant()
+        v.set_string('{"x": 1, "y": 2, "rotation": 3}')
+        self.assertEqual(self.provider.write(self.base + "/AMR-01", v)[0], Result.OK)
+        self.inputs.flush()
+        self.assertEqual(json.loads(self.provider.read(self.base + "/AMR-01")[1].get_string()),
+                         {"x": 1.0, "y": 2.0, "rotation": 3.0})
+        self.assertEqual(self.provider.metadata(self.base + "/AMR-01/x")[0], Result.INVALID_ADDRESS)
+
+
 if __name__ == "__main__":
     unittest.main()

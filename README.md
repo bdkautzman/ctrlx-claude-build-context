@@ -72,7 +72,8 @@ Open items:
   first versions - adjust after real use; IPv4 only; no ICMP/SYN scans possible in a strict snap (gotchas #61)
 * `ctrlx-amr-fleet`: map units (mm) and the fleet JSON format were chosen without a real PLC/fleet
   manager - confirm when one is connected; performance (its README): with 200 AMRs the browser spends
-  most time drawing AMRs + labels and rasterizing (0.3.1 fixed the list's share)
+  most time drawing AMRs + labels and rasterizing (0.3.1 fixed the list's share); per-value nodes cost
+  ~0.24 ms per write on a CORE (gotchas #90) - a PLC write test (instead of REST from the build VM) is open
 
 History: git log, the CHANGELOGs, `docs/ctrlx/gotchas.md`. Decisions and their reasons: `docs/ctrlx/decisions.md`.
 

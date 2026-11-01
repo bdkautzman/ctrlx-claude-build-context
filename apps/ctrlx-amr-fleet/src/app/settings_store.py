@@ -413,6 +413,10 @@ class SettingsStore:
         with self._lock:
             self._load_deadline = None
 
+    def load_in_progress(self):
+        """A Solutions load is copying files: other app data files must not be read now either."""
+        return self._load_in_progress()
+
     def _load_in_progress(self):
         with self._lock:
             if self._load_deadline is None:

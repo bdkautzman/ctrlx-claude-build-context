@@ -136,25 +136,34 @@ def parse_fleet(text, rotation_unit="deg"):
         if ident in seen:
             raise FleetError('{}.id: duplicate id "{}"'.format(where, ident))
         seen.add(ident)
-        x, y = _number(item, "x", where), _number(item, "y", where)
-        rotation = _number(item, "rotation", where)
-        if rotation_unit == "rad":
-            rotation = math.degrees(rotation)
-        amr = {"id": ident, "x": x, "y": y, "rotation": round(rotation % 360.0, 4) % 360.0}
-        for key in ("name", "state"):
-            value = _text(item, key, where)
-            if value is not None:
-                amr[key] = value
-        battery = _number(item, "battery", where, required=False)
-        if battery is not None:
-            if not 0 <= battery <= 100:
-                raise FleetError(where + ".battery: must be 0..100")
-            amr["battery"] = battery
-        info = _info(item, where)
-        if info:
-            amr["info"] = info
-        amrs.append(amr)
+        amrs.append(parse_amr(item, ident, where, rotation_unit))
     return amrs
+
+
+def parse_amr(item, ident, where, rotation_unit="deg"):
+    """One AMR object (its id checked by the caller) -> the app's AMR: rotation in degrees [0, 360).
+    Also for the per-AMR JSON nodes (amr_inputs.py), where the id is the node's name."""
+    x, y = _number(item, "x", where), _number(item, "y", where)
+    amr = {"id": ident, "x": x, "y": y, "rotation": rotation_degrees(_number(item, "rotation", where), rotation_unit)}
+    for key in ("name", "state"):
+        value = _text(item, key, where)
+        if value is not None:
+            amr[key] = value
+    battery = _number(item, "battery", where, required=False)
+    if battery is not None:
+        if not 0 <= battery <= 100:
+            raise FleetError(where + ".battery: must be 0..100")
+        amr["battery"] = battery
+    info = _info(item, where)
+    if info:
+        amr["info"] = info
+    return amr
+
+
+def rotation_degrees(value, rotation_unit):
+    if rotation_unit == "rad":
+        value = math.degrees(value)
+    return round(value % 360.0, 4) % 360.0
 
 
 class FleetState:
@@ -168,6 +177,7 @@ class FleetState:
         self._wallclock = wallclock
         self._lock = threading.Lock()
         self._amrs = []
+        self._by_id = {}            # id -> AMR of self._amrs
         self._revision = 0          # +1 per accepted update; the web UI polls with ?since=
         self._rejected = 0
         self._updated = None        # clock() of the last accepted update
@@ -189,23 +199,34 @@ class FleetState:
         """callback(snapshot) after every accepted or rejected update (keep it fast)."""
         self._listeners.append(callback)
 
+    def rotation_unit(self):
+        with self._lock:
+            return self._rotation_unit
+
     def receive(self, text, source="datalayer"):
         """Accept a new fleet JSON or raise FleetError (the previous fleet stays)."""
-        with self._lock:
-            unit = self._rotation_unit
         try:
-            amrs = parse_fleet(text, unit)
+            amrs = parse_fleet(text, self.rotation_unit())
         except FleetError as exc:
-            with self._lock:
-                self._rejected += 1
-                self._error = str(exc)
-            self._notify()
+            self.reject(str(exc))
             raise
+        return self.accept(amrs, source)
+
+    def reject(self, message):
+        """A write was rejected (fleet JSON or a per-AMR node): counted, shown as the last error."""
+        with self._lock:
+            self._rejected += 1
+            self._error = message
+        self._notify()
+
+    def accept(self, amrs, source):
+        """The whole fleet, validated already (parse_fleet / parse_amr): the new state."""
         with self._lock:
             now = self._clock()
             self._record_paths(amrs, now)    # before _add_speed: uses the previous positions
             self._add_speed(amrs, now)
             self._amrs = amrs
+            self._by_id = {a["id"]: a for a in amrs}
             self._revision += 1
             self._updated = now
             self._received_at = self._wallclock()
@@ -278,6 +299,12 @@ class FleetState:
             first = bisect.bisect_left(path.t, now - self._path_s)
             return {"id": ident, "points": [[round(x, 3), round(y, 3), round(now - t, 1)] for t, x, y
                                             in zip(path.t[first:], path.x[first:], path.y[first:])]}
+
+    def amr(self, ident):
+        """One AMR of the current fleet (a copy) or None."""
+        with self._lock:
+            a = self._by_id.get(ident)
+            return None if a is None else dict(a, info=dict(a["info"])) if "info" in a else dict(a)
 
     def snapshot(self, stale_after_s=None, include_amrs=True):
         with self._lock:

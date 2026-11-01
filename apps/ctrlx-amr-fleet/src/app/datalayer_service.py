@@ -17,6 +17,7 @@ PC without the native libcomm_datalayer library.
 import json
 import logging
 import threading
+import time
 
 from app import config
 from app.datalayer_nodes import NodeRegistry, NodeWriteError, build_node_specs
@@ -27,10 +28,13 @@ RECONNECT_DELAY_S = 5.0
 
 
 class DataLayerService:
-    def __init__(self, settings, version, on_fleet_write=None):
-        self.registry = NodeRegistry(config.DATALAYER_ROOT, build_node_specs(settings, version, on_fleet_write))
+    def __init__(self, settings, version, on_fleet_write=None, amr_inputs=None, fleet_reader=None):
+        self.registry = NodeRegistry(config.DATALAYER_ROOT,
+                                     build_node_specs(settings, version, on_fleet_write, fleet_reader))
         self.registry.set_internal("settings/active", json.dumps(settings, separators=(",", ":")))
         self._heartbeat_s = settings["general"]["heartbeatIntervalMs"] / 1000.0
+        self._amr_inputs = amr_inputs     # per-AMR input modes: fleet/amr/** (amr_inputs.py)
+        self._wake = threading.Event()    # input mode changed -> (un)register fleet/amr/** in the provider thread
         self._stop = threading.Event()
         self._thread = None
         self._status_lock = threading.Lock()
@@ -43,6 +47,7 @@ class DataLayerService:
 
     def stop(self, timeout=10.0):
         self._stop.set()
+        self._wake.set()
         if self._thread:
             self._thread.join(timeout)
 
@@ -64,6 +69,10 @@ class DataLayerService:
         self.registry.set_internal("fleet/updates", snapshot["revision"])
         self.registry.set_internal("fleet/rejected", snapshot["rejected"])
         self.registry.set_internal("fleet/last-error", snapshot["lastError"])
+
+    def on_input_changed(self):
+        """Input mode or AMR list changed: the provider thread (un)registers fleet/amr/** within a moment."""
+        self._wake.set()
 
     def on_map_changed(self, info):
         """MapSource listener."""
@@ -134,14 +143,23 @@ class DataLayerService:
                 self.registry.set_internal("status/state", "running")
                 self._set_status(connected=True, error=None, registered=len(nodes))
                 log.info("Data Layer provider running, %d nodes under %s/", len(nodes), self.registry.root)
+                tree = _AmrTree(self._amr_inputs, self.registry.address("fleet/amr")) if self._amr_inputs else None
 
+                next_tick = time.monotonic() + self._heartbeat_s
                 while not self._stop.is_set() and provider.is_connected():
-                    self._stop.wait(self._heartbeat_s)
-                    self._tick()
+                    if tree and tree.sync(provider):
+                        self._set_status(registered=len(nodes) + len(tree.nodes))
+                    self._wake.wait(max(0.0, next_tick - time.monotonic()))
+                    self._wake.clear()
+                    if time.monotonic() >= next_tick:
+                        next_tick = time.monotonic() + self._heartbeat_s
+                        self._tick()
 
                 if not self._stop.is_set():
                     log.warning("Data Layer provider disconnected - reconnecting")
                 self._set_status(connected=False, registered=0)
+                if tree:
+                    tree.unregister(provider)
                 for node in nodes:
                     provider.unregister_node(self.registry.address(node.spec.name))
                     node.close()
@@ -233,3 +251,173 @@ class _ProviderNode:
         from ctrlxdatalayer.variant import Result
         cb(Result.OK, self.metadata)
 
+
+class _AmrTree:
+    """<root>/fleet/amr and everything below it (per-AMR input modes): two wildcard-capable registrations
+    served by amr_inputs.AmrInputs - registered only while such a mode is active."""
+
+    def __init__(self, inputs, base):
+        self.inputs, self.base = inputs, base
+        self.nodes = []                   # [(address, _AmrTreeNode)]
+
+    def sync(self, provider):
+        """Register / unregister to match the input mode; True when something changed."""
+        from ctrlxdatalayer.variant import Result
+        want = self.inputs.per_amr()
+        if want and not self.nodes:
+            for address in (self.base, self.base + "/**"):
+                node = _AmrTreeNode(self.inputs, self.base)
+                res = provider.register_node(address, node.provider_node)
+                if res != Result.OK:
+                    log.error("register_node %s failed: %s", address, res)
+                    node.close()
+                    continue
+                self.nodes.append((address, node))
+            log.info("Per-AMR nodes %s/... registered (%s)", self.base, self.inputs.mode())
+            return True
+        if not want and self.nodes:
+            self.unregister(provider)
+            log.info("Per-AMR nodes %s/... unregistered", self.base)
+            return True
+        return False
+
+    def unregister(self, provider):
+        for address, node in self.nodes:
+            provider.unregister_node(address)
+            node.close()
+        self.nodes = []
+
+
+class _AmrTreeNode:
+    """Browse / read / write / metadata for any address below <root>/fleet/amr (amr_inputs.py decides
+    what exists). Metadata variants are built once per name and kind and kept until close()."""
+
+    def __init__(self, inputs, base):
+        from ctrlxdatalayer.provider_node import ProviderNode, ProviderNodeCallbacks
+
+        self.inputs, self.base = inputs, base
+        self._metadata = {}
+        self._lock = threading.Lock()
+        self._cbs = ProviderNodeCallbacks(
+            self._on_create, self._on_remove, self._on_browse,
+            self._on_read, self._on_write, self._on_metadata)
+        self.provider_node = ProviderNode(self._cbs)
+
+    def close(self):
+        self.provider_node.close()
+        with self._lock:
+            for metadata in self._metadata.values():
+                metadata.close()
+            self._metadata = {}
+
+    def _rel(self, address):
+        address = address.strip("/")
+        if address == self.base:
+            return ""
+        if address.startswith(self.base + "/"):
+            return address[len(self.base) + 1:]
+        return None
+
+    def _meta(self, rel, kind):
+        from comm.datalayer import NodeClass
+        from ctrlxdatalayer.metadata_utils import MetadataBuilder
+        name = rel.split("/")[-1] if rel else "amr"
+        key = (name,) + kind
+        with self._lock:
+            metadata = self._metadata.get(key)
+            if metadata is None:
+                if kind[0] == "folder":
+                    metadata = MetadataBuilder.create_metadata(
+                        name, "AMRs of the AMR list (input mode fleet.input)" if not rel else "AMR " + name,
+                        "", "", NodeClass.NodeClass.Folder, read_allowed=False, write_allowed=False,
+                        create_allowed=False, delete_allowed=False, browse_allowed=True, type_path="")
+                else:
+                    metadata = MetadataBuilder.create_metadata(
+                        name, kind[2], "", "", NodeClass.NodeClass.Variable, read_allowed=True, write_allowed=True,
+                        create_allowed=False, delete_allowed=False, browse_allowed=True,
+                        type_path="types/datalayer/" + kind[1])
+                self._metadata[key] = metadata
+            return metadata
+
+    @staticmethod
+    def _value(data):
+        """A written Variant as str or number (a PLC may write REAL / INT: any number type works)."""
+        from ctrlxdatalayer.variant import VariantType
+        vtype = data.get_type()
+        if vtype == VariantType.STRING:
+            return data.get_string()
+        if vtype in (VariantType.FLOAT64, VariantType.FLOAT32, VariantType.INT8, VariantType.UINT8,
+                     VariantType.INT16, VariantType.UINT16, VariantType.INT32, VariantType.UINT32,
+                     VariantType.INT64, VariantType.UINT64):
+            return getattr(data, "get_" + vtype.name.lower())()
+        raise NodeWriteError("type", "expected a number or a string")
+
+    # Callbacks: signature (userdata, address, [data,] cb). ALWAYS call cb exactly once.
+    def _on_create(self, userdata, address, data, cb):
+        from ctrlxdatalayer.variant import Result
+        cb(Result.UNSUPPORTED, None)
+
+    def _on_remove(self, userdata, address, cb):
+        from ctrlxdatalayer.variant import Result
+        cb(Result.UNSUPPORTED, None)
+
+    def _on_browse(self, userdata, address, cb):
+        from ctrlxdatalayer.variant import Result, Variant
+        try:
+            rel = self._rel(address)
+            names = None if rel is None else self.inputs.browse(rel)
+            if names is None:
+                cb(Result.INVALID_ADDRESS, None)
+                return
+            with Variant() as variant:
+                variant.set_array_string(names)
+                cb(Result.OK, variant)
+        except Exception:
+            log.exception("on_browse %s", address)
+            cb(Result.FAILED, None)
+
+    def _on_read(self, userdata, address, data, cb):
+        from ctrlxdatalayer.variant import Result, Variant
+        try:
+            rel = self._rel(address)
+            value = self.inputs.read(rel) if rel is not None else None
+            with Variant() as variant:
+                if isinstance(value, str):
+                    variant.set_string(value)
+                else:
+                    variant.set_float64(value)
+                cb(Result.OK, variant)
+        except NodeWriteError:
+            cb(Result.INVALID_ADDRESS, None)
+        except Exception:
+            log.exception("on_read %s", address)
+            cb(Result.FAILED, None)
+
+    def _on_write(self, userdata, address, data, cb):
+        from ctrlxdatalayer.variant import Result
+        try:
+            rel = self._rel(address)
+            if rel is None:
+                raise NodeWriteError("unknown", "not below " + self.base)
+            self.inputs.write(rel, self._value(data))
+            cb(Result.OK, data)
+        except NodeWriteError as exc:   # the reason is in fleet/last-error; 1000s of writes/s: no log line each
+            log.debug("Rejected write to %s: %s", address, exc)
+            cb({"type": Result.TYPE_MISMATCH, "invalid": Result.INVALID_VALUE,
+                "unknown": Result.INVALID_ADDRESS}.get(exc.reason, Result.FAILED), None)
+        except Exception:
+            log.exception("on_write %s", address)
+            cb(Result.FAILED, None)
+
+    def _on_metadata(self, userdata, address, cb):
+        from ctrlxdatalayer.variant import Result
+        try:
+            rel = self._rel(address)
+            kind = self.inputs.describe(rel) if rel is not None else None
+            if kind is None:
+                cb(Result.INVALID_ADDRESS, None)
+                return
+            cb(Result.OK, self._meta(rel, kind))
+        except Exception:
+            log.exception("on_metadata %s", address)
+            cb(Result.FAILED, None)

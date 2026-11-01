@@ -2,6 +2,26 @@
 
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 
+## 0.4.0
+
+- Input modes (new setting `fleet.input`, in the settings and the app data): `fleet-json` (default, as
+  before: the whole fleet as one JSON string in `fleet/amrs`), `amr-json` (one JSON string node per
+  AMR: `fleet/amr/<id>`) and `amr-fields` (one node per value and AMR: `fleet/amr/<id>/x`, `y`,
+  `rotation`, `battery`, `name`, `state`, `info`). Per-AMR writes are validated one by one and merged
+  into one fleet update per write cycle (when the writes pause for 20 ms, at the latest after 200 ms);
+  number nodes accept any number type; `fleet/amrs` is
+  read-only there and shows the merged fleet.
+- AMR list for the per-AMR modes: `amr-list.txt` in the app data (default AMR-01 ... AMR-04), edited in
+  the settings - add / remove ids, upload or download a list file - and stored with Save; changes from
+  outside (Manage app data, loaded configurations) are picked up. Web API `GET` / `PUT /amr-list`.
+- One wildcard provider node serves `fleet/amr/**`, registered only in the per-AMR modes (no node per
+  AMR and value).
+- Settings rules may give an enum `enumLabels` (shown in the select, the value is stored).
+- `scripts/perf_test.py --inputs`: writes a fleet through the device's REST bulk API in each input mode
+  and measures the app and the device. Real CORE, 5 updates/s, app CPU at 10 / 50 / 200 AMRs: whole
+  fleet JSON 1.1 / 2.5 / 7.2 %, JSON per AMR 2.6 / 9.2 / 31.6 %, node per value 6.6 / 29.2 / 50.8 % (200
+  AMRs per value: only 2.1 updates/s reached) - ~0.24 ms per node write; the settings help says so.
+
 ## 0.3.1
 
 - AMR list: a tile writes only values that changed, and tiles outside the visible part of the list are
