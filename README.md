@@ -73,7 +73,8 @@ Open items:
 * `ctrlx-amr-fleet`: map units (mm) and the fleet JSON format were chosen without a real PLC/fleet
   manager - confirm when one is connected; performance (its README): with 200 AMRs the browser spends
   most time drawing AMRs + labels and rasterizing (0.3.1 fixed the list's share); per-value nodes cost
-  ~0.24 ms per write on a CORE (gotchas #90) - a PLC write test (instead of REST from the build VM) is open
+  ~0.24 ms per write on a CORE (gotchas #90) - a PLC write test (instead of REST from the build VM) is open;
+  0.5.0 (map drop-down + upload) runs on the COREvirtual only - the 208 x 356 m map is not measured on a real CORE
 
 History: git log, the CHANGELOGs, `docs/ctrlx/gotchas.md`. Decisions and their reasons: `docs/ctrlx/decisions.md`.
 

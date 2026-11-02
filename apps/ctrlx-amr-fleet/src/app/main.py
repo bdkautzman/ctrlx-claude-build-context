@@ -26,6 +26,7 @@ from app.amr_inputs import AmrInputs
 from app.amr_list import FILE_NAME as AMR_LIST_FILE, AmrList
 from app.datalayer_service import DataLayerService
 from app.fleet import FleetError, FleetState
+from app.map_files import MapFiles
 from app.map_source import MapSource
 from app.settings_rules import RULES
 from app.settings_store import SettingsError, SettingsStore
@@ -120,7 +121,8 @@ def main():
     store.add_listener(apply_settings)
     amr_list.add_listener(lambda _ids: apply_inputs())
 
-    web = WebServer(store, datalayer, fleet, maps, amr_list)
+    map_files = MapFiles(config.MAP_SEARCH_DIRS, config.APPDATA_DIR, not_maps=(AMR_LIST_FILE,))
+    web = WebServer(store, datalayer, fleet, maps, amr_list, map_files)
     web.start()
 
     while not stop.wait(POLL_INTERVAL_S):

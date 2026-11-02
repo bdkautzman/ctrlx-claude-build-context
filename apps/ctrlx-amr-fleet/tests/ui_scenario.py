@@ -7,7 +7,8 @@
 Screenshots: start, details (expanded tile), follow (lock + heading-up), focus-small (zoomed far out right
 after the crosshair: small AMRs keep their shape, the enlarged outline pulses), path (driven path of the first
 AMR), help (menu open), tutorial / tutorial-narrow (the "Focus" step after "Show me", 1400 / 390 px wide),
-styling (unsaved preview of other colors), inputs (input mode + AMR list after an upload, before Save), widget (the home screen widget on its own page, same origin
+styling (unsaved preview of other colors), inputs (input mode + AMR list after an upload, before Save), map-file
+(map drop-down after an upload, before Save), widget (the home screen widget on its own page, same origin
 as on the device).
 """
 
@@ -50,6 +51,7 @@ def run(ui):
     if ui.role != "reader" and ui.local:
         styling(ui)
         inputs(ui)
+        map_file(ui)
     widget(ui)
 
 
@@ -264,6 +266,53 @@ def inputs(ui):
         page.keyboard.press("Escape")
     finally:
         ui.api("PUT", "/amr-list", {"ids": original_list}, as_admin=True)
+        ui.api("PUT", "/settings", original, as_admin=True)
+
+
+def map_file(ui):
+    """Settings: map drop-down (bundled + app data maps), upload a map (name cleaned, replace asks), Save loads it.
+    Local only: the upload stays in the app data (the local app runs from a temp copy)."""
+    page = ui.page
+    original = ui.api("GET", "/settings", as_admin=True)
+    try:
+        with page.expect_response(lambda r: r.url.endswith("/api/v1/maps")):
+            page.click("#btn-settings")
+        options = page.locator("#f-map-file option").all_inner_texts()
+        assert any(o.startswith("HMI_Map.txt – bundled") for o in options), options
+        assert page.input_value("#f-map-file") == original["map"]["file"]
+        with tempfile.TemporaryDirectory() as tmp:
+            notes = os.path.join(tmp, "notes.md")
+            with open(notes, "w") as f:
+                f.write("0\t0\n")
+            page.set_input_files("#map-upload-file", notes)              # checked in the browser: not a .txt
+            page.wait_for_selector("#map-upload-errors:not([hidden])")
+            hall = os.path.join(tmp, "UI test hall.txt")                # spaces -> UI_test_hall.txt
+            with open(hall, "w") as f:                                  # a 4 x 3 m room, 20 mm cells, door gap
+                f.writelines("{}\t{}\n".format(x, y) for x in range(0, 4001, 20) for y in (0, 3000) if not 1000 < x < 2000 or y)
+                f.writelines("{}\t{}\n".format(x, y) for y in range(20, 3000, 20) for x in (0, 4000))
+            page.set_input_files("#map-upload-file", hall)
+            page.wait_for_function("/uploaded/.test(document.getElementById('map-upload-note').textContent)")
+            assert page.input_value("#f-map-file") == "UI_test_hall.txt"
+            assert "UI test hall.txt uploaded as UI_test_hall.txt" in page.inner_text("#map-upload-note")
+            page.once("dialog", lambda d: d.accept() if "Replace" in d.message else d.dismiss())
+            page.evaluate("document.getElementById('map-upload-note').textContent = ''")
+            page.set_input_files("#map-upload-file", hall)              # again: replace after the question
+            page.wait_for_function("/uploaded/.test(document.getElementById('map-upload-note').textContent)")
+        assert page.locator("#map-upload-errors").is_hidden()
+        page.evaluate("document.getElementById('f-map-file').closest('fieldset').scrollIntoView()")
+        ui.shot("map-file")
+        page.click("#btn-save")
+        page.wait_for_function("/^Saved/.test(document.getElementById('save-state').textContent)")
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            info = ui.api("GET", "/map", as_admin=True)
+            if info["file"] == "UI_test_hall.txt" and info["loaded"]:
+                break
+            time.sleep(0.5)
+        assert info["file"] == "UI_test_hall.txt" and info["loaded"] and not info["error"], info
+        assert abs(info["right"] - info["left"] - 4020) < 1, info              # 4 m + one 20 mm cell
+        page.keyboard.press("Escape")
+    finally:
         ui.api("PUT", "/settings", original, as_admin=True)
 
 

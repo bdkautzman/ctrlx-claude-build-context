@@ -2,6 +2,18 @@
 
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 
+## 0.5.0
+
+- Settings: **Map file** is a drop-down of the available maps - the `.txt` files in the app's app data
+  folder (with their size) and the bundled maps; a configured file that is missing shows as "not found".
+  **Upload map…** stores a map file in the app data at once and selects it (*Save* shows it): streamed to
+  a temp file (`*.tmp`, not part of configurations), name cleaned to A-Z a-z 0-9 `.` `_` `-`, `.txt`, at
+  most 64 MB, map points in the first 64 KB; replacing a file in the app data asks first; upload progress
+  in percent. Replacing the active map reloads it at once. Web API `GET /maps`, `PUT /maps/<name>[?replace=1]`.
+- Simulation: the navigation grid keeps its cells in byte and int arrays instead of Python sets, lists and
+  a Counter: 103 x 177 m map 3.9 -> 0.3 MB kept (peak 5.5 -> 0.4 MB), a 208 x 356 m map (40 mm cells,
+  320k nav cells) 15.2 -> 1.0 MB (peak 23.9 -> 1.7 MB); measured with tracemalloc in the build VM.
+
 ## 0.4.0
 
 - Input modes (new setting `fleet.input`, in the settings and the app data): `fleet-json` (default, as

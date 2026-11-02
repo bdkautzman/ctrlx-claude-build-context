@@ -1390,7 +1390,12 @@
       else if (input.type === "checkbox") input.checked = !!v;
       else if (input.dataset.kind === "array") input.value = JSON.stringify(v ?? []);
       else if (input.syncColor) input.syncColor(v ?? "");
-      else input.value = v ?? "";
+      else {
+        if (input.tagName === "SELECT" && v != null && ![...input.options].some((o) => o.value === String(v))) {
+          input.append(el("option", { value: String(v), text: String(v) + " – not available" }));
+        }
+        input.value = v ?? "";
+      }
       input.disabled = !canWrite;
       if (!keepErrors) input.closest(".field").classList.remove("invalid");
     }
@@ -1497,6 +1502,88 @@
       el("ul", { class: "error-list", id: "amr-list-errors", hidden: true }));
   }
 
+  // ---- map file (settings): drop-down of the maps in the app data and the bundled ones; an upload is stored in
+  // the app data at once (PUT /maps/<name>) and selected - Save shows it. Same name rules as src/app/map_files.py.
+  const MAP_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+  let mapFiles = { maps: [], maxBytes: 64 * 1024 * 1024, canUpload: true };
+  function formatBytes(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " kB"; }
+  function mapUploadMessage(errors, note) {
+    const list = $("map-upload-errors");
+    list.replaceChildren(...errors.map((m) => el("li", { text: m })));
+    list.hidden = !errors.length;
+    $("map-upload-note").textContent = note || "";
+  }
+  function renderMapOptions(current) {
+    const select = $("f-map-file");
+    const opts = mapFiles.maps.map((m) => el("option", { value: m.name,
+      text: m.name + " – " + (m.source === "bundled" ? "bundled with the app" : "app data, " + formatBytes(m.size)) }));
+    if (current && !mapFiles.maps.some((m) => m.name === current)) opts.unshift(el("option", { value: current, text: current + " – not found" }));
+    select.replaceChildren(...opts);
+    select.value = current || "";
+  }
+  async function loadMapFiles(current) {
+    mapFiles = await api("GET", "/maps");
+    renderMapOptions(current);
+    $("btn-map-upload").disabled = !canWrite || !mapFiles.canUpload;
+    if (!mapFiles.canUpload) mapUploadMessage([], "App data storage is not available right now - uploads are not possible.");
+  }
+  function putFile(path, file, onProgress) {   // XMLHttpRequest: fetch reports no upload progress
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", API + path);
+      for (const [k, v] of Object.entries(authHeaders({ "Accept": "application/json", "Content-Type": "text/plain" }))) xhr.setRequestHeader(k, v);
+      xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) onProgress(ev.loaded / ev.total); };
+      xhr.onload = () => {
+        let data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        if (xhr.status === 401) showBanner("Session expired or no token - please reopen this app from the ctrlX menu.");
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+        else reject(new Error((data && (data.detail || data.title)) || "HTTP " + xhr.status));
+      };
+      xhr.onerror = () => reject(new Error("the connection failed"));
+      xhr.send(file);
+    });
+  }
+  async function uploadMap(file) {
+    mapUploadMessage([]);
+    const name = file.name.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^[^A-Za-z0-9]+/, "");
+    if (!/\.txt$/i.test(name)) { mapUploadMessage([file.name + ": a map is a .txt file with one occupied cell per line (x<TAB>y)"]); return; }
+    if (!MAP_NAME.test(name)) { mapUploadMessage([file.name + ": the name may have at most 100 characters"]); return; }
+    if (file.size > mapFiles.maxBytes) { mapUploadMessage([file.name + ": larger than " + formatBytes(mapFiles.maxBytes)]); return; }
+    const existing = mapFiles.maps.find((m) => m.name === name);
+    const replace = !!existing && existing.source !== "bundled";
+    if (replace && !confirm(name + " is in the app data already. Replace it?")) return;
+    if (existing && !replace && !confirm(name + " is also bundled with the app. Upload it anyway? The app then uses your file.")) return;
+    const upload = $("btn-map-upload");
+    upload.disabled = true;
+    try {
+      const entry = await putFile("/maps/" + encodeURIComponent(name) + (replace ? "?replace=1" : ""), file,
+        (p) => { $("map-upload-note").textContent = "Uploading " + name + ": " + Math.round(p * 100) + " %"; });
+      await loadMapFiles(name);                 // the new file, selected (unsaved)
+      mapUploadMessage([], (name !== file.name ? file.name + " uploaded as " + name : name + " uploaded") + ", " +
+        formatBytes(entry.size) + " - " +
+        (loaded && name === loaded.map.file ? "the map reloads." : "Save to show it."));
+    } catch (e) {
+      mapUploadMessage([name + " not uploaded: " + e.message]);
+    } finally {
+      upload.disabled = !canWrite || !mapFiles.canUpload;
+    }
+  }
+  function mapFileField() {   // the generated text field of map.file becomes a drop-down (same id and data-path)
+    const old = $("f-map-file");
+    const select = el("select", { id: "f-map-file" });
+    select.dataset.path = old.dataset.path;
+    select.dataset.kind = old.dataset.kind;
+    const file = el("input", { type: "file", id: "map-upload-file", accept: ".txt,text/plain", hidden: true });
+    file.addEventListener("change", () => { if (file.files[0]) uploadMap(file.files[0]); file.value = ""; });
+    const upload = el("button", { type: "button", class: "btn btn-small", id: "btn-map-upload", text: "Upload map…" });
+    upload.addEventListener("click", () => file.click());
+    old.replaceWith(el("div", { class: "map-file-row" }, select, upload, file));
+    const field = select.closest(".field");
+    field.classList.add("field-wide");
+    field.append(el("div", { class: "help", id: "map-upload-note" }), el("ul", { class: "error-list", id: "map-upload-errors", hidden: true }));
+  }
+
   function showErrors(errors) {
     const list = $("settings-errors");
     list.replaceChildren(...(errors || []).map((m) => el("li", { text: m })));
@@ -1523,8 +1610,10 @@
         }
         const inputField = $("f-fleet-input") && $("f-fleet-input").closest(".field");
         if (inputField) inputField.after(amrListField());
+        if ($("f-map-file")) mapFileField();
       }
       loaded = await api("GET", "/settings");
+      if ($("map-upload-file")) { mapUploadMessage([]); await loadMapFiles(loaded.map.file); }
       fillForm(loaded);
       showErrors([]);
       if ($("amr-list-field")) {

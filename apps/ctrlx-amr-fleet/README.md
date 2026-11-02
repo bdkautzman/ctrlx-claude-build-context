@@ -93,9 +93,13 @@ coordinates as the AMRs. Each point is the centre of a cell; the cell size is de
 (greatest common divisor, here 20) or set with `map.resolution`.
 
 * Bundled: `defaults/maps/HMI_Map.txt` (10.4 m × 17.8 m if the units are mm, 520 × 890 cells, 17,015 points).
-* Own maps: upload the file into the app's folder in the ctrlX app data (`Settings → Manage app data →
-  ctrlx-amr-fleet/`) and set `map.file` to its name. App data is searched before the bundled maps, and
-  the map is saved and loaded with ctrlX configurations.
+* Own maps: in the settings, **Map file** is a drop-down of the `.txt` maps in the app's app data folder
+  (with their size) and the bundled maps. **Upload map…** stores a file there at once and selects it;
+  *Save* shows it. The name is cleaned (A-Z a-z 0-9 `.` `_` `-`, other characters become `_`), it must
+  end with `.txt`, at most 64 MB, and the start of the file must contain map points; replacing a file asks
+  first. Files put there with *Settings → Manage app data → ctrlx-amr-fleet/* show up too. App data comes
+  before the bundled maps (a file with a bundled map's name is used instead), and the maps are saved and
+  loaded with ctrlX configurations.
 * The file is checked every 2 s and reloaded when it changes; the open pages pick up the new map on
   their own. A file that breaks keeps the last good version on screen (with the error shown).
 * Large maps: the server cuts the map into 256 × 256 PNG tiles per zoom level (level 0 = one pixel per
@@ -149,7 +153,7 @@ Open from the ctrlX sidebar or overview (**AMR Fleet View**).
 
 | Setting | Default | |
 |---|---|---|
-| `map.file` | `HMI_Map.txt` | map file name (app data first, then bundled maps) |
+| `map.file` | `HMI_Map.txt` | map file, chosen in a drop-down of the app data and bundled maps (app data first); *Upload map…* adds one |
 | `map.resolution` | `0` | cell size in map units, 0 = automatic |
 | `map.unitsPerMeter` | `1000` | map units per meter (1000 = mm): scale bar, AMR size, simulation speed |
 | `fleet.input` | `fleet-json` | how the AMRs reach the app: `fleet-json`, `amr-json`, `amr-fields` (see above); AMR list: `amr-list.txt` |
@@ -177,7 +181,10 @@ external writes; switching it off clears the fleet once.
 ## Web API (`/ctrlx-amr-fleet/api/v1`, token required)
 
 `GET` / `PUT /amr-list` (the AMR list; `PUT` with `{"ids": [...]}` or an uploaded file's `{"text": "..."}`,
-needs `.rw`) · `GET /fleet[?since=<revision>]` (AMRs + status; only the status when nothing changed since that
+needs `.rw`) · `GET /maps` (map files for the drop-down: `maps` = name, source, size, modified; `active`,
+`maxBytes`, `canUpload`; needs `.rw`) · `PUT /maps/<name>[?replace=1]` (body = the map file, stored in the
+app data; 409 when it exists without `replace=1`, 413 above 64 MB, 400 for a name or content that is not a
+map; needs `.rw`) · `GET /fleet[?since=<revision>]` (AMRs + status; only the status when nothing changed since that
 revision) · `GET /fleet/path?id=<id>` (driven path of one AMR: `points` = `[x, y, age in s]`, oldest
 first; 404 for an unknown id) · `GET /view-config` (colors, units, AMR size, refresh, path history - all
 the view needs, also for read-only users) · `GET /map` (active map: file, source, error, cell size, extent, tile levels) ·
@@ -279,6 +286,17 @@ fleet, one JSON node per AMR, or x, y, rotation, battery, state per AMR. App CPU
   REST server's work included - a PLC writes over IPC without it, the app's cost stays).
 * Rule of thumb for a CORE: up to ~1000 node writes per second (e.g. 50 AMRs x 4 values x 5/s); beyond
   that one JSON node.
+
+### A 4x larger map (measured 2026-11-02, 0.5.0, COREvirtual)
+
+A realistic warehouse of 208 x 356 m (dock doors on both short sides, 35 selective rack rows with 57 m aisles,
+27 VNA rows with 91 m aisles, block storage, pick and packing area, offices; generated once, not part of the
+app) with **40 mm cells**: 5191 x 8893 cells - the same 46 million cells as the 103 x 177 m map with 20 mm
+cells, so the same tile pyramid (7 levels) - and 477k points (8.7 MB). Uploaded with *Upload map…* through
+the reverse proxy in 7.3 s (from the build VM). Load 0.65-0.7 s, tile levels 0.4-0.5 s, simulation grid
+(433 x 742 cells) 0.4 s later. App memory after a start with this map 60.6 MB (peak 62.7 MB) against
+52.4 MB with the 103 x 177 m map. For still larger areas use coarser cells (`map.resolution` or the
+file's coordinates): the limit is 100 million cells.
 
 ## Develop
 

@@ -48,8 +48,9 @@ RULES = {
     "map.file": {
         "label": "Map file",
         "pattern": r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}",
-        "help": "File name of the map: searched in this app's app data folder first "
-                "(Manage app data), then in the maps bundled with the app (HMI_Map.txt).",
+        "help": "The map shown: your own maps in this app's app data folder (Upload map…, saved and loaded "
+                "with configurations) or the maps bundled with the app (HMI_Map.txt). A map file has one "
+                "occupied cell per line: x<TAB>y in map units.",
     },
     "map.resolution": {
         "label": "Map cell size [map units]",

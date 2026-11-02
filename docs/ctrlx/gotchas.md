@@ -574,3 +574,17 @@ App `ctrlx-core-connector` 0.2.0 (formerly `ctrlx-core-monitor`: Data Layer brow
     31 % of 2 cores incl. the REST server). One write of a 200-AMR JSON (5/s) cost 7 %. Design PLC interfaces with
     few large writes (a JSON or flatbuffers node), or values written only on change. REST bulk: per entry its
     own `result` (`DL_OK`); 500 writes took ~70-170 ms on the COREvirtual, ~160-390 ms on the CORE.
+91. **The reverse proxy passes big uploads to an app; the stdlib server must read a rejected body to the end**
+    (verified on the COREvirtual 4.6, 2026-11-02, ctrlx-amr-fleet 0.5.0 "Upload map…"): an 8.7 MB map file went
+    through `PUT /<snap>/api/v1/maps/<name>` in one request (7.3 s from the build VM, XMLHttpRequest with upload
+    progress). A header-only probe (`Content-Length` + `Expect: 100-continue`, no body) got `100 Continue` up to
+    100 MB, so there is no small proxy body limit. Stream the body into `<name>.tmp` in the app data (manifest
+    `appPrivateFiles`) and rename; never hold it in memory. When the app answers early (409 exists, 400 name) without
+    reading the body, `http.server` closes the socket and the client sees a reset / `EOF occurred in violation of
+    protocol` instead of the answer: read the rest first (`_drain` in the app's `web_server.py`). Probing limits:
+    use the header-only probe - a real oversized test body to a writable route can get stored (it happened once with
+    `/amr-list`: a body of `#` characters was a valid, empty list).
+92. **Python ints in sets / lists / dicts cost ~50-90 bytes each - use `bytearray` / `array` for grids.** The AMR
+    simulator's navigation grid of a 208 x 356 m map (320k cells, 167k free) kept 15 MB (peak 24 MB) as a set +
+    list + `Counter`; as `bytearray` masks + `array("i")` it keeps 1.0 MB (peak 1.7 MB), the same speed for the
+    A* lookups (`mask[i]` instead of `i in set`). Measure with `tracemalloc` (slows Python ~5x - time separately).

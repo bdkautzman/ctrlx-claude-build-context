@@ -15,6 +15,7 @@ Each AMR reports `info` (goal, distance to it, finished trips) to show the detai
 
 import collections
 import heapq
+from array import array
 import json
 import logging
 import math
@@ -45,10 +46,18 @@ class NavGrid:
         self.cell = k * occ_map.resolution
         self.left = occ_map.min_x - occ_map.resolution / 2
         self.top = occ_map.max_y + occ_map.resolution / 2
-        points = collections.Counter((r // k) * cols + c // k for c, r in occ_map.cells())
+        # bytearrays and int arrays, not dicts / sets / lists of ints: a 208 x 356 m map has 320k nav cells
+        # (sets and lists of them cost ~15 MB, these ~1.5 MB)
+        points = bytearray(cols * rows)            # map points per nav cell, capped at 255
+        for c, r in occ_map.cells():
+            idx = (r // k) * cols + c // k
+            if points[idx] < 255:
+                points[idx] += 1
         solid = min(SOLID_POINTS, k)   # a wall through a nav cell has about k points
         blocked = bytearray(cols * rows)
-        for idx, count in points.items():
+        for idx, count in enumerate(points):
+            if not count:
+                continue
             blocked[idx] = 1
             if count < solid:
                 continue  # a stray lidar point: block only its own cell
@@ -56,8 +65,10 @@ class NavGrid:
             for r in range(max(0, r0 - 1), min(rows, r0 + 2)):
                 for c in range(max(0, c0 - 1), min(cols, c0 + 2)):
                     blocked[r * cols + c] = 1
-        self.free = self._pick_region(blocked)
-        self._free_set = set(self.free)
+        self.free = self._pick_region(blocked)     # array('i') of cell indices
+        self._is_free = bytearray(cols * rows)
+        for idx in self.free:
+            self._is_free[idx] = 1
 
     def _neighbours4(self, idx):
         r, c = divmod(idx, self.cols)
@@ -75,11 +86,11 @@ class NavGrid:
         the map edge. A building's free floor touches the edge only at door gaps (the walls are the map
         border); the space around a building is a band along the edge."""
         seen = bytearray(len(blocked))
-        best_inner, best_any = [], []
+        best_inner, best_any = array("i"), array("i")
         for start in range(len(blocked)):
             if blocked[start] or seen[start]:
                 continue
-            region, edge_cells = [], 0
+            region, edge_cells = array("i"), 0
             queue = collections.deque([start])
             seen[start] = 1
             while queue:
@@ -107,7 +118,7 @@ class NavGrid:
         c = int((x - self.left) // self.cell)
         r = int((self.top - y) // self.cell)
         idx = r * self.cols + c
-        if 0 <= c < self.cols and 0 <= r < self.rows and idx in self._free_set:
+        if 0 <= c < self.cols and 0 <= r < self.rows and self._is_free[idx]:
             return idx
         return min(self.free, key=lambda i: math.hypot(self.center(i)[0] - x, self.center(i)[1] - y))
 
@@ -116,7 +127,7 @@ class NavGrid:
         far (MAX_EXPANSIONS). avoid: cells to treat as blocked (e.g. around other AMRs)."""
         if start == goal:
             return [start]
-        free, cols, rows = self._free_set, self.cols, self.rows
+        free, cols, rows = self._is_free, self.cols, self.rows
         gr, gc = divmod(goal, cols)
 
         def h(i):   # octile distance
@@ -141,9 +152,9 @@ class NavGrid:
             for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)):
                 nr, nc = r + dr, c + dc
                 n = nr * cols + nc
-                if not (0 <= nr < rows and 0 <= nc < cols) or n not in free or n in avoid:
+                if not (0 <= nr < rows and 0 <= nc < cols) or not free[n] or n in avoid:
                     continue
-                if dr and dc and ((r * cols + nc) not in free or (nr * cols + c) not in free):
+                if dr and dc and not (free[r * cols + nc] and free[nr * cols + c]):
                     continue
                 ng = g + (_DIAGONAL if dr and dc else 1.0)
                 if ng < best.get(n, float("inf")):
@@ -162,7 +173,7 @@ class NavGrid:
         """Free cells whose centre is closer than radius to one of the points (plain arithmetic: it runs
         for every path search; the points are only the AMRs near the one that plans)."""
         near = set()
-        free, cols, rows, cell, left, top = self._free_set, self.cols, self.rows, self.cell, self.left, self.top
+        free, cols, rows, cell, left, top = self._is_free, self.cols, self.rows, self.cell, self.left, self.top
         reach = int(radius // cell) + 1
         radius2 = radius * radius
         for x, y in points:
@@ -174,7 +185,7 @@ class NavGrid:
                     continue
                 for c in range(max(0, c0 - reach), min(cols, c0 + reach + 1)):
                     idx = r * cols + c
-                    if idx in free and (left + (c + 0.5) * cell - x) ** 2 + dy2 < radius2:
+                    if free[idx] and (left + (c + 0.5) * cell - x) ** 2 + dy2 < radius2:
                         near.add(idx)
         return near
 

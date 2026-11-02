@@ -14,6 +14,7 @@ from app.datalayer_nodes import NodeRegistry, NodeSpec, NodeWriteError, build_no
 from app.amr_list import AmrList
 from app.datalayer_service import DataLayerService
 from app.fleet import FleetState
+from app.map_files import MapFiles
 from app.map_source import MapSource
 from app.settings_rules import RULES
 from app.settings_store import SettingsStore
@@ -105,7 +106,10 @@ class WebApiTest(unittest.TestCase):
         config.DEV_HTTP_PORT = 0  # let the OS pick a free port
         cls.amr_list = AmrList(os.path.join(active, config.SNAP_NAME, "amr-list.txt"),
                                os.path.join(os.path.dirname(DEFAULTS_FILE), "amr-list.txt"))
-        cls.web = WebServer(cls.store, cls.dl, cls.fleet, cls.maps, cls.amr_list)
+        cls.appdata = os.path.join(active, config.SNAP_NAME)
+        cls.map_files = MapFiles([("app data", cls.appdata), ("bundled", config.BUNDLED_MAPS_DIR)], cls.appdata,
+                                 not_maps=("amr-list.txt",))
+        cls.web = WebServer(cls.store, cls.dl, cls.fleet, cls.maps, cls.amr_list, cls.map_files)
         cls.web.start()
         cls.port = cls.web._server.server_address[1]
 
@@ -125,6 +129,44 @@ class WebApiTest(unittest.TestCase):
         conn.close()
         self.last_headers = dict(res.getheaders())
         return res.status, (json.loads(raw) if raw and res.getheader("Content-Type", "").startswith("application/json") else raw)
+
+    def put_raw(self, path, data):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request("PUT", path, body=data, headers={"Authorization": "Bearer " + make_token([config.SCOPE_WRITE]),
+                                                      "Content-Type": "text/plain"})
+        res = conn.getresponse()
+        raw = res.read()
+        conn.close()
+        return res.status, json.loads(raw)
+
+    def test_maps(self):
+        """Map drop-down: the bundled maps and uploads into the app data (not the AMR list)."""
+        url = config.API_PREFIX + "/maps"
+        status, body = self.req("GET", url)
+        self.assertEqual((status, body["active"], body["canUpload"]), (200, "HMI_Map.txt", True))
+        self.assertIn(("HMI_Map.txt", "bundled"), [(m["name"], m["source"]) for m in body["maps"]])
+        self.assertNotIn("amr-list.txt", [m["name"] for m in body["maps"]])
+        data = b"0\t0\n40\t0\n0\t40\n"
+        try:
+            status, entry = self.put_raw(url + "/hall-2.txt", data)
+            self.assertEqual((status, entry["name"], entry["source"], entry["size"]), (200, "hall-2.txt", "app data", len(data)))
+            status, problem = self.put_raw(url + "/hall-2.txt", data * 2000)   # exists: 409 (the body is drained)
+            self.assertEqual(status, 409, problem)
+            status, entry = self.put_raw(url + "/hall-2.txt?replace=1", data * 2)
+            self.assertEqual((status, entry["size"]), (200, 2 * len(data)))
+            status, problem = self.put_raw(url + "/" + quote("bad name.txt"), data)
+            self.assertEqual(status, 400, problem)
+            status, problem = self.put_raw(url + "/words.txt", b"no map here\n")
+            self.assertEqual(status, 400, problem)
+            self.assertIn("no map points", problem["detail"])
+            self.assertEqual(self.req("GET", url, scopes=(config.SCOPE_READ,))[0], 403)   # settings only
+            names = [m["name"] for m in self.req("GET", url)[1]["maps"]]
+            self.assertIn("hall-2.txt", names)
+            self.assertNotIn("words.txt", names)
+        finally:
+            for name in ("hall-2.txt", "words.txt"):
+                if os.path.exists(os.path.join(self.appdata, name)):
+                    os.remove(os.path.join(self.appdata, name))
 
     def test_static_index_without_token(self):
         status, body = self.req("GET", config.URL_PREFIX + "/", scopes=None)

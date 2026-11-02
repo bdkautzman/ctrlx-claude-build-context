@@ -18,6 +18,8 @@ Routes
   GET  /<snap>/api/v1/values         write  (Data Layer nodes of this app, incl. settings/active)
   GET  /<snap>/api/v1/amr-list       write  AMR list of the per-AMR input modes (amr-list.txt in app data)
   PUT  /<snap>/api/v1/amr-list       write  body {"ids": [...]} or {"text": "<file content>"} (an upload)
+  GET  /<snap>/api/v1/maps           write  map files for the settings: app data + bundled, active, upload limit
+  PUT  /<snap>/api/v1/maps/<name>[?replace=1]   write  body = the map file: stored in the app data
   PUT  /<snap>/api/v1/values/<name>  write  body {"value": ...}
   GET  /<snap>/api/v1/view-config    read   what the map view needs: style colors, units, AMR size, refresh, paths
   GET  /<snap>/api/v1/fleet[?since=<revision>]   read  AMRs; only status if the revision is unchanged
@@ -44,6 +46,8 @@ from app import appdata_commands, auth, config
 from app.amr_list import AmrListError, parse_list
 from app.fleet import PATH_STEP_M
 from app.datalayer_nodes import NodeWriteError
+from app.map_files import CHUNK_BYTES, MapFileError
+from app.occupancy_map import MAX_FILE_BYTES
 from app.settings_store import SettingsError
 
 log = logging.getLogger("web")
@@ -53,6 +57,7 @@ STATIC_TYPES = {".html", ".js", ".css", ".svg", ".png", ".ico", ".json", ".woff2
 _START_TIME = time.monotonic()
 _TILE_ROUTE = re.compile(r"/map/tiles/([0-9a-f]{12})/(\d{1,2})/(\d{1,6})/(\d{1,6})\.png")
 _COLOR = re.compile(r"[0-9a-fA-F]{6}")
+_MAP_FILE_ROUTE = re.compile(r"/maps/([^/]+)")
 DEFAULT_TILE_COLOR = "333d4a"
 
 
@@ -69,17 +74,18 @@ class _TCPHTTPServer(http.server.ThreadingHTTPServer):
 
 
 class WebServer:
-    def __init__(self, store, datalayer, fleet, maps, amr_list=None):
+    def __init__(self, store, datalayer, fleet, maps, amr_list=None, map_files=None):
         self.store = store
         self.datalayer = datalayer
         self.fleet = fleet
         self.maps = maps
         self.amr_list = amr_list
+        self.map_files = map_files
         self._server = None
         self._thread = None
 
     def start(self):
-        handler = _make_handler(self.store, self.datalayer, self.fleet, self.maps, self.amr_list)
+        handler = _make_handler(self.store, self.datalayer, self.fleet, self.maps, self.amr_list, self.map_files)
         if config.IN_SNAP:
             os.makedirs(config.SOCKET_DIR, exist_ok=True)
             try:
@@ -109,7 +115,19 @@ class WebServer:
                 pass
 
 
-def _make_handler(store, datalayer, fleet, maps, amr_list):
+class _Body:
+    """A request body: read() returns at most the bytes still left of Content-Length."""
+
+    def __init__(self, rfile, length):
+        self._rfile, self.left = rfile, max(0, length)
+
+    def read(self, n):
+        data = self._rfile.read(min(n, self.left)) if self.left else b""
+        self.left = self.left - len(data) if data else 0     # nothing more: the client is gone
+        return data
+
+
+def _make_handler(store, datalayer, fleet, maps, amr_list, map_files):
     class Handler(http.server.BaseHTTPRequestHandler):
         server_version = config.SNAP_NAME
         sys_version = ""
@@ -199,6 +217,35 @@ def _make_handler(store, datalayer, fleet, maps, amr_list):
             except Exception:
                 log.exception("Unhandled error for %s %s", method, path)
                 self._problem(500, "Internal error")
+
+        def _upload_map(self, name):
+            length = int(self.headers.get("Content-Length") or 0)
+            replace = self._query().get("replace") in ("1", "true")
+            body = _Body(self.rfile, length)
+            try:
+                if not store.storage_available():
+                    raise MapFileError(503, "app data storage not available - the map can't be stored now")
+                if store.load_in_progress():
+                    raise MapFileError(409, "a configuration is being loaded - try again in a moment")
+                entry = map_files.save(name, body.read, length, replace)
+            except MapFileError as exc:
+                self._drain(body, exc.status)
+                return self._problem(exc.status, "Map not stored", str(exc))
+            except OSError as exc:                       # e.g. app data full
+                log.error("Storing map file %s failed: %s", name, exc)
+                self._drain(body, 500)
+                return self._problem(500, "Map not stored", "{}: {}".format(name, exc.strerror or exc))
+            log.info("Map file %s uploaded via web UI (%d bytes%s)", name, entry["size"], ", replaced" if replace else "")
+            maps.poll()                                  # the active map reloads at once when it was replaced
+            return self._send_json(200, entry)
+
+        def _drain(self, body, status):
+            """Read the rest of a rejected upload: the client then gets the answer, not a reset connection."""
+            if status == 413 or body.left > MAX_FILE_BYTES:
+                self.close_connection = True
+                return
+            while body.left and body.read(CHUNK_BYTES):
+                pass
 
         # -- static files -------------------------------------------------
         def _static(self, rel):
@@ -300,6 +347,15 @@ def _make_handler(store, datalayer, fleet, maps, amr_list):
                         return self._problem(400, "Invalid AMR list", errors=exc.errors)
                     log.info("AMR list changed via web UI (%d AMRs)", len(ids))
                 return self._send_json(200, dict(amr_list.status(), ids=amr_list.ids()))
+
+            if route == "/maps" and method == "GET" and map_files is not None:
+                auth.require(self.headers, write=True)      # part of the settings: not for read-only users
+                return self._send_json(200, {"maps": map_files.list_maps(), "active": store.get()["map"]["file"],
+                                             "maxBytes": MAX_FILE_BYTES, "canUpload": store.storage_available()})
+            match = _MAP_FILE_ROUTE.fullmatch(route)
+            if match and method == "PUT" and map_files is not None:
+                auth.require(self.headers, write=True)
+                return self._upload_map(match.group(1))
 
             if route == "/view-config" and method == "GET":
                 auth.require(self.headers, write=False)

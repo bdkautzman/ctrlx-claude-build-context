@@ -263,3 +263,8 @@ input:disabled, select:disabled { background: var(--bg); color: var(--muted); }
   .hud { left: 8px; bottom: 8px; }
   .minimap { right: 8px; bottom: 8px; }
 }
+
+/* map file: drop-down + upload button in one row */
+.map-file-row { display: flex; gap: 8px; align-items: center; }
+.map-file-row select { flex: 1; min-width: 0; }
+.map-file-row .btn { flex: none; }
