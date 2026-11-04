@@ -35,7 +35,8 @@ Verified 2026-11-03 (clean builds of both architectures):
   0.5 s exposure in the dim test room: grab ~685 ms, decode ~420 ms (all 19 symbologies), ~1.1 s per read;
   `trigger` and `request-id` handshakes, `continuous` (8 reads in 10 s); 0.1 % CPU idle, 57 % of one core at 1 read/s,
   128 MB RSS steady (above the 75 MB guideline - accepted for this app); ui_check --device core OK with 50 history
-  entries. Not yet: decoding of a real code (none fully in view).
+  entries. A real Code 128 label (X004WHVORB) on a box ~0.5 m away: 5 of 5 reads decoded it, ~1.15 s per read
+  (grab ~685 ms incl. 0.5 s exposure, decode ~450 ms), Data Layer result nodes OK.
 - ctrlX COREvirtual (amd64, 87 MB snap), simulated camera: 23 of 23 reads decoded exactly the generated codes, both
   handshakes, continuous, 0.2 % CPU idle, 97 MB RSS; ui_check --device virtual OK. With the real camera: control
   through the NAT works, reads end with the NAT hint after 3 s and the camera is reopened after 3 failures.
