@@ -1,0 +1,204 @@
+# Barcode Reader — GigE Vision camera (Aravis) + OpenCV + zxing-cpp, web UI, Data Layer, app-data settings
+# Target: ctrlX OS 4.6 (Ubuntu Core 24)  |  SDK 4.6.0  |  snapcraft 8.x
+#
+# Rules this file must keep (enforced by tools/check.sh):
+#   - name: starts with "ctrlx-", lowercase, <= 32 chars (<= 29 keeps the socket path short enough)
+#   - base: core24, confinement: strict, grade: stable for releases
+#   - description contains the <!-- author/url --> HTML comment + >= 16 chars of text
+#   - version is MAJOR.MINOR.PATCH and must increase with every release
+#   - restart-delay >= 5s
+#   - only plugs/slots that are listed in validation/slotplug-description.json
+#   - NO reserved interfaces (docs/ctrlx/reserved-interfaces-and-ports.md)
+
+name: ctrlx-barcode-reader
+title: Barcode Reader
+version: 0.1.0
+summary: Reads 1D/2D barcodes from GigE Vision cameras, triggered via UI or Data Layer
+description: |
+  <!--
+  author: bdkautzman
+  url: https://github.com/bdkautzman
+  -->
+  Captures images from a GigE Vision camera (Aravis; written for the Omron Sentech
+  STC-MCS500POE, standard GenICam features only), prepares them with OpenCV and decodes
+  1D and 2D codes with zxing-cpp (Code 128/39/93, EAN/UPC, ITF, DataBar, QR, Data Matrix,
+  PDF417, Aztec, ...). Reads are triggered from the web UI or the ctrlX Data Layer
+  (trigger / request-id handshakes, continuous mode); results go to Data Layer nodes,
+  images with code outlines to the web UI, optionally to a removable medium.
+
+base: core24
+confinement: strict
+grade: stable
+
+platforms:
+  amd64:
+  arm64:
+    build-on: [amd64, arm64]
+    build-for: [arm64]
+
+apps:
+  service:
+    command: bin/run.sh
+    daemon: simple
+    restart-condition: always
+    passthrough:
+      restart-delay: 5s
+    plugs:
+      - network
+      - network-bind
+      - datalayer
+      - active-solution
+      - removable-media    # optional image storage on /media/<medium> (storage.target = medium)
+    slots:
+      - package-assets
+      - package-run
+
+parts:
+  app:
+    plugin: python
+    # only the Python package: changes elsewhere (UI, configs, ...) do not rebuild the venv
+    source: src
+    # don't upgrade pip/setuptools/wheel in the venv (default ["pip", "setuptools", "wheel"]): saves
+    # ~2 min per Python rebuild in the App Build Environment, and they are primed out anyway
+    python-packages: []
+    stage-packages:
+      - ctrlx-datalayer
+    # The ctrlx-datalayer .deb ships build tools, headers, a static lib and the shared libs of BOTH
+    # architectures (~100 MB). At runtime only usr/lib/<triplet>/libcomm_datalayer.so* is used
+    # (ctrlxdatalayer/clib.py loads "libcomm_datalayer.so"). The venv tooling (pip, setuptools,
+    # wheel, packaging) is not needed at runtime either (and would have to be listed in fossinfo).
+    prime:
+      - -usr/bin/dl_compliance
+      - -usr/bin/mddb_compiler
+      - -usr/include
+      - -usr/lib/*/libcomm_datalayer_static.a
+      - -usr/lib/*/pkgconfig
+      - -bin/pip*
+      - -lib/python3.12/site-packages/pip
+      - -lib/python3.12/site-packages/pip-*
+      - -lib/python3.12/site-packages/setuptools
+      - -lib/python3.12/site-packages/setuptools-*
+      - -lib/python3.12/site-packages/_distutils_hack
+      - -lib/python3.12/site-packages/distutils-precedence.pth
+      - -bin/wheel
+      - -lib/python3.12/site-packages/wheel
+      - -lib/python3.12/site-packages/wheel-*
+      - -lib/python3.12/site-packages/packaging
+      - -lib/python3.12/site-packages/packaging-*
+    override-prime: |
+      craftctl default
+      for d in usr/lib/*-linux-gnu; do
+        if [ "$d" != "usr/lib/${CRAFT_ARCH_TRIPLET_BUILD_FOR}" ]; then
+          rm -f "$d"/libcomm_datalayer*
+          rmdir --ignore-fail-on-non-empty "$d"
+        fi
+      done
+
+  # Aravis 0.8.30 + its GObject typelib, PyGObject 3.48 for core24's Python 3.12, the GLib/GIRepository
+  # typelibs and the libraries core24 lacks (libxml2 + ICU, libusb) - Ubuntu 24.04 packages of the build-for
+  # architecture, LICENSE: LGPL-2.1+ / MIT / Unicode. Not as stage-packages: in an arm64 build on the amd64 VM
+  # snapcraft stages amd64 packages, and with ":arm64" it also stages python3 and other core24 packages
+  # (gotchas #99). So exactly these, without their dependencies (all others are in core24); versions in
+  # usr/share/ctrlx-barcode-reader/debs.txt (fossinfo). app.camera.load_aravis() puts
+  # $SNAP/usr/lib/python3/dist-packages and the typelib folder on the search paths.
+  debs:
+    plugin: nil
+    override-pull: |
+      cd "$CRAFT_PART_SRC"
+      rm -f ./*.deb
+      apt-get download $(for p in libaravis-0.8-0 gir1.2-aravis-0.8 python3-gi gir1.2-glib-2.0 \
+          gir1.2-girepository-2.0 libgirepository-1.0-1 libxml2 libicu74 libusb-1.0-0; do
+        echo "$p:$CRAFT_ARCH_BUILD_FOR"; done)
+    override-build: |
+      mkdir -p "$CRAFT_PART_INSTALL/usr/share/ctrlx-barcode-reader"
+      list="$CRAFT_PART_INSTALL/usr/share/ctrlx-barcode-reader/debs.txt"
+      : > "$list"
+      for deb in "$CRAFT_PART_SRC"/*.deb; do
+        dpkg-deb -x "$deb" "$CRAFT_PART_INSTALL"
+        dpkg-deb -f "$deb" Package Version Architecture | paste -sd ' ' >> "$list"
+      done
+      cat "$list"
+    # libaravis' GStreamer plugin (this app doesn't use GStreamer); of ICU libxml2 needs only libicuuc + data
+    prime:
+      - -usr/lib/*/gstreamer-1.0
+      - -usr/lib/*/libicuio*
+      - -usr/lib/*/libicutest*
+      - -usr/lib/*/libicutu*
+      - -usr/lib/*/libicui18n*
+      - -usr/bin
+      - -usr/sbin
+      - -usr/share/man
+      - -usr/share/lintian
+      - -usr/share/bug
+      - -usr/share/locale
+
+  # OpenCV, numpy, zxing-cpp: C extensions. The python plugin's pip would install the BUILD VM's
+  # x86_64 wheels into an arm64 snap as well, so they are installed here for the build-for
+  # architecture, exact versions with sha256 (wheels/requirements.txt), into the venv's site-packages.
+  # Their own part: a change in src/ doesn't download them again.
+  wheels:
+    plugin: nil
+    source: wheels
+    override-build: |
+      case "$CRAFT_ARCH_BUILD_FOR" in
+        amd64) arch=x86_64 ;;
+        arm64) arch=aarch64 ;;
+        *) echo "unsupported architecture $CRAFT_ARCH_BUILD_FOR" >&2; exit 1 ;;
+      esac
+      site="$CRAFT_PART_INSTALL/lib/python3.12/site-packages"
+      python3 -m pip install --no-deps --only-binary=:all: --require-hashes --disable-pip-version-check \
+        --implementation cp --python-version 3.12 --abi cp312 --abi abi3 \
+        --platform "manylinux_2_28_$arch" --platform "manylinux_2_17_$arch" --platform "manylinux2014_$arch" \
+        --target "$site" -r requirements.txt
+      # not used at runtime: numpy's scripts (they point to the build VM's Python), its tests,
+      # OpenCV's Haar cascade files (~25 MB unpacked together)
+      rm -rf "$site/bin"
+      find "$site/numpy" -type d -name tests -prune -exec rm -rf {} +
+      rm -f "$site"/cv2/data/*.xml
+
+  # Everything that is not Python in ONE dump part - in the App Build Environment every part costs
+  # 30-60 s per step (gotchas #47). Resulting layout: bin/run.sh, package-assets/<snap>/, www/, defaults/
+  files:
+    plugin: dump
+    source: .
+    organize:
+      wrapper/run.sh: bin/run.sh
+      'configs/package-assets/*': package-assets/${CRAFT_PROJECT_NAME}/
+    stage:
+      - bin/run.sh
+      - package-assets
+      - www
+      - defaults
+
+slots:
+  package-assets:
+    interface: content
+    content: package-assets
+    source:
+      read:
+        - $SNAP/package-assets/${CRAFT_PROJECT_NAME}
+  package-run:
+    interface: content
+    content: package-run
+    source:
+      write:
+        - $SNAP_DATA/package-run/${CRAFT_PROJECT_NAME}
+
+plugs:
+  datalayer:
+    interface: content
+    content: datalayer
+    target: $SNAP_DATA/.datalayer
+  active-solution:
+    interface: content
+    content: solutions
+    target: $SNAP_COMMON/solutions
+
+lint:
+  ignore:
+    - library:
+        - usr/lib/aarch64-linux-gnu/libcomm_datalayer.so.*
+        - usr/lib/x86_64-linux-gnu/libcomm_datalayer.so.*
+        # loaded through its GObject typelib (gi), not linked
+        - usr/lib/aarch64-linux-gnu/libaravis-0.8.so.*
+        - usr/lib/x86_64-linux-gnu/libaravis-0.8.so.*

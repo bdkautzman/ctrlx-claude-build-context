@@ -45,6 +45,9 @@ _START_TIME = time.monotonic()
 
 class _UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
+    # listen() backlog: socketserver's default 5 made the reverse proxy answer 502 when a page opened ~50
+    # image requests at once (gotchas #102)
+    request_queue_size = 64
 
     def get_request(self):
         request, _ = super().get_request()
@@ -53,6 +56,7 @@ class _UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer
 
 class _TCPHTTPServer(http.server.ThreadingHTTPServer):
     daemon_threads = True
+    request_queue_size = 64
 
 
 class WebServer:

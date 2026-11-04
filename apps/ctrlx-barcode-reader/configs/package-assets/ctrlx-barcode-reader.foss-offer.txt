@@ -1,0 +1,37 @@
+WRITTEN OFFER FOR SOURCE CODE - ctrlx-barcode-reader (Barcode Reader for ctrlX OS)
+
+This app contains software licensed under the GNU Lesser General Public License version 2.1 or later
+(LGPL-2.1-or-later) and the GNU General Public License version 3 or later with the GCC Runtime Library
+Exception 3.1 (GPL-3.0-or-later WITH GCC-exception-3.1). These components are shared libraries (or a Python
+extension module) of their own in the snap; they are linked dynamically and can be replaced. Their license
+texts and those of all other components are in ctrlx-barcode-reader.fossinfo.json next to this file.
+
+For at least three (3) years after the last distribution of a version of this app, the author offers to give
+anyone who asks a complete machine-readable copy of the corresponding source code of the components below,
+for that app version and architecture, for a charge no more than the cost of physically performing the
+distribution (a download link costs nothing).
+
+  Request through: https://github.com/bdkautzman  (author of the app: bdkautzman)
+  Please name: the app version (ctrlX OS: Settings > Apps) and the architecture (amd64 or arm64).
+
+Components (version as distributed in the snap):
+
+  Ubuntu 24.04 (noble) packages, source packages from the Ubuntu archive:
+    libaravis-0.8-0, gir1.2-aravis-0.8   Aravis 0.8.30 (source package aravis 0.8.30-1build2)          LGPL-2.1-or-later
+    python3-gi                           PyGObject 3.48.2 (source package pygobject 3.48.2-1)   LGPL-2.1-or-later
+    libgirepository-1.0-1, gir1.2-girepository-2.0, gir1.2-glib-2.0
+                                         GObject Introspection 1.80.1 / GLib typelibs (source packages
+                                         gobject-introspection 1.80.1-1, glib2.0 typelibs 2.80.0-6ubuntu3.10)     LGPL-2.1-or-later
+    libusb-1.0-0                         libusb 1.0.27 (source package libusb-1.0 2:1.0.27-1)         LGPL-2.1-or-later
+
+  Bundled in the PyPI wheel opencv-python-headless 4.14.0.94 (build: https://github.com/opencv/opencv-python/tree/94):
+    FFmpeg: libavcodec 62.28.102, libavformat 62.12.102, libavutil 60.26.102, libswscale 9.5.102,
+            libswresample 6.3.102                                                               LGPL-2.1-or-later
+    libgfortran, libquadmath (GCC 8.5.0, AlmaLinux 8 package 8.5.0-28.el8_10.alma.1)
+                                         GPL-3.0-or-later WITH GCC-exception-3.1 / LGPL-2.1-or-later
+
+  Bundled in the PyPI wheel numpy 2.3.5 (build: https://github.com/numpy/numpy/tree/v2.3.5):
+    libgfortran, libquadmath (GCC runtime of the scipy-openblas build)
+                                         GPL-3.0-or-later WITH GCC-exception-3.1 / LGPL-2.1-or-later
+
+This offer is in addition to the license texts; the components remain under their own licenses.

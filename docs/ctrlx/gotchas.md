@@ -140,7 +140,7 @@ Browser click-through by the user, 2026-10-21 (template 0.1.1):
 
 Real ctrlX CORE (arm64, ctrlX OS 4.6, rexroth-arch01-*), 2026-10-21 (template 0.1.2):
 
-36. **arm64 cross-build works as-is** in the App Build Environment (multiarch apt sources from the
+36. **arm64 cross-build works as-is** (for Architecture: all stage-packages and pure-Python wheels only - #99) in the App Build Environment (multiarch apt sources from the
     SDK setup script; the `ctrlx-datalayer` .deb is `Architecture: all`; the prime filter keeps
     `usr/lib/aarch64-linux-gnu/libcomm_datalayer.so*`). 8.4 MB; no "Unable to determine library
     dependencies" warnings this time; same `contact`/`license` lint warnings as amd64.
@@ -588,3 +588,85 @@ App `ctrlx-core-connector` 0.2.0 (formerly `ctrlx-core-monitor`: Data Layer brow
     simulator's navigation grid of a 208 x 356 m map (320k cells, 167k free) kept 15 MB (peak 24 MB) as a set +
     list + `Counter`; as `bytearray` masks + `array("i")` it keeps 1.0 MB (peak 1.7 MB), the same speed for the
     A* lookups (`mask[i]` instead of `i in set`). Measure with `tracemalloc` (slows Python ~5x - time separately).
+
+App `ctrlx-barcode-reader` (GigE Vision camera, Aravis + OpenCV + zxing-cpp), 2026-11-03:
+
+93. **A GigE Vision camera and the ctrlX COREvirtual with port forwarding: commands yes, images no.** The
+    COREvirtual (and the build VM) sit behind QEMU user networking (10.0.2.15, NAT through the Windows PC). A GVCP
+    discovery sent to the camera's IP (UDP 3956) is answered, Aravis opens the camera by IP and reads/writes its
+    features (`arv-tool-0.8 -a 192.168.1.99 control ...`). But the image stream is sent by the camera to the address
+    the host writes into `GevSCDA` - Aravis writes its interface address 10.0.2.15, which the camera can't reach, so
+    every grab times out (no packets at all). Broadcast discovery finds nothing through the NAT. Test image
+    acquisition on a real CORE in the camera's network; on the COREvirtual use a simulated camera (Aravis' "Fake"
+    interface: `Aravis.enable_interface("Fake")`, device id `Fake_1`, software trigger works) or give it a network
+    adapter in the camera's network. Both devices: `net.core.rmem_max` 212992, MTU 1500, ephemeral ports
+    32768-60999 (which include the reserved 49250-50250 - an app that binds UDP port 0 can get one).
+94. **Ubuntu packages with Python modules in a core24 snap** (stage-packages `python3-gi`, `gir1.2-aravis-0.8`,
+    `libaravis-0.8-0`): snapcraft stages them for the build-for architecture (the VM's multiarch sources, #36) and
+    does not stage `python3`/`python3.12` (core24 has them). The module lands in `$SNAP/usr/lib/python3/dist-packages`,
+    which is not on the python plugin venv's `sys.path`, and GObject typelibs in
+    `$SNAP/usr/lib/<triplet>/girepository-1.0`, which gi doesn't search: add both at runtime before `import gi`
+    (`apps/ctrlx-barcode-reader/src/app/camera.py::load_aravis`; `GI_TYPELIB_PATH` is read when gi loads its first
+    typelib, the libraries are found through snapcraft's `LD_LIBRARY_PATH`). `libaravis-0.8-0` depends on
+    `libgstreamer1.0-0` (+ `libunwind8`, `libdw1t64`) only for its GStreamer plugin: prime them out. core24 has GLib/GIO
+    but no libxml2, ICU (~30 MB unpacked), libusb, libgirepository.
+95. **Claude Code's auto mode blocked running native code from downloaded PyPI wheels** ("Code from External")
+    while Ubuntu archive packages extracted with `dpkg-deb -x` ran. Ask the user before running wheels (OpenCV,
+    numpy, ...) in the build VM; after the user agreed in the conversation the same commands ran.
+96. **OpenCV 4.14 (opencv-python-headless 4.14.0.94) as a snap dependency**: the x86_64 wheel is 57 MB (210 MB
+    unpacked with numpy, ~62 MB in the xz snap), aarch64 35 MB (~38 MB in the snap with numpy). It bundles FFmpeg
+    (LGPL-2.1+), OpenSSL 1.1.1k (end of life), OpenBLAS, libgfortran (GPL-3.0 + GCC exception), libvpx/libaom/dav1d/
+    libavif and statically libtiff, OpenJPEG, OpenEXR, protobuf, Intel IPP (x86_64) / KleidiCV + carotene (aarch64):
+    `cv2.getBuildInformation()` lists them. The wheel's LICENSE-3RD-PARTY.txt misses libtiff and the GCC Runtime
+    Library Exception text (numpy's LICENSE.txt has it), zxing-cpp's wheel misses nanobind. `import numpy, cv2,
+    zxingcpp` = 46 MB RSS on the build VM. OpenCV's own decoders read only QR and EAN-8/13, UPC-A/E (its
+    `BarcodeDetector` is an EAN/UPC decoder); zxing-cpp 3.1.1 (Apache-2.0, 1 MB wheel) reads 19 symbologies. A noisy
+    EAN-13 tilted by 6 degrees gave zxing-cpp a second, wrong EAN-13 with a valid check digit.
+97. **Bosch icon names for menus**: the ctrlX UI's stylesheet on the device lists them -
+    `curl -sk https://<device>/` → `styles-*.css` → `grep -o 'bosch-ic-[a-z0-9-]*'` (ctrlX OS 4.6: e.g.
+    `bosch-ic-barcode-scan`, `bosch-ic-camera`, `bosch-ic-qr-code`). An unknown name shows an empty icon.
+98. **numpy >= 2.4 does not import on the COREvirtual - and then the Data Layer library fails too.** The
+    COREvirtual (ctrlX WORKS, 2026-11-03) reports the host CPU (i7-11850H) with SSE3, AVX, AVX2, AVX-512F but
+    without SSSE3, SSE4.1, SSE4.2, POPCNT in `/proc/cpuinfo` (the build VM's "QEMU TCG CPU" has them). numpy 2.4+
+    x86_64 wheels need x86-64-v2 and raise `RuntimeError: NumPy was built with baseline optimizations: (X86_V2) but
+    your machine doesn't support: (X86_V2)` at import. `flatbuffers` (used by `ctrlxdatalayer`) imports numpy when it
+    is installed and only catches `ImportError`, so `import ctrlxdatalayer` failed and the app ran without Data Layer.
+    numpy 2.3.x (baseline SSE3) works; check `grep flags /proc/cpuinfo` on the device before pinning C extensions with
+    a raised x86 baseline. OpenCV 4.14 wheels: baseline SSE3 (`cv2.getBuildInformation()`). The real CORE is arm64.
+99. **An arm64 snap built on the amd64 VM contained amd64 Ubuntu packages** (snapcraft 8, destructive mode,
+    `--build-for=arm64`): `stage-packages: [python3-gi, libaravis-0.8-0]` staged
+    `_gi.cpython-312-x86_64-linux-gnu.so` and `usr/lib/x86_64-linux-gnu/...` - the build and the snap linter only
+    warned about "unused libraries". Only "Architecture: all" packages (like `ctrlx-datalayer`, #36) are right
+    without care. With `libfoo:${CRAFT_ARCH_BUILD_FOR}` snapcraft fetches arm64 packages, but then its filter of
+    packages that the base already has no longer matches and it stages `python3.12`, `libpython3.12`, `libffi8`,
+    `libselinux1`, `debconf`, ... too (a staged `$SNAP/usr/bin/python3` would come first in the snap's PATH, before
+    the venv's Python). The same goes for C-extension wheels from the python plugin's pip (x86_64 wheels in an
+    arm64 snap). Fix in ctrlx-barcode-reader: part `debs` (`apt-get download <pkg>:$CRAFT_ARCH_BUILD_FOR` of exactly
+    the packages core24 lacks, `dpkg-deb -x`, versions into `usr/share/<snap>/debs.txt`) and part `wheels`
+    (`pip install --platform manylinux_2_28_<arch> ... --target`, sha256 pins). Check an arm64 snap with
+    `file prime/**/*.so | grep -v aarch64`. Also: an incremental build that reprimes a part after its `prime:`
+    filter changed keeps the files primed before - build `--clean` after filter changes. core24 20260824 has
+    glib 2.80.0-6ubuntu3.8, noble's `gir1.2-glib-2.0` is 2.80.0-6ubuntu3.10 (same API, works).
+100. **Omron Sentech STC-MCS500POE (firmware 20.50) + Aravis 0.8.30: no frame on a software trigger** (real CORE,
+    2026-11-03). With TriggerSelector FrameStart, TriggerMode On, TriggerSource Software (unlocked per the camera's
+    GenICam XML: `TriggerSoftwareEnabled` = 0), acquisition running (`AcquisitionEnabledReg` 1), burst count 1, neither
+    `TriggerSoftware`, a direct write of `TriggerSoftwareReg` nor `SoftwareSignalPulse` (source SoftwareSignal0) made
+    the camera send a single stream packet; free run streamed at once. One **SingleFrame acquisition per read**
+    (AcquisitionStart → one frame → AcquisitionStop) works and is plain GenICam: ~208 ms per 5 MP frame incl. the
+    exposure. To see what a camera does: run a small script in the app's own sandbox,
+    `echo <base64> | base64 -d | sudo snap run --shell <snap>.<app> -c 'python3 -'` (same Python, libraries,
+    confinement; the app must release the camera first - one controlling application per camera), with
+    `ARV_DEBUG=stream:2` for Aravis' stream statistics; GVCP READREG of the bootstrap registers (0x0A00 CCP, 0x0D00 SCP0,
+    0x0D04 SCPS0, 0x0D18 SCDA0) works from a second application without control.
+101. **GigE Vision images on a ctrlX CORE lose packets unless the camera paces them.** `net.core.rmem_max` is 212992
+    (an app can't raise it), i.e. ~2.5 ms of a 1 Gbit/s burst. STC-MCS500POE, 5 MP BayerRG8, 1444-1520 B packets:
+    inter-packet delay 6 µs (camera default 6000 ticks) and 20 µs lost whole frames (2/6, 3/6, thousands of resends);
+    40 µs (`arv_camera_gv_set_packet_delay(40000)` - Aravis converts ns to the camera's ticks) gave 14 of 14 complete
+    frames, ~208 ms each. Aravis' packet-size negotiation chose 1520 B on the CORE (MTU 1500!) and those frames
+    arrived. No firewall is in the way: iptables (nft and legacy) is empty, policy ACCEPT. Cost on the CORE (cv2 2
+    threads): debayer 5 MP 15 ms (cv2) vs ~200 ms with numpy slicing; resize 2448→1280 INTER_AREA ~170 ms, INTER_LINEAR
+    ~50 ms, halving with INTER_AREA fast; zxing-cpp 19 symbologies on 5 MP ~330 ms; first `import cv2` ~3 s.
+102. **HTTP 502 from the reverse proxy when a page fires many requests at once** (real CORE, ctrlx-barcode-reader:
+    the history table loaded 50 thumbnails in parallel; one answered 502, nothing in the app log). Python's
+    `socketserver` listens with a backlog of 5 (`request_queue_size`): extra connections of the proxy to the Unix
+    socket were refused. Template 0.1.8: backlog 64; and pages should limit parallel requests (the app: 3 at a time).

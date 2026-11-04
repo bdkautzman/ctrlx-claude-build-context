@@ -33,6 +33,25 @@ def _wait_for_storage(store, stop):
     return store.storage_available()
 
 
+def _load_settings(store, stop):
+    """Right after an install the app data folder can be there but not writable for a few seconds
+    (gotchas #82): retry instead of crashing."""
+    deadline = time.monotonic() + STORAGE_WAIT_S
+    while True:
+        try:
+            store.load_from_disk(create_if_missing=True)
+            return
+        except SettingsError as exc:
+            log.error("settings.json is invalid, running with defaults until it is fixed: %s", exc)
+            return
+        except OSError as exc:
+            if time.monotonic() > deadline or stop.is_set():
+                log.error("App data not usable, running with defaults: %s", exc)
+                return
+            log.info("App data not writable yet (%s) - trying again", exc.strerror or exc)
+            stop.wait(POLL_INTERVAL_S)
+
+
 def main():
     logsetup.setup("INFO")
     stop = threading.Event()
@@ -54,10 +73,7 @@ def main():
                           config.ACTIVE_CONFIGURATION_DIR, RULES)
 
     if _wait_for_storage(store, stop):
-        try:
-            store.load_from_disk(create_if_missing=True)
-        except SettingsError as exc:
-            log.error("settings.json is invalid, running with defaults until it is fixed: %s", exc)
+        _load_settings(store, stop)
     else:
         log.warning("App data storage not available after %.0fs - running with defaults "
                     "(is the active-solution plug connected?)", STORAGE_WAIT_S)

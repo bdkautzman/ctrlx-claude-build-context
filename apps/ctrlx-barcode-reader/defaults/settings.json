@@ -1,0 +1,62 @@
+{
+  "settingsVersion": 1,
+  "general": {
+    "logLevel": "INFO",
+    "heartbeatIntervalMs": 1000
+  },
+  "camera": {
+    "source": "gige",
+    "address": "192.168.1.99",
+    "pixelFormat": "",
+    "exposureUs": 20000.0,
+    "exposureAuto": "Off",
+    "gain": 0.0,
+    "gainAuto": "Off",
+    "acquisition": "singleframe",
+    "packetSize": 0,
+    "packetDelayUs": 40.0,
+    "timeoutMs": 3000,
+    "buffers": 2
+  },
+  "decode": {
+    "formats": ["Code128", "Code39", "Code93", "Codabar", "ITF", "EAN13", "EAN8", "UPCA", "UPCE",
+                "DataBar", "DataBarExpanded", "DataBarLimited",
+                "QRCode", "MicroQRCode", "RMQRCode", "DataMatrix", "PDF417", "Aztec", "MaxiCode"],
+    "tryRotate": true,
+    "tryInvert": false,
+    "tryDownscale": true,
+    "maxCodes": 10,
+    "roi": {
+      "enabled": false,
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0
+    }
+  },
+  "live": {
+    "intervalMs": 500,
+    "width": 960
+  },
+  "continuous": {
+    "intervalMs": 1000
+  },
+  "images": {
+    "displayWidth": 1280,
+    "jpegQuality": 80,
+    "historySize": 50
+  },
+  "storage": {
+    "target": "ram",
+    "medium": "",
+    "save": "all",
+    "format": "jpg",
+    "jpegQuality": 90,
+    "maxMb": 1024
+  },
+  "simulation": {
+    "width": 1224,
+    "height": 1024,
+    "codes": 3
+  }
+}

@@ -332,7 +332,9 @@ NOT_STAGED_DIRS = {"src", "tests", "snap", "validation", "scripts", "docs", "con
 
 def check_staged_dirs(app_dir, parts, rep, where):
     """A dump part with `source: .` and a `stage:` list only puts the listed paths into the snap: a new
-    top-level folder (e.g. data/) that is not listed is silently missing on the device."""
+    top-level folder (e.g. data/) that is not listed is silently missing on the device. A folder that is the
+    `source:` of another part (e.g. ctrlx-barcode-reader's wheels/) reaches the snap through that part."""
+    part_sources = {str((p or {}).get("source", "")).strip("/").split("/")[0] for p in parts.values()} - {"", "."}
     for pname, part in parts.items():
         part = part or {}
         if part.get("plugin") != "dump" or str(part.get("source", "")).rstrip("/") not in (".", "") or "stage" not in part:
@@ -341,7 +343,7 @@ def check_staged_dirs(app_dir, parts, rep, where):
         covered |= {str(k).strip("/").split("/")[0] for k in ((part.get("organize") or {}).keys())}
         for entry in sorted(os.listdir(app_dir)):
             if (os.path.isdir(os.path.join(app_dir, entry)) and entry not in NOT_STAGED_DIRS
-                    and entry not in covered and not entry.startswith(".")):
+                    and entry not in covered and entry not in part_sources and not entry.startswith(".")):
                 rep.warn("PART-STAGE-DIR", "folder '{}/' is not in the stage list of part '{}': it will be missing in "
                          "the snap. Add it to stage: (or to NOT_STAGED_DIRS in tools/ctrlx_check.py if it is a "
                          "development-only folder)".format(entry, pname), where)

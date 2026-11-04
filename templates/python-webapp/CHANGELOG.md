@@ -3,6 +3,14 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## 0.1.8
+
+- First start after an install: when the app data folder is there but not writable yet (gotchas #82), settings
+  loading retries for up to 30 s instead of crashing (systemd restarted the app, the log showed a traceback).
+  `tests/test_main.py`. From apps/ctrlx-barcode-reader.
+- Web server: listen backlog 64 (`request_queue_size`) instead of socketserver's 5 - the reverse proxy answered
+  502 when a page opened ~50 requests at once (gotchas #102). From apps/ctrlx-barcode-reader.
+
 ## 0.1.7
 
 - Settings: `SettingsStore(..., validator=fn)` for checks the generic rules can't express (`fn(settings)`

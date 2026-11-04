@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/validation/slotplug-description/slotplug-description.v1.schema.json",
+  "$id": "https://boschrexroth.com/app-validation/slotplug-description.v1.json",
+  "type": "object",
+  "title": "Slot and Plug Description",
+  "description": "All used slots and plugs of ctrlx-barcode-reader",
+  "slots": [
+    {
+      "name": "package-assets",
+      "purpose": "Provides the package manifest, FOSS info and translations to the ctrlX Device Admin (menus, reverse proxy, scopes, app data)."
+    },
+    {
+      "name": "package-run",
+      "purpose": "Shares the folder with the web server Unix socket so the ctrlX reverse proxy can forward requests to the app."
+    }
+  ],
+  "plugs": [
+    {
+      "name": "network",
+      "purpose": "Network client access for the ctrlX Data Layer library and for the GigE Vision camera: GVCP commands to UDP port 3956 of the camera (and a discovery broadcast to that port), the camera's replies and the GVSP image stream come back to UDP ports the OS chooses."
+    },
+    {
+      "name": "network-bind",
+      "purpose": "Allows the app to create and listen on its web server Unix socket and to bind the UDP sockets Aravis receives the camera's replies and image stream on (OS-chosen ports, see portlist-description)."
+    },
+    {
+      "name": "datalayer",
+      "purpose": "Content interface to the ctrlX Data Layer (IPC) to provide the app's Data Layer nodes."
+    },
+    {
+      "name": "active-solution",
+      "purpose": "Access to the active configuration (app data) to store and load the app settings JSON file."
+    },
+    {
+      "name": "removable-media",
+      "purpose": "Optional image storage: when the user selects a USB stick or SD card in the settings, every read (or only the no-reads) is saved as an image + CSV row to <medium>/ctrlx-barcode-reader/, so nothing is written cyclically to the internal flash. Connected by the ctrlX installer."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+# Binary wheels of the snap, installed for the TARGET architecture by part `wheels` (snap/snapcraft.yaml):
+# the python plugin's pip would take the build VM's x86_64 wheels for an arm64 snap too.
+# Exact versions + sha256 of every Linux x86_64/aarch64 wheel on PyPI (pip --require-hashes).
+# numpy stays at 2.3.x: 2.4+ needs x86-64-v2 (SSE4.2, POPCNT), which the COREvirtual's CPU doesn't report
+# (gotchas #98); its import error also stops ctrlxdatalayer (flatbuffers imports numpy).
+# Changing a version: update the hashes (https://pypi.org/pypi/<name>/<version>/json), fossinfo.json,
+# the README and .dev/pylib (README.md "Local development").
+opencv-python-headless==4.14.0.94 \
+    --hash=sha256:29714d7716dbfddf9fec20ffb878765e94ccaecd7d3ebd6750877420296e2dc5 \
+    --hash=sha256:5e02669eac0ba67b2a22d7245af1e8ee1a2ef1185ee526a063d8f0555224bd52 \
+    --hash=sha256:97c6e818c6f71c0cfa214e12293b1d0266d679c38f4e086de08357c8ac6ece0d \
+    --hash=sha256:211e581f5a4670acbbe08fff36a35e9946039d2eea28b80394632d036d1be527
+numpy==2.3.5 \
+    --hash=sha256:8b973c57ff8e184109db042c842423ff4f60446239bd585a5131cc47f06f789d \
+    --hash=sha256:0d8163f43acde9a73c2a33605353a4f1bc4798745a8b1d73183b28e5b435ae28
+zxing-cpp==3.1.1 \
+    --hash=sha256:f4dae01111f323f46736fc21f05c14dcaaac06cea5fdc8fd994ba19f6f918c6e \
+    --hash=sha256:9cf67341949946307d086b302cefd453fb47bc6d6ddc7d088839e9481982757b

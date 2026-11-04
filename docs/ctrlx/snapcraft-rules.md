@@ -76,5 +76,12 @@ lint:
   (check: `PY-PACKAGES`), otherwise it is silently missing in the snap.
 * Pure-Python wheels only, if possible. Packages with C extensions must have manylinux
   wheels for **aarch64 and cp312** or the arm64 build fails/needs native build deps.
+* **Native code in an arm64 build on the amd64 VM** (gotchas #99): the python plugin's pip and `stage-packages`
+  take the build VM's amd64 files (only "Architecture: all" packages are safe). C-extension wheels → own part with
+  `pip install --platform manylinux_2_28_<arch> --only-binary=:all: --require-hashes --target
+  $CRAFT_PART_INSTALL/lib/python3.12/site-packages`; Ubuntu packages → own part with
+  `apt-get download <pkg>:$CRAFT_ARCH_BUILD_FOR` + `dpkg-deb -x` of exactly the packages core24 lacks
+  (`:arm64` in stage-packages also stages python3 & co.). Example: `apps/ctrlx-barcode-reader/snap/snapcraft.yaml`.
+  Check: `file prime/**/*.so | grep -v aarch64` shows nothing.
 * Use `${CRAFT_PROJECT_NAME}` (core24); `${SNAPCRAFT_PROJECT_NAME}` is deprecated.
 * `wrapper/run.sh` is a Python script with `#!/usr/bin/env python3` (SDK 4.6 pattern).

@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.snap binary
+*.png binary
+*.jpg binary
+*.whl binary
+*.deb binary

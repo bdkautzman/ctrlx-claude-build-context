@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# keep in sync with snap/snapcraft.yaml (name, version) - tools/check.sh verifies the name
+name = "ctrlx-barcode-reader"
+version = "0.1.0"
+description = "Barcode reader for GigE Vision cameras (Aravis, OpenCV, zxing-cpp) with web UI and Data Layer nodes"
+requires-python = ">=3.10"
+# Same pins as the ctrlX AUTOMATION SDK 4.6.0 Python samples.
+# Every runtime dependency must also be listed in configs/package-assets/*.fossinfo.json.
+# opencv-python-headless, numpy and zxing-cpp are NOT here: C extensions, installed for the target
+# architecture by snap part `wheels` (../wheels/requirements.txt); PyGObject + Aravis are Ubuntu packages.
+dependencies = [
+    "ctrlx-datalayer<=3.6",
+    "ctrlx-fbs",
+]
+
+[tool.setuptools]
+packages = ["app"]

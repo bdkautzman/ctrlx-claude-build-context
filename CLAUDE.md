@@ -52,6 +52,9 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 - **Settings**: only through `SettingsStore` (validated, atomic, app data). Structure in `defaults/settings.json`,
   limits in `src/app/settings_rules.py`. Backward compatible forever (old configurations get loaded).
 - **Flash**: no log files, no cyclic disk writes (also not on Data Layer writes). Log to stdout via `logging`.
+- **RAM: < 75 MB per app** (App Guide 6.2) stays the target. When an app will likely need more (image processing,
+  large libraries, big buffers), say so with an estimate and ask the user before building (AskUserQuestion, with
+  ways to stay below it); an accepted exception goes into the app README and `docs/ctrlx/decisions.md`.
 - **Data Layer**: look up signatures in `reference/ctrlxdatalayer-api-3.6.0/` – never guess. Callbacks call `cb` exactly once.
   Nodes are declared in `src/app/datalayer_nodes.py::build_node_specs`.
 - **Secrets**: no credentials in snap code (`ipc://` needs none). Device credentials only in the git-ignored

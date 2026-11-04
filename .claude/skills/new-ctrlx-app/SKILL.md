@@ -12,6 +12,9 @@ Goal from the user: $ARGUMENTS
    - snap name `ctrlx-<company>-<app>` (lowercase, ≤ 29 chars), title (3–40 chars), author/company, URL
    - what the web UI shows/does, which Data Layer nodes (address, type, read-only/writable, unit),
      which settings (name, type, default, limits), external systems/protocols (→ may need plugs or ports!)
+   - **RAM and snap size**: estimate them (libraries, buffers, images). Likely above 75 MB RAM (App Guide 6.2,
+     CLAUDE.md "RAM") or 100 MB snap: tell the user with the estimate and ask - accept for this app, or reduce
+     (smaller buffers/images, fewer libraries)
    - **custom tools the request would need** (CLAUDE.md "Custom tools: ask first"). Go through the request and
      list everything neither the template, the kit tools nor the standard library covers, for example:
 

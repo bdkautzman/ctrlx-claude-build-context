@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/package-manifest/package-manifest.v1.7.schema.json",
+  "version": "1.0.0",
+  "id": "ctrlx-barcode-reader",
+  "scopes-declaration": [
+    {
+      "identifier": "ctrlx-barcode-reader.web",
+      "name": "Barcode Reader",
+      "description": "Permissions for the Barcode Reader",
+      "scopes": [
+        {
+          "identifier": "ctrlx-barcode-reader.web.all.r",
+          "name": "View Barcode Reader",
+          "description": "View results, images, history, camera state and settings of the Barcode Reader"
+        },
+        {
+          "identifier": "ctrlx-barcode-reader.web.all.rw",
+          "name": "Manage Barcode Reader",
+          "description": "Trigger reads, live picture and continuous reading, change the decode region and settings of the Barcode Reader"
+        }
+      ]
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "ctrlx-barcode-reader.web",
+        "url": "/ctrlx-barcode-reader",
+        "binding": "unix://{$SNAP_DATA}/package-run/ctrlx-barcode-reader/web.sock",
+        "restricted": [
+          "/ctrlx-barcode-reader/api"
+        ]
+      }
+    ]
+  },
+  "menus": {
+    "sidebar": [
+      {
+        "id": "ctrlx-barcode-reader",
+        "title": "Barcode Reader",
+        "icon": "bosch-ic-barcode-scan",
+        "link": "/ctrlx-barcode-reader/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-barcode-reader.web.all.r",
+          "ctrlx-barcode-reader.web.all.rw"
+        ],
+        "items": []
+      }
+    ],
+    "overview": [
+      {
+        "id": "ctrlx-barcode-reader-overview",
+        "title": "Barcode Reader",
+        "description": "Reads 1D and 2D barcodes from a GigE Vision camera",
+        "icon": "bosch-ic-barcode-scan",
+        "link": "/ctrlx-barcode-reader/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-barcode-reader.web.all.r",
+          "ctrlx-barcode-reader.web.all.rw"
+        ],
+        "items": []
+      }
+    ]
+  },
+  "commands": {
+    "activeConfiguration": {
+      "save": [
+        {
+          "id": "ctrlx-barcode-reader",
+          "subject": "Barcode Reader settings",
+          "url": "/ctrlx-barcode-reader/api/v1/appdata/save"
+        }
+      ],
+      "load": [
+        {
+          "id": "ctrlx-barcode-reader",
+          "subject": "Barcode Reader settings",
+          "url": "/ctrlx-barcode-reader/api/v1/appdata/load"
+        }
+      ]
+    }
+  },
+  "configuration": {
+    "appDirectories": [
+      {
+        "name": "ctrlx-barcode-reader",
+        "description": "Barcode Reader settings (test-images/: images for the simulated camera)",
+        "icon": "bosch-ic-barcode-scan",
+        "copyOnLoad": true,
+        "writeProtected": false
+      }
+    ],
+    "appPrivateFiles": [
+      "^ctrlx-barcode-reader/.*\\.tmp$"
+    ]
+  }
+}

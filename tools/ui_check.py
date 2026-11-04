@@ -91,7 +91,10 @@ class LocalApp:
             if os.path.isdir(os.path.join(app_dir, part)):
                 shutil.copytree(os.path.join(app_dir, part), os.path.join(self.tmp, part))
         self.port = free_port()
-        env = dict(os.environ, APP_DEV_HTTP_PORT=str(self.port), PYTHONPATH=os.path.join(self.tmp, "src"))
+        # PYTHONPATH of the caller stays behind src/ (like run-local.sh): apps with libraries outside the
+        # snap's venv for local runs, e.g. ctrlx-barcode-reader's eval "$(./dev-env.sh)"
+        pythonpath = os.pathsep.join(filter(None, [os.path.join(self.tmp, "src"), os.environ.get("PYTHONPATH")]))
+        env = dict(os.environ, APP_DEV_HTTP_PORT=str(self.port), PYTHONPATH=pythonpath)
         env.pop("CTRLX_HOST", None)
         self.token = None
         if role == "admin":

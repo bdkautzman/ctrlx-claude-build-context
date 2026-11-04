@@ -131,6 +131,12 @@ class CheckerTest(unittest.TestCase):
         self.edit("snap/snapcraft.yaml", "      - defaults\n", "      - defaults\n      - data\n")
         self.assertNotIn("PART-STAGE-DIR", codes(self.app, level="items"))
 
+    def test_folder_that_is_another_parts_source(self):
+        os.makedirs(os.path.join(self.app, "wheels"))
+        self.assertIn("PART-STAGE-DIR", codes(self.app, level="items"))
+        self.edit("snap/snapcraft.yaml", "  files:\n", "  wheels:\n    plugin: nil\n    source: wheels\n\n  files:\n")
+        self.assertNotIn("PART-STAGE-DIR", codes(self.app, level="items"))
+
     def test_missing_datalayer_plug(self):
         self.edit("snap/snapcraft.yaml", "      - datalayer\n", "")
         self.edit("snap/snapcraft.yaml", "  datalayer:\n    interface: content\n    content: datalayer\n    target: $SNAP_DATA/.datalayer\n", "")

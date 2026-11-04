@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/validation/portlist-description/portlist-description.v1.schema.json",
+  "$id": "https://boschrexroth.com/app-validation/portlist-description.v1.json",
+  "type": "object",
+  "title": "Port Description",
+  "description": "The app opens no TCP/UDP server ports. The web server uses a Unix socket behind the ctrlX reverse proxy. GigE Vision camera (outgoing, the app starts it): GVCP commands to UDP port 3956 of the camera (and a discovery broadcast to port 3956 when the user clicks Discover); the camera answers to the sending socket and sends the GVSP image stream to one more UDP socket of the app. Both local ports are chosen by the OS (32768-60999); a stream port reserved on ctrlX OS (49250-50250, 51218, 56090, 58000) is not used - the app opens another one. Only the configured camera sends to them.",
+  "ports": []
+}
