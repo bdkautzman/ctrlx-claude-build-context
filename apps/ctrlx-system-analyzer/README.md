@@ -9,6 +9,8 @@ growth (MB/h); restarts and updates are marked in the charts; data can be export
 Built from the kit template (`templates/python-webapp`), Python standard library only. Charts:
 uPlot 1.6.32 (MIT, bundled in `www/vendor/`, listed in `fossinfo.json`).
 
+**Known issues, caveats, measurements and what is not tested yet: [KNOWN-ISSUES.md](KNOWN-ISSUES.md)** (working document - keep it current).
+
 ## Where the data comes from
 
 | What | Source | Note |

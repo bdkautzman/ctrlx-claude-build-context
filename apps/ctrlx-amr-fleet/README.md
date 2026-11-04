@@ -5,6 +5,8 @@ of the site**. A PLC or fleet manager writes the position and heading of every A
 the whole fleet as one JSON string, one JSON string per AMR, or one node per value and AMR; the web UI
 draws them on the map with pan, zoom and a lock that follows one AMR.
 
+**Known issues, caveats, measurements and what is not tested yet: [KNOWN-ISSUES.md](KNOWN-ISSUES.md)** (working document - keep it current).
+
 ## Feeding the AMRs: input mode (setting `fleet.input`)
 
 | `fleet.input` | Data Layer nodes (writable) | One write is |

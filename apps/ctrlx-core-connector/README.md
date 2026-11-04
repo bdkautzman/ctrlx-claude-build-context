@@ -24,6 +24,8 @@ ctrlX OS 4.6 app (snap, `core24`, Python) for **this device and other ctrlX CORE
 
 Formerly **Core Monitor** (`ctrlx-core-monitor` 0.1.x): see "Moving from Core Monitor" below.
 
+**Known issues, caveats, measurements and what is not tested yet: [KNOWN-ISSUES.md](KNOWN-ISSUES.md)** (working document - keep it current).
+
 ## How it works
 
 * Connections use the ctrlX OS feature **Data Layer remote connection**: for every configured core

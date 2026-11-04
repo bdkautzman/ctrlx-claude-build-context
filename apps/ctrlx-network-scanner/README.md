@@ -9,6 +9,8 @@ Built from the kit template (`templates/python-webapp`), Python standard library
 dependencies (the PDF writer is part of the app). Only open data is bundled: the IEEE MAC vendor
 listing (`data/oui.tsv.gz`, public listing, see `fossinfo.json`).
 
+**Known issues, caveats, measurements and what is not tested yet: [KNOWN-ISSUES.md](KNOWN-ISSUES.md)** (working document - keep it current).
+
 ## What it does (and does not do)
 
 | Phase | How | Option in the profile |
