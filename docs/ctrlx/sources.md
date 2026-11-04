@@ -14,6 +14,13 @@
 
 Binaries (`*.snap`, `*.whl`, `*.deb`), images and vendored JS libraries were left out of the copies.
 
+
+## ctrlX CORE hardware manuals (Bosch Rexroth)
+
+Catalog: https://docs.automation.boschrexroth.com/iirds/cdp-metadata.boschrexroth.de~iiDC~Product-ctrlX-CORE/
+Retrieved 2026-11-04: R911405645 ed. 08 (X2, X3), R911420136 ed. 06 (COREplus X3), R911419122 ed. 05 (X5, X7).
+Facts in `reference/ctrlx-core-hardware/README.md`; PDFs local and git-ignored. When an edition changes, update that page.
+
 ## Refreshing for a new ctrlX OS / SDK version
 
 1. `git clone https://github.com/boschrexroth/ctrlx-automation-sdk && git checkout <tag>`;

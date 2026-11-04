@@ -16,7 +16,7 @@ Changes on the device (and restores them at the end): uploads MAP.txt into the a
 
 Input modes (setting fleet.input) instead of the simulation:
 
-    python3 scripts/perf_test.py --device core --inputs fleet-json,amr-json,amr-fields
+    python3 scripts/perf_test.py --device x3 --inputs fleet-json,amr-json,amr-fields
                                  [--input-counts 10,50,200] [--rate 5] [--out perf-inputs-core.json]
 
 Simulation off; per AMR count an AMR list P-001 ... is uploaded; per mode THIS machine writes a fleet

@@ -12,7 +12,7 @@ validation artifacts below are mandatory (`upstream-sdk-4.6.0/appdevguide.md` §
 - [x] fossinfo complete, no TODO (run `tools/foss_from_prime.py --write` after the build)
 - [x] `validation/*.json` match snapcraft.yaml
 - [ ] both snaps built (amd64 + arm64) from a clean tree, inspected with `--snap`
-- [ ] smoke test on COREvirtual and on real hardware (`build-deploy-test.md` §4)
+- [ ] smoke test on a real arm64 CORE and on a real amd64 CORE, or the COREvirtual if there is none (`build-deploy-test.md` §3-4)
 - [ ] no debug ports / debug code enabled, no default credentials, no hardcoded paths into other snaps
 - [ ] RAM < 75 MB in steady state (Settings → System → resources, or `ps` via SSH), snap < 100 MB
 - [ ] tag the commit `v<version>`
@@ -59,7 +59,7 @@ tools/make-app.sh apps/<app>             # <snap>_<ver>_{amd64,arm64}.snap -> ap
 tools/make-app.sh apps/<app> --build     # first build missing/outdated architectures (--clean, ~17 min each)
 tools/make-app.sh apps/<app> --rebuild   # first build both architectures (--clean)
 tools/make-app.sh apps/<app> --sign <oem-cert> <key>   # OEM-signed: SDK app-signing-tool.sh + verify-apps.sh
-tools/ctrlx.py [--device core] install apps/<app>/<snap>_<ver>.app --service   # same file on every device
+tools/ctrlx.py [--device NAME] install apps/<app>/<snap>_<ver>.app --service   # same file on every device
 ```
 - The version comes from `snap/snapcraft.yaml`; the tool refuses when an architecture is missing, the
   two versions differ, or they don't match snapcraft.yaml, and checks name, version and architecture

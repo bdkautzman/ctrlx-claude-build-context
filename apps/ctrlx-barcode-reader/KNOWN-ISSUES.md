@@ -226,7 +226,7 @@ camera first: set `camera.source` = `simulated` in the settings. Then, from the 
 
 ```bash
 B64=$(base64 -w0 test.py)
-python3 tools/ctrlx.py --device core ssh "echo $B64 | base64 -d | sudo ARV_DEBUG=stream:2 snap run --shell ctrlx-barcode-reader.service -c 'python3 -'"
+python3 tools/ctrlx.py --device x3 ssh "echo $B64 | base64 -d | sudo ARV_DEBUG=stream:2 snap run --shell ctrlx-barcode-reader.service -c 'python3 -'"
 ```
 
 `ARV_DEBUG` categories used: `stream:2` (stream statistics, packet timing histogram), `interface:3` (discovery).

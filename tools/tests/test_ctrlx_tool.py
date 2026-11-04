@@ -63,7 +63,7 @@ class ResolveTargetTest(unittest.TestCase):
 
     def test_example_file_is_valid(self):
         devices = ctrlx.load_devices(os.path.join(ctrlx.KIT, "devices.example.toml"))
-        self.assertEqual(set(ctrlx.device_names(devices)), {"virtual", "core"})
+        self.assertEqual(set(ctrlx.device_names(devices)), {"virtual", "x3"})
         self.assertIn(devices["default"], devices)
 
     def test_snap_arch(self):

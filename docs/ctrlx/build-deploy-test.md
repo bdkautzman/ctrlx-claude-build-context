@@ -56,8 +56,8 @@ run in the emulated build VM (browser start ~12 s), so it is not part of every `
 
 ```bash
 ../../tools/check.sh .              # tests + ctrlX static checks; must be clean
-./build-snap-amd64.sh               # COREvirtual  -> <name>_<ver>_amd64.snap  (incremental)
-./build-snap-arm64.sh               # CORE X3/X5/X7 -> <name>_<ver>_arm64.snap (cross build)
+./build-snap-amd64.sh               # CORE X5/X7, COREvirtual -> <name>_<ver>_amd64.snap  (incremental)
+./build-snap-arm64.sh               # CORE X2/X3 -> <name>_<ver>_arm64.snap (cross build)
 ./build-snap-amd64.sh --clean       # full clean build: builds you hand over / release
 python3 ../../tools/ctrlx_check.py . --snap <name>_<ver>_amd64.snap   # inspect the built snap
 python3 ../../tools/foss_from_prime.py . --write   # sync fossinfo versions with prime/
@@ -77,21 +77,41 @@ current version into one `.app` - not part of the normal build:
 ```
 Details: `release-and-validation.md` → "`.app` packages".
 
-## 3. Deploy to ctrlX COREvirtual
+## 3. Deploy to a test device
 
-ctrlX WORKS → create/start a COREvirtual (port forwarding), log in once in the browser
+Which device (user's request 2026-11-04, why: `decisions.md`):
+
+| Snap | Test on | COREvirtual instead when |
+|---|---|---|
+| amd64 | a real amd64 CORE (X5, X7), if `devices.toml` has one | there is no real amd64 CORE, or a check needs SSH and the real one has no `ssh_user` (`ssh -` in `tools/ctrlx.py devices`) or doesn't allow SSH |
+| arm64 | a real arm64 CORE (X2, X3) | - (the COREvirtual is amd64 only) |
+
+* Performance figures (CPU, RAM, timing, network) count only from real hardware. The COREvirtual is a VM with a
+  different CPU; a figure from it says little about a real CORE. Figures don't carry over between models either: the
+  X5 and X7 have the same ports but different CPU, RAM and flash (`reference/ctrlx-core-hardware/README.md`).
+* If SSH is the only reason for the COREvirtual, split the test: everything REST and the UI can reach stays on the
+  real CORE (install, Data Layer, the app's API, `logs`, `ui_check.py --device`), and only the SSH checks go to the
+  COREvirtual (scripts in the app's sandbox, kernel/AppArmor logs, `/proc`).
+* Name the device with every result (CHANGELOG, `KNOWN-ISSUES.md`, reports to the user).
+* A pass on a real amd64 CORE doesn't show that the app starts on a COREvirtual: its CPU level is lower (gotchas #98).
+
+COREvirtual setup: ctrlX WORKS → create/start a COREvirtual (port forwarding), log in once in the browser
 (https://localhost:8443 from Windows), then Settings → Apps → allow installation from
 unknown sources (or `--allow-unknown` below).
 
 Test devices: `cp devices.example.toml devices.toml` (kit root, git-ignored) and fill in address,
-API and SSH credentials per device. `virtual` (COREvirtual from the build VM, amd64) is the default;
-pick another with `--device core` or `CTRLX_DEVICE=core`.
+API and SSH credentials per device, each under its own `[name]`. `default` is the device a command
+without `--device` talks to: make that the real amd64 CORE if there is one, otherwise `virtual`
+(COREvirtual from the build VM, amd64). Pick another with `--device NAME` or `CTRLX_DEVICE=NAME`.
+`tools/ctrlx.py` doesn't fall back by itself: if the default device can't be reached it stops with an
+error. Say so and pass `--device virtual`.
 
 ```bash
 ../../tools/ctrlx.py devices                                    # list (no passwords)
 ../../tools/ctrlx.py install <name>_<ver>_amd64.snap --service   # SERVICE -> install -> back
-../../tools/ctrlx.py --device core install <name>_<ver>_arm64.snap --service   # real CORE (arm64)
-../../tools/ctrlx.py --device core install <name>_<ver>.app --service   # .app: same file on every device
+../../tools/ctrlx.py --device x7 install <name>_<ver>_amd64.snap --service     # real amd64 CORE
+../../tools/ctrlx.py --device x3 install <name>_<ver>_arm64.snap --service   # real arm64 CORE
+../../tools/ctrlx.py --device x3 install <name>_<ver>.app --service   # .app: same file on every device
 ../../tools/ctrlx.py ssh 'sudo snap logs -n 50 <name>'           # SSH with the devices.toml login
 ../../tools/ctrlx.py packages                                   # name, version, health
 ../../tools/ctrlx.py dl-read <name>/status/heartbeat
@@ -100,7 +120,9 @@ pick another with `--device core` or `CTRLX_DEVICE=core`.
 ../../tools/ctrlx.py state [SERVICE|OPERATING]                  # show / set the operating state
 ```
 ctrlX OS 4.6 installs apps **only in SERVICE state** (HTTP 409 otherwise); `--service` switches the
-device (stops PLC/motion), installs and restores the previous state. Loading a configuration
+device (stops PLC/motion), installs and restores the previous state. During active app development,
+installs and `--service` on the devices in `devices.toml` need no asking, also when other apps run there
+(user's request 2026-11-04). Loading a configuration
 (Solutions) also needs SERVICE. `tools/ctrlx.py` never uses `http(s)_proxy` (the build VM sets one
 that can't reach the device); for curl add `--noproxy '*'`.
 Manual alternative: web UI → Settings → Apps → Install from file.
@@ -119,12 +141,13 @@ The COREvirtual's license is the 4-hour engineering license; it shuts down after
 5. Manage app data: `<name>/settings.json` exists; save a configuration, change a setting,
    load the configuration → the old value is back (load phases in the log).
 6. Reboot the device → app comes back, settings persisted.
-7. arm64 snap on real hardware before release (different CPU, slower).
+7. Before release: the arm64 snap on a real arm64 CORE (different CPU, slower) and the amd64 snap on a real amd64
+   CORE if there is one (§3).
 
 ## Debugging
 
 * Logs: Diagnostics → Logbook (filter on the snap) or `tools/ctrlx.py logs --snap <name>`. With SSH
-  (needs a user with SSH rights): `tools/ctrlx.py [--device core] ssh` (COREvirtual from the build VM:
+  (needs a user with SSH rights): `tools/ctrlx.py [--device NAME] ssh` (COREvirtual from the build VM:
   port 8022 - port 10022 is the build VM itself): `sudo snap logs -f <name>`, `snap services <name>`,
   `snap connections <name>`, `sudo snap run --shell <name>.service` then inspect `$SNAP_COMMON/solutions`.
 * Python remote debugging with debugpy: `upstream-sdk-4.6.0/remote-debug-python.md` and the SDK

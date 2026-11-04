@@ -23,9 +23,9 @@ Background: `docs/ctrlx/release-and-validation.md` → "`.app` packages", `docs/
 4. Signing only when the user has OEM App Signing (Bosch-issued certificate + private key):
    `--sign <oem-cert> <key>` hands off to the SDK's `app-signing-tool.sh` and verifies with `verify-apps.sh`.
    Never copy keys or certificates into the kit. Unsigned `.app` files install only where unknown sources are allowed.
-5. Install only if the user agreed - the same file on every device: `tools/ctrlx.py [--device core] install
+5. Install - the same file on every device: `tools/ctrlx.py [--device NAME] install
    <app>/<snap>_<ver>.app --service` (the tool checks that the archive contains the device's architecture;
-   ask before the first `--service`, never pass `--allow-unknown` unless the user said so). Verify the
+   never pass `--allow-unknown` unless the user said so). Verify the
    architecture: `tools/ctrlx.py --device <name> ssh 'uname -m; snap info <snap> | grep installed'`, then the
    smoke test of the build-and-deploy skill.
 6. Report: path of the `.app`, size, sha256 (printed by the tool), version, architectures, signed or unsigned,

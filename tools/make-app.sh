@@ -201,4 +201,4 @@ done
 cp "$TMP/out.app" "$OUT.part"
 mv -f "$OUT.part" "$OUT"
 echo "== written: $OUT  (sha256 $(sha256sum < "$OUT" | cut -d' ' -f1))"
-echo "   install: tools/ctrlx.py [--device core] install $OUT --service"
+echo "   install: tools/ctrlx.py [--device NAME] install $OUT --service"

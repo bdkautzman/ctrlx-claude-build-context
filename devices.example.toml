@@ -2,10 +2,14 @@
 #
 #   cp devices.example.toml devices.toml      # then edit; devices.toml is git-ignored
 #   tools/ctrlx.py devices                    # list (without passwords)
-#   tools/ctrlx.py --device core packages     # pick one (or CTRLX_DEVICE=core)
+#   tools/ctrlx.py --device x3 packages       # pick one (or CTRLX_DEVICE=x3)
 #
 # Precedence: command-line options > CTRLX_* environment variables > this file > built-in defaults.
 # Never commit real passwords: only devices.toml holds them.
+#
+# Which device to test on: docs/ctrlx/build-deploy-test.md section 3. A real amd64 CORE replaces the COREvirtual for
+# testing: give it its own [name] and address and make it the `default`. A device without SSH login: leave out ssh_user
+# (`tools/ctrlx.py devices` shows "ssh -"); SSH-only checks then run on the COREvirtual.
 
 default = "virtual"
 
@@ -20,8 +24,8 @@ api_password = "boschrexroth"
 ssh_user = "rexroot"  # needs SSH rights on the device (Settings > Users & Permissions)
 ssh_password = "rexroot"
 
-[core]
-description = "ctrlX CORE hardware"
+[x3]
+description = "ctrlX CORE X3 hardware"
 host = "192.168.1.1"
 https_port = 443
 ssh_port = 22
@@ -30,3 +34,15 @@ api_user = "boschrexroth"
 api_password = "boschrexroth"
 ssh_user = "rexroot"
 ssh_password = "rexroot"
+
+# A real amd64 CORE, if you have one (X5, X7; the X2 and X3 are arm64):
+# [x7]
+# description = "ctrlX CORE X7 hardware"
+# host = "192.168.1.2"
+# https_port = 443
+# ssh_port = 22
+# arch = "amd64"
+# api_user = "boschrexroth"
+# api_password = "boschrexroth"
+# ssh_user = "rexroot"
+# ssh_password = "rexroot"

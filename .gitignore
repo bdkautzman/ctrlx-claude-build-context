@@ -10,5 +10,7 @@ apps/*/*.snap
 apps/*/*.app
 # tools/ui_check.py screenshots
 .ui-check/
+# Bosch manuals, local copies only (all rights reserved): reference/ctrlx-core-hardware/README.md
+/reference/ctrlx-core-hardware/pdf/
 # device credentials for tools/ctrlx.py (template: devices.example.toml)
 /devices.toml

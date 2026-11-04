@@ -36,10 +36,10 @@ ctrlX OS 4.6 app (snap, `core24`) written in Python:
 python3 -m unittest discover -s tests -t .     # tests, any PC
 ./run-local.sh                                  # http://127.0.0.1:8080/ctrlx-acme-template/
 ../../tools/check.sh .                          # ctrlX compliance checks
-./build-snap-amd64.sh                           # snap for ctrlX COREvirtual (incremental)
-./build-snap-arm64.sh                           # snap for ctrlX CORE hardware
+./build-snap-amd64.sh                           # snap for amd64: CORE X5/X7, COREvirtual (incremental)
+./build-snap-arm64.sh                           # snap for arm64: CORE X2/X3
 ./build-snap-amd64.sh --clean                   # full clean build (hand-over / release)
-../../tools/ctrlx.py install ./*_amd64.snap --service   # install on the COREvirtual (needs SERVICE state)
+../../tools/ctrlx.py install ./*_amd64.snap --service   # install on the default test device (needs SERVICE state)
 ```
 
 ## On the device

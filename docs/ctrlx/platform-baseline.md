@@ -2,7 +2,7 @@
 
 | Item | Value | Source |
 |---|---|---|
-| Target OS | ctrlX OS **4.6** (ctrlX CORE X3/X5/X7 = arm64, ctrlX COREvirtual = amd64) | user setup |
+| Target OS | ctrlX OS **4.6** (ctrlX CORE X2, X3 = arm64; X5, X7 = amd64; ctrlX COREvirtual = amd64; hardware: `reference/ctrlx-core-hardware/README.md`) | user setup, Bosch manuals |
 | Ubuntu Core base | **core24** (Python 3.12 inside the snap) | SDK 4.6.0 samples all use `base: core24` |
 | SDK | ctrlX AUTOMATION SDK **4.6.0** (git tag `4.6.0`) | github.com/boschrexroth/ctrlx-automation-sdk |
 | snapcraft | **8.x** (`snap install snapcraft --channel=8.x/stable --classic`) | SDK `scripts/install-snapcraft.sh` |

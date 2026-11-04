@@ -1,7 +1,7 @@
 # ctrlX OS app development kit
 
-Python snaps for **ctrlX OS 4.6** (Bosch Rexroth ctrlX CORE / COREvirtual), tested on the COREvirtual first,
-then on a real CORE. Every app has a web UI behind the ctrlX reverse proxy, Data Layer nodes, and a settings
+Python snaps for **ctrlX OS 4.6** (Bosch Rexroth ctrlX CORE / COREvirtual), tested on real hardware where
+possible ("Test devices" below). Every app has a web UI behind the ctrlX reverse proxy, Data Layer nodes, and a settings
 JSON in ctrlX app data (saved and loaded with configurations).
 
 The user prefers more work up front for fewer problems later: verify on the device, test, record what you
@@ -21,7 +21,7 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 - `templates/python-webapp/` – reference implementation; keep it working, don't put app code in it
 - `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `ui_check.py` (web UI in headless Chromium, screenshots; setup once: `setup-ui-test.sh`), `pdf_check.py` (PDF pages → PNG), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
 - `docs/ctrlx/` – curated rules; start at `docs/ctrlx/README.md`; `upstream-sdk-4.6.0/` = verbatim SDK docs
-- `reference/` – read-only: Data Layer API source, SDK samples, REST specs, example apps (see `reference/README.md`)
+- `reference/` – read-only: Data Layer API source, SDK samples, REST specs, example apps, CORE hardware facts (see `reference/README.md`)
 
 ## Definition of done (every change)
 1. `tools/check.sh apps/<app>` → `RESULT: OK` (unit tests + 0 errors). Fix warnings or explain them.
@@ -65,6 +65,12 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
   `devices.toml` (template `devices.example.toml`) or env vars for tools - never in committed files.
 - **Versions**: bump `version` (snap/snapcraft.yaml + src/pyproject.toml) and CHANGELOG for every build you hand over.
 - **Files**: LF line endings, `wrapper/run.sh` executable. Don't edit `reference/` or `docs/ctrlx/upstream-*`.
+- **Test devices** (user's request 2026-11-04): test amd64 builds on a real amd64 CORE (X5, X7) when `devices.toml`
+  has one - its performance figures hold in real use, the COREvirtual's don't. Use the COREvirtual when no real amd64 CORE is
+  available (none in `devices.toml`, or not reachable), or for checks that need SSH when the real CORE has no `ssh_user` or doesn't allow SSH; everything else still
+  runs on the real CORE. Test arm64 builds on a real arm64 CORE (X2, X3). Name the device with every result.
+  During active app development, installing the app and `--service` on these devices need no asking, whatever else is
+  installed there. Details: `docs/ctrlx/build-deploy-test.md` §3.
 - Don't run `snap install`/`snapcraft` with sudo tricks, don't touch other snaps, don't change device settings
   (e.g. `--allow-unknown`) unless the human asked.
 
@@ -76,12 +82,12 @@ cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  
 python3 tools/ui_check.py apps/<app> [--narrow] [--role reader] [--device [NAME]]   # headless Chromium + screenshots (~1-2 min)
 python3 tools/pdf_check.py <file.pdf> [--text]  # a generated PDF: PDFium opens it, pages -> PNG to look at
 cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh; incremental, --clean for hand-over builds
-tools/ctrlx.py devices                         # test devices from devices.toml: virtual (amd64), core (arm64)
-tools/ctrlx.py [--device core] install apps/<app>/<snap>_<ver>_<arch>.snap --service   # --service: ask first
+tools/ctrlx.py devices                         # test devices from devices.toml: name, arch, address, SSH user
+tools/ctrlx.py [--device NAME] install apps/<app>/<snap>_<ver>_<arch>.snap --service   # SERVICE -> install -> previous state
 tools/make-app.sh apps/<app> [--build] [--sign <oem-cert> <key>]   # optional, on request: one .app for amd64 + arm64
-tools/ctrlx.py [--device core] dl-read <snap>/status/heartbeat | appdata <snap>/settings.json | logs --snap <snap> | state
-tools/ctrlx.py [--device core] api GET /<snap>/api/v1/status [--data JSON] [--out file]   # the app's own API on the device
-tools/ctrlx.py [--device core] ssh 'sudo snap logs -n 50 <snap>'
+tools/ctrlx.py [--device NAME] dl-read <snap>/status/heartbeat | appdata <snap>/settings.json | logs --snap <snap> | state
+tools/ctrlx.py [--device NAME] api GET /<snap>/api/v1/status [--data JSON] [--out file]   # the app's own API on the device
+tools/ctrlx.py [--device NAME] ssh 'sudo snap logs -n 50 <snap>'
 python3 -m unittest discover -s tools/tests    # self-test of the checker
 ```
 
@@ -94,5 +100,6 @@ python3 -m unittest discover -s tools/tests    # self-test of the checker
 | Data Layer | `docs/ctrlx/datalayer-python.md` |
 | settings / app data | `docs/ctrlx/app-data-settings.md` |
 | build, deploy, debug | `docs/ctrlx/build-deploy-test.md`, then `docs/ctrlx/gotchas.md` |
+| hardware of a device: CPU, RAM, flash, ports, USB, SD | `reference/ctrlx-core-hardware/README.md` |
 | release | `docs/ctrlx/release-and-validation.md` |
 | an architectural choice (why X, not Y) | `docs/ctrlx/decisions.md` |

@@ -14,7 +14,8 @@ disagree, the upstream file wins, and the disagreement belongs in `gotchas.md`.
 | `datalayer-python.md` | add/change Data Layer nodes or read other nodes |
 | `app-data-settings.md` | add settings or change persistence / save-load behaviour |
 | `reserved-interfaces-and-ports.md` | want to add any plug, slot, or open a port |
-| `build-deploy-test.md` | build, install on COREvirtual, read logs, debug |
+| `build-deploy-test.md` | build, which test device, install, read logs, debug |
+| `../../reference/ctrlx-core-hardware/README.md` | need the hardware of a device: CPU, RAM, flash, ports, USB, SD |
 | `release-and-validation.md` | prepare a release or the Bosch validation artifacts |
 | `gotchas.md` | **before** debugging anything: known problems and fixes |
 | `decisions.md` | want to change an architectural choice: what was decided and why |

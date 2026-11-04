@@ -39,7 +39,10 @@ and a settings JSON in ctrlX app data.
    This one-time shakedown validates the parts of the kit that could not be tested without a device
    (listed under "Unverified assumptions" in gotchas.md).
 
-## Status (2026-11-03)
+## Status (2026-11-04)
+
+Test devices: amd64 tests move to a real amd64 CORE (X7, added 2026-11-04) when one is available (`docs/ctrlx/build-deploy-test.md` §3);
+nothing is verified on the X7 yet.
 
 Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (arm64):
 * template: build, install (`tools/ctrlx.py install --service`), Data Layer, reverse proxy + scopes,
