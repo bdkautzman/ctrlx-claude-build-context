@@ -16,6 +16,9 @@ so other GigE Vision cameras should work as well.
 * **Results**: Data Layer nodes, the web UI (image with code outlines, result, history of the last reads with
   thumbnails), optionally images + CSV on a removable medium.
 
+**Known issues, caveats, measurements and what is not tested yet: [KNOWN-ISSUES.md](KNOWN-ISSUES.md)** (working
+document - keep it current).
+
 Design decisions (the user's, 2026-11-03): decoder OpenCV + zxing-cpp; one camera, generic GenICam, code laid
 out for more; both PLC handshakes; images in RAM, a removable medium optional in the settings; live picture
 and continuous reading (no hardware trigger in 0.1.0); decode region drawn in the UI; result history table;
@@ -185,12 +188,9 @@ never calls (it reads no videos or streams with OpenCV).
 
 ## Known limitations (0.1.0)
 
-* One camera; 8-bit pixel formats only (Mono8, Bayer8, RGB8/BGR8).
-* No hardware trigger (camera input line) yet - the camera supports it (Line0), the setting is a later step.
-* zxing-cpp can read a wrong EAN-13 with a valid check digit from a strongly tilted, noisy 1D code (seen in the
-  simulator at 6°): restrict `decode.formats` to the codes you use and check `result/codes` plausibility in the PLC.
-* RAM: above the App Guide's 75 MB guideline - accepted for this app by the user (OpenCV + 5 MP frames);
-  measured values: CHANGELOG.
+Details, evidence and open questions: [KNOWN-ISSUES.md](KNOWN-ISSUES.md). In short: the STC-MCS500POE's software
+trigger gives no frame (SingleFrame per read instead), the CORE needs 40 µs packet pacing, the COREvirtual with port
+forwarding gets no images, one camera and 8-bit pixel formats only, no hardware trigger yet, RAM ~128 MB (accepted).
 
 ## Files
 

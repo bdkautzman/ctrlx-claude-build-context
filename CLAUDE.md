@@ -31,6 +31,10 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
    Builds you hand over are full builds (`--clean`).
 5. UI changed: `python3 tools/ui_check.py apps/<app>` → `UI CHECK: OK`, and **look at the screenshots** it lists;
    keep `tests/ui_scenario.py` in step with the UI. Not set up (`tools/setup-ui-test.sh --check` fails): say so.
+6. **Known issues**: every app keeps a working document `apps/<app>/KNOWN-ISSUES.md` (from the template; user's
+   request 2026-11-03) - each problem, workaround, caveat and limitation with date, setup, evidence/measurements,
+   what was tried and what is open, plus what is not tested on a device yet and the diagnostic commands used.
+   Update it with every finding; mark fixed entries instead of deleting them. Generic lessons also go to gotchas.
 
 ## Hard rules
 - **Interfaces**: never add a plug/slot or open a port without asking. Check

@@ -14,7 +14,8 @@ Read `docs/ctrlx/build-deploy-test.md` (and `docs/ctrlx/gotchas.md` when anythin
 3. `cd <app> && ./build-snap-amd64.sh` (COREvirtual) and/or `./build-snap-arm64.sh` (hardware). Incremental by default;
    add `--clean` when this build is handed over (step 2) or after an SDK / ctrlx-datalayer update. Run builds in the
    background: a full build takes ~20 min in the App Build Environment (no hardware acceleration).
-   On failure: read the full snapcraft output, fix the cause, record new knowledge in `docs/ctrlx/gotchas.md`.
+   On failure: read the full snapcraft output, fix the cause, record new knowledge in `docs/ctrlx/gotchas.md`
+   (generic) and in the app's `KNOWN-ISSUES.md` (app-specific: problems, device results, untested parts).
 4. `python3 tools/ctrlx_check.py <app> --snap <file>.snap` and `python3 tools/foss_from_prime.py <app> --write`.
 5. Deploy only if the user agreed. Devices come from `devices.toml` (`tools/ctrlx.py devices`): `virtual`
    (amd64 snap) is the default, `--device core` is real hardware (arm64 snap; the tool refuses a wrong architecture):

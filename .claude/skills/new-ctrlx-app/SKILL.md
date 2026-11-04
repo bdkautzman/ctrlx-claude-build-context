@@ -40,14 +40,16 @@ Goal from the user: $ARGUMENTS
       wired from `src/app/main.py`; settings changes via `store.add_listener`
    4. `www/` UI (keep the token handling in `app.js`; relative URLs; no CDN)
    5. manifest: titles, icons, menu texts, scope names/descriptions
-   6. `README.md` of the app, `CHANGELOG.md`
+   6. `README.md` of the app, `CHANGELOG.md`, `KNOWN-ISSUES.md` (working document of problems, caveats, untested
+      parts and diagnostics - CLAUDE.md "Definition of done" 6; link it from the README)
 4. New Python dependencies: prefer the standard library. Each dependency → `src/pyproject.toml` + `fossinfo.json`;
    C-extension packages need aarch64/cp312 wheels. Ask before adding.
 5. New plugs/slots/ports: **stop and ask** (docs/ctrlx/reserved-interfaces-and-ports.md).
    A custom tool that turns out to be needed only during the work (it was not on the list from step 1):
    **stop and ask** too, before writing it - with the same options and a recommendation.
 6. Finish: unit tests for the new logic, `tools/check.sh apps/<name>` clean, `./run-local.sh` smoke test
-   (curl the API with APP_DEV_NO_AUTH=1), build if snapcraft is available. Report what was verified and what wasn't.
+   (curl the API with APP_DEV_NO_AUTH=1), build if snapcraft is available. Report what was verified and what wasn't, and
+   put the unverified parts and every problem found into `KNOWN-ISSUES.md`.
 7. UI: adapt `tests/ui_scenario.py` to the new page (click the real buttons, name the screenshots), keep the
    `data-ui-ready` marker working (`www/index.html` + `app.js`), run `python3 tools/ui_check.py apps/<name> --narrow`
    and look at the screenshots. If `tools/setup-ui-test.sh --check` fails, tell the user the UI was not seen.

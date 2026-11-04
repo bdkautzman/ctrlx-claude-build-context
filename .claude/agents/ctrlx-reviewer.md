@@ -20,5 +20,7 @@ report findings only.
    - copied identifiers from samples; hardcoded paths into other snaps; credentials
    - Data Layer API calls that don't exist in `reference/ctrlxdatalayer-api-3.6.0/`
    - missing tests for new logic
+   - `KNOWN-ISSUES.md` missing or out of date: problems, workarounds and untested parts mentioned in the
+     CHANGELOG/README or found in the review that it doesn't list (CLAUDE.md "Definition of done" 6)
 3. Output: a list ordered by severity (blocker / should fix / nit) with file:line, why it matters on a
    ctrlX device, and the concrete fix. End with "ready / not ready to hand over".

@@ -11,3 +11,5 @@ description: Record a newly discovered ctrlX/snapcraft problem and its fix in do
 3. If a static check could have caught it: propose a rule for `tools/ctrlx_check.py` with a code name and a test in
    `tools/tests/test_ctrlx_check.py` (ask before editing tools/).
 4. If a doc in `docs/ctrlx/` was wrong or incomplete, fix that doc as well (never `upstream-sdk-*`).
+5. If it concerns a specific app: add it (with evidence, what was tried, status) to that app's `KNOWN-ISSUES.md`
+   and reference the gotcha number there. App-specific findings that teach nothing generic go only there.

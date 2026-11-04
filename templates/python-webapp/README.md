@@ -18,6 +18,7 @@ ctrlX OS 4.6 app (snap, `core24`) written in Python:
 | `wrapper/run.sh` | start script of the daemon (`bin/run.sh` in the snap) |
 | `configs/package-assets/<snap>.package-manifest.json` | ctrlX integration: proxy, menus, scopes, app-data commands |
 | `configs/package-assets/<snap>.fossinfo.json` | open source components shipped in the snap |
+| `KNOWN-ISSUES.md` | working document: problems, workarounds, caveats, what is not tested on a device, diagnostics (keep current) |
 | `defaults/settings.json` | default settings = structure + types of `settings.json` |
 | `src/app/settings_rules.py` | value rules for settings (enum/min/max/labels) |
 | `src/app/datalayer_nodes.py` | **the nodes this app provides** (`build_node_specs`) |
