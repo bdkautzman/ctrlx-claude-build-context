@@ -123,7 +123,7 @@ ctrlX OS 4.6 installs apps **only in SERVICE state** (HTTP 409 otherwise); `--se
 device (stops PLC/motion), installs and restores the previous state. During active app development,
 installs and `--service` on the devices in `devices.toml` need no asking, also when other apps run there
 (user's request 2026-11-04). Loading a configuration
-(Solutions) also needs SERVICE. `tools/ctrlx.py` never uses `http(s)_proxy` (the build VM sets one
+(Solutions) needs SERVICE on a device with Motion, which refuses it otherwise (gotchas #24); an X3 without Motion loaded in OPERATING (#108). `tools/ctrlx.py` never uses `http(s)_proxy` (the build VM sets one
 that can't reach the device); for curl add `--noproxy '*'`.
 Manual alternative: web UI → Settings → Apps → Install from file.
 The COREvirtual's license is the 4-hour engineering license; it shuts down after 4 h.
@@ -139,7 +139,7 @@ The COREvirtual's license is the 4-hour engineering license; it shuts down after
 3. Users & Permissions: a user with only `.r` sees read-only UI; without scopes the API returns 403.
 4. Settings → Data Layer: `<name>/…` nodes readable; writable ones accept/reject correctly.
 5. Manage app data: `<name>/settings.json` exists; save a configuration, change a setting,
-   load the configuration → the old value is back (load phases in the log).
+   load the configuration → the old value is back (load phases in the log). Over REST: `app-data-settings.md`.
 6. Reboot the device → app comes back, settings persisted.
 7. Before release: the arm64 snap on a real arm64 CORE (different CPU, slower) and the amd64 snap on a real amd64
    CORE if there is one (§3).

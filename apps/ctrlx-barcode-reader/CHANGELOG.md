@@ -2,6 +2,35 @@
 
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 
+## 0.2.0
+
+Speed fixes and general improvements (2026-11-04). This app stays a simple reader for one camera: `ROADMAP.md`. Settings of 0.1.0 keep working and keep their
+values, so an upgraded app gets the new defaults only if they are chosen in the settings.
+
+Measured at 5 ms exposure, gain 100, one Code 128 label at rest (0.1.0 → 0.2.0):
+
+| | X7 | X3 |
+|---|---|---|
+| Read, default settings | 226 → 122 ms | 669 → 652 ms |
+| Continuous, default settings | 4.1 → 7.5/s | 1.1 → 1.4/s |
+| Continuous, Code 128 only, no rotate/downscale | 9.8 → 12.4/s | 2.5 → 3.9/s |
+| The same with the new camera region | 48/s, 20 ms per read | 18/s, 38-43 ms per read |
+| RAM (RSS) while reading | 131-137 → ~102 MB | 126-128 → ~99 MB |
+
+- Camera region (`decode.roi.onCamera`, off by default): the camera sends only the decode region; code positions stay in sensor pixels.
+- `camera.packetDelayUs` default -2, automatic: 6 µs on amd64 (X5, X7), 40 µs on arm64 (X2, X3); two images failing close together raise it a step.
+- `camera.pixelFormat` default `Mono8` for new installs (a gray picture); Bayer formats stay selectable.
+- Display images: halve instead of scaling when within 10 % of the target, so 1280 gives 1224 wide (X3: 153 → 65 ms in color, 106 → 24 ms in gray).
+- `continuous.intervalMs` minimum 100 → 10 ms.
+- `MALLOC_MMAP_THRESHOLD_` for the service: freed image buffers go back to the system at once. PNG compression level 3 → 1.
+- Opening the camera resets a region and binning left by other software and clears the camera's 1 s AcquisitionStart after such changes (`KNOWN-ISSUES.md` 20).
+- Fixed: when the stream got a port reserved by ctrlX (~3.5 % of the times the camera opens), no image arrived until 3 failed reads reopened the camera. Present since 0.1.0.
+- Camera errors name the application that holds the camera. Discover searches again when the first answer is empty.
+- New Data Layer nodes `result/grab-ms`, `result/decode-ms`, `camera/resent-packets`, `camera/missing-packets`; `result/json` holds `grabMs`, `decodeMs`.
+- Tested on devices for the first time: image storage on a USB stick, PNG download, the Data Layer handshakes on the X7, running beside other apps, long runs with memory samples (44 minutes X3, 40 minutes X7). Auto exposure turned out unreliable with SingleFrame.
+
+Open: `KNOWN-ISSUES.md` 26 (camera region on the X3: about 1 image in 100 fails). Not tested: camera power cycle, save and load with configurations.
+
 ## 0.1.0
 
 First version (2026-11-03), from the kit template 0.1.7.

@@ -12,7 +12,7 @@
 
 name: ctrlx-barcode-reader
 title: Barcode Reader
-version: 0.1.0
+version: 0.2.0
 summary: Reads 1D/2D barcodes from GigE Vision cameras, triggered via UI or Data Layer
 description: |
   <!--
@@ -40,6 +40,9 @@ apps:
   service:
     command: bin/run.sh
     daemon: simple
+    environment:
+      # large image buffers go back to the system when freed: RSS 121 -> 85 MB in a read loop on the X3, ~5 % slower
+      MALLOC_MMAP_THRESHOLD_: "1048576"
     restart-condition: always
     passthrough:
       restart-delay: 5s

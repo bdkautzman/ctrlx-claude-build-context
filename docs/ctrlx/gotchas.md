@@ -87,7 +87,7 @@ First device test, 2026-10-20 (App Build Environment VM → ctrlX COREvirtual 4.
     does so when it restores the state.
 24. **Solutions load refused in phase `query` with 409 from `rexroth-motion`** ("Cannot modify motion
     object for loading configuration in Running State") → loading a configuration needs SERVICE,
-    like installing. Not an app problem; our app answered the query with 204.
+    like installing. Not an app problem; our app answered the query with 204. An X3 without Motion loaded in OPERATING (#108).
 25. **No `abort` after a refused `query`** (persistdata.md: "the load operation is canceled") → an
     app that pauses its file watcher in `query` must not wait for `abort`. Template: pause from
     `query` expires after 60 s, `prepare`/`load` extend it (`LOAD_QUERY_TIMEOUT_S`). A load that goes
@@ -670,3 +670,27 @@ App `ctrlx-barcode-reader` (GigE Vision camera, Aravis + OpenCV + zxing-cpp), 20
     the history table loaded 50 thumbnails in parallel; one answered 502, nothing in the app log). Python's
     `socketserver` listens with a backlog of 5 (`request_queue_size`): extra connections of the proxy to the Unix
     socket were refused. Template 0.1.8: backlog 64; and pages should limit parallel requests (the app: 3 at a time).
+103. **A fast UDP stream that a CORE X3 can't take is no problem on an X7** (ctrlx-barcode-reader, 2026-11-04, GigE Vision, 5 MP, UDP
+    with Aravis). X7: no lost frames up to wire speed, 6 ms CPU per frame. X3: frames lost at most packet delays below 30 µs, 19-92 ms CPU per frame;
+    98-99.6 % of the loss is `RcvbufErrors` (the receiving thread doesn't empty the socket), the NIC's counters stay clean; the loss is not
+    linear with the rate (10-20 µs worst). Tune and measure network values per device model; a value found on one says little
+    about the other. Details: the app's `KNOWN-ISSUES.md` 22.
+104. **What a strict snap can't do for network speed** (measured in the sandbox with `network` + `network-bind`, as root, X7 and X3):
+    `AF_PACKET` EACCES, `SO_RCVBUFFORCE` EPERM, `SO_RCVBUF` capped at 2 x `rmem_max` (425984). `os.setpriority` on a thread gives EPERM too. `/proc/net/snmp` isn't readable either: read
+    the UDP counters over SSH. `net.core.rmem_max` = 212992 on both, not changeable from an app.
+105. **Large images in Python: two cheap wins** (ctrlx-barcode-reader, X3, 2026-11-04). glibc raises its mmap threshold after freeing a large block, so
+    frames of 5-15 MB then come from the heap and RSS keeps growing (121 MB after 60 reads); `MALLOC_MMAP_THRESHOLD_=1048576` for the service keeps
+    them in mmap (85 MB, ~5 % slower), `MALLOC_ARENA_MAX=1` didn't help. `cv2.resize` to an exact half with `INTER_AREA` is 4-8 x faster than a slightly
+    different width (gray 5 MP: 2.8 ms for 1224 wide, 22.5 ms for 1280). A worker thread for display images gained little and raised packet loss on
+    the X3's 2 app CPUs.
+106. **Aravis: dropping a stream object clears the camera's stream port** (ctrlx-barcode-reader, 2026-11-04). With two `ArvGvStream` objects on one camera, releasing the older one sets `GevSCPHostPort` to 0: the camera
+    sends nothing and reads time out, with no error and no packet counted. Release the old stream before creating the next one.
+107. **Solutions REST tasks: a `copy` right after `save_async` gives an incomplete configuration** (X3, 2026-11-05). `POST /solutions/api/v1/tasks` answers 201 with an empty body and the id in `Location`, so a script that
+    doesn't look there won't wait. Our copy lacked `datalayer/`, `scheduler/`, `script/` and `trace/`, which the save had not written yet. We deleted it unloaded, so what loading it does isn't known. Wait for `state` = `done`
+    (recipe: `app-data-settings.md`). Also: the first save on a device adds the system settings files to the active configuration (35 on that X3, 2.4 s); `GET .../configurations/appdata/archive` answers 400 "No downloadable
+    appdata found"; stored configurations are reachable under `/solutions/webdav/<name>/`.
+108. **Load results** (template mechanism, ctrlx-barcode-reader 0.2.0, X3, 2026-11-05): a load runs in OPERATING when no app refuses it (no Motion on that X3, #24). An app answering 400 in phase `load` makes the task `failed`,
+    and its phases end `validate, abort, save`: the app stays on its settings, and that save replaces the invalid file in the active configuration. No folder for the app in the configuration: reset to defaults, the file comes back with the same
+    save, which matters for a default that reaches for hardware (`camera.source`). Other apps didn't restart and their settings files stayed the same over 11 loads.
+109. **A GigE camera that is gone: closing it blocks** (Aravis 0.8.30, X7, 2026-11-05). Dropping the `ArvCamera` after `control-lost` took about 8 s, and a read during that time waits. Set a status such as `camera/state` before
+    closing, not after, or it reports `connected` all that time. The heartbeat does notice a pulled cable while idle.

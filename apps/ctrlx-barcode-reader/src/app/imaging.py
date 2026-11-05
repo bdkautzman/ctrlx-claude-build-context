@@ -51,6 +51,12 @@ class Frame:
     frame_id: int = 0
     timestamp: float = field(default_factory=time.time)   # epoch seconds when the image arrived
     grab_ms: float = 0.0
+    camera_region: object = None # (x, y, w, h) in sensor pixels when the camera sent only that part
+
+    @property
+    def origin(self):
+        """Sensor position of this image's top left pixel."""
+        return tuple(self.camera_region[:2]) if self.camera_region else (0, 0)
 
     @property
     def width(self):
@@ -110,11 +116,12 @@ def to_bgr(frame):
 
 
 def shrink(img, width):
-    """Image -> at most `width` pixels wide: halve with INTER_AREA while possible (OpenCV's fast integer path),
-    then one INTER_LINEAR step. INTER_AREA with a non-integer factor took ~170 ms for 5 MP on a ctrlX CORE."""
+    """Image -> at most `width` pixels wide: halve with INTER_AREA while possible (OpenCV's fast integer path), also
+    when that lands within 10 % below `width`, then one INTER_LINEAR step. On a ctrlX CORE X3, 5 MP gray to 1224 wide
+    took 2.8 ms, to 1280 wide 22.5 ms; INTER_AREA with a non-integer factor ~170 ms."""
     cv2, _ = cv()
     h, w = img.shape[:2]
-    while w >= 2 * width:
+    while w // 2 >= 0.9 * width:
         w, h = w // 2, h // 2
         img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
     if w > width:
@@ -137,7 +144,7 @@ def jpeg(img, quality):
 
 def png(img):
     cv2, _ = cv()
-    ok, data = cv2.imencode(".png", img, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+    ok, data = cv2.imencode(".png", img, [cv2.IMWRITE_PNG_COMPRESSION, 1])
     if not ok:
         raise RuntimeError("PNG encoding failed")
     return data.tobytes()

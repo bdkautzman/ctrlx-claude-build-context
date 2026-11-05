@@ -74,12 +74,14 @@ class FakeCamera:
     fail_open = None           # error text -> open() raises CameraError
     grab_errors = []           # texts popped by grab() before it returns frames again
     frame = None               # imaging.Frame returned by every grab (else simulator / blank image)
+    packet_stats = {}          # added to stats(): resentPackets, missingPackets
     gate = None                # threading.Event: grab() waits for it (a slow camera)
     instances = []
     opened = 0
 
-    def __init__(self, cam_settings, simulator=None, sim_settings=None):
+    def __init__(self, cam_settings, simulator=None, sim_settings=None, region=None):
         self.settings = dict(cam_settings)
+        self.region = region
         self.simulated = cam_settings["source"] == "simulated"
         self.simulator = simulator
         self.sim_settings = sim_settings or {"width": 640, "height": 480, "codes": 2}
@@ -95,6 +97,7 @@ class FakeCamera:
         cls.fail_open = None
         cls.grab_errors = []
         cls.frame = None
+        cls.packet_stats = {}
         cls.gate = None
         cls.instances = []
         cls.opened = 0
@@ -113,7 +116,7 @@ class FakeCamera:
         self.exposure_applied += 1
 
     def stats(self):
-        return {"completed": 0}
+        return dict(FakeCamera.packet_stats, completed=0)
 
     def grab(self, timeout_ms):
         if FakeCamera.gate is not None:
@@ -122,11 +125,19 @@ class FakeCamera:
             raise CameraError(FakeCamera.grab_errors.pop(0))
         from app import imaging
         if FakeCamera.frame is not None:
-            return imaging.Frame(FakeCamera.frame.data, FakeCamera.frame.pixel_format)
+            return self._region(imaging.Frame(FakeCamera.frame.data, FakeCamera.frame.pixel_format))
         if self.simulator is not None:
             s = self.sim_settings
             scene = self.simulator.next_scene(s["width"], s["height"], s["codes"])
             self.last_expected = scene.expected
-            return scene.frame
+            return self._region(scene.frame)
         _, np = imaging.cv()
-        return imaging.Frame(np.full((120, 160), 128, np.uint8), "Mono8")
+        return self._region(imaging.Frame(np.full((120, 160), 128, np.uint8), "Mono8"))
+
+    def _region(self, frame):
+        """What a camera with this region would send."""
+        if not self.region:
+            return frame
+        from app import imaging
+        x, y, w, h = self.region
+        return imaging.Frame(frame.data[y:y + h, x:x + w], frame.pixel_format, camera_region=(x, y, w, h))

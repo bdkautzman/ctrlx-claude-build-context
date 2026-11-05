@@ -342,7 +342,8 @@ def _make_handler(store, datalayer, reader):
                     return True
                 self._send_bytes(live["jpeg"], "image/jpeg", {
                     "X-Live-Seq": str(live["seq"]), "X-Image-Width": str(live["width"]),
-                    "X-Image-Height": str(live["height"])})
+                    "X-Image-Height": str(live["height"]),
+                    "X-Image-X": str(live["origin"][0]), "X-Image-Y": str(live["origin"][1])})
                 return True
             if route == "/history" and method == "GET":
                 auth.require(self.headers, write=False)

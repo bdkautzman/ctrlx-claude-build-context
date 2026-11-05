@@ -79,6 +79,10 @@ Our X7 reports itself as "ctrlX COREplus X7". We have no X5 yet.
 | `/writable`: size, free | 2.8 GB, 2.0 GB | 35 GB, 30 GB |
 | Ethernet interfaces | XF10, XF50, XF51 | XF10, XF11, XF12, XF50, XF52 |
 | `net.core.rmem_max` | 212992 | 212992 |
+| XF10 driver, MTU now, max | macb, 1500, 10222 | igc, 1500, 9216 |
+| XF10 interrupts | one, on CPU 0 | four queues, on CPUs 0-1 |
+| Receiving a 5 MP GigE Vision frame, CPU (40 µs / no packet delay) | 92 / 38 ms | 9 / 6 ms |
+| Same image processing | ~10 x slower | see `apps/ctrlx-barcode-reader/KNOWN-ISSUES.md` 22 |
 | Other apps running | few | Docker, Grafana, InfluxDB, Node-RED, WebIQ, UMC, PLC, Motion, EtherCAT master |
 
 ## What this means for apps

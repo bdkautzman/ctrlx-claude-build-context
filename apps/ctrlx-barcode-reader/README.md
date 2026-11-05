@@ -21,7 +21,7 @@ document - keep it current).
 
 Design decisions (the user's, 2026-11-03): decoder OpenCV + zxing-cpp; one camera, generic GenICam, code laid
 out for more; both PLC handshakes; images in RAM, a removable medium optional in the settings; live picture
-and continuous reading (no hardware trigger in 0.1.0); decode region drawn in the UI; result history table;
+and continuous reading (no hardware trigger); decode region drawn in the UI; result history table;
 a written offer for the LGPL/GPL sources; on the COREvirtual a simulated camera (see "Test setup").
 
 ## Web UI
@@ -56,14 +56,16 @@ live picture makes the camera take pictures, so it needs `.rw` too).
 | `result/ok` | bool8 | r | at least one code and no error |
 | `result/count` | uint64 | r | number of codes |
 | `result/text`, `result/format` | string | r | first code (reading order: top to bottom, left to right) |
-| `result/codes` | string | r | JSON `[{"format","text","corners":[[x,y]×4]}]` in image pixels |
+| `result/codes` | string | r | JSON `[{"format","text","corners":[[x,y]×4]}]` in sensor pixels |
 | `result/duration-ms` | float64 | r | from the trigger to the result (incl. waiting in the queue) |
+| `result/grab-ms`, `result/decode-ms` | float64 | r | of that: getting the complete image; decoding it |
 | `result/timestamp` | string | r | time of the image, ISO 8601 in the device's time zone |
 | `result/error` | string | r | e.g. `no image within 3000 ms`, `camera not connected: …` - empty when OK |
 | `result/json` | string | r | the whole result in **one** node - read this for a consistent set |
 | `camera/state` | string | r | `connected`, `connecting`, `disconnected`, `error` |
 | `camera/model`, `camera/address`, `camera/error` | string | r | |
 | `camera/frames`, `camera/failures` | uint64 | r | images received / failed since the app started |
+| `camera/resent-packets`, `camera/missing-packets` | uint64 | r | since the camera was opened: requested again (the device is near its limit); lost for good |
 | `status/version`, `status/state`, `status/heartbeat`, `settings/active` | | r | as in every app of this kit |
 
 **Order of the updates** after a read: all `result/*` values, then `result/request-id`, then `result/sequence`,
@@ -83,26 +85,26 @@ PLC sequences:
 |---|---|---|
 | `camera.source` | `gige` | `gige` or `simulated` (Aravis' fake camera + generated codes / test images) |
 | `camera.address` | `192.168.1.99` | IP address or Aravis device id; empty = first camera found |
-| `camera.pixelFormat` | `""` | keep the camera's; or `Mono8`, `BayerRG8`, … (8-bit formats only) |
+| `camera.pixelFormat` | `Mono8` | `""` = keep the camera's; or `BayerRG8` for a color picture, … (8-bit formats only). Mono8 is the fastest |
 | `camera.exposureUs`, `camera.exposureAuto` | 20000, `Off` | `Off`/`Once`/`Continuous` |
 | `camera.gain`, `camera.gainAuto` | 0, `Off` | camera units (STC-MCS500POE 0-208) |
 | `camera.acquisition` | `singleframe` | `singleframe`: AcquisitionStart → one frame → AcquisitionStop per read; `trigger`: running acquisition + software trigger per read |
 | `camera.packetSize` | 0 | 0 = negotiate (largest packet the network passes; 1520 B on the test CORE) |
-| `camera.packetDelayUs` | 40 | pause between stream packets; -1 = keep the camera's. Raise it when images arrive incomplete |
+| `camera.packetDelayUs` | -2 | pause between stream packets; -2 = automatic (6 µs on amd64 such as X5/X7, 40 µs on arm64 such as X3, raised after a failed image), -1 = keep the camera's, 0 or more = fixed. Raise it when images arrive incomplete |
 | `camera.timeoutMs`, `camera.buffers` | 3000, 2 | wait for the image; frame buffers (one 5 MB frame each) |
 | `decode.formats` | all 19 | fewer = faster |
 | `decode.tryRotate`, `tryInvert`, `tryDownscale` | true, false, true | zxing-cpp search options |
 | `decode.maxCodes` | 10 | |
-| `decode.roi` | off | `enabled`, `x`, `y`, `width`, `height` in image pixels (drawn in the UI) |
+| `decode.roi` | off | `enabled`, `x`, `y`, `width`, `height` in sensor pixels (drawn in the UI); `onCamera`: the camera sends only the region |
 | `live.intervalMs`, `live.width` | 500, 960 | |
-| `continuous.intervalMs` | 1000 | between the starts of two reads |
+| `continuous.intervalMs` | 1000 | between the starts of two reads, 10 ms or more |
 | `images.displayWidth`, `jpegQuality`, `historySize` | 1280, 80, 50 | display images in RAM |
 | `storage.target` | `ram` | `medium`: also save images to a USB stick / SD card |
 | `storage.medium`, `save`, `format`, `jpegQuality`, `maxMb` | `""`, `all`, `jpg`, 90, 1024 | see below |
 | `simulation.width`, `height`, `codes` | 1224, 1024, 3 | generated test scenes |
 
-Camera settings that need a new stream (source, address, pixel format, packet size/delay, buffers) reopen the
-camera; exposure and gain are applied to the running camera. Nothing is written into the camera's user sets.
+Camera settings that need a new stream (source, address, pixel format, packet size/delay, buffers, a camera region)
+reopen the camera; exposure and gain are applied to the running camera. Nothing is written into the camera's user sets.
 
 ## Image storage on a removable medium
 
@@ -115,6 +117,32 @@ Mount the medium in ctrlX **Settings → Storage**; it appears under `/media/<na
 by its own thread; the oldest images are deleted above `storage.maxMb`. A medium that is too slow drops images
 (counted in the camera card). Never the internal flash (kit rule).
 
+## Getting speed
+
+Measured 2026-11-04 with the STC-MCS500POE at 5 ms exposure and gain 100, one Code 128 label at rest. A read is exposure + transfer + decoding.
+
+| Settings | X7: read, continuous | X3: read, continuous |
+|---|---|---|
+| Defaults (Mono8, automatic packet delay, all formats) | 122 ms, 7.5/s | 652 ms, 1.4/s |
+| + `decode.formats` = only the symbologies in use (here Code 128) | 86 ms, 11/s | 281 ms, 2.9/s |
+| + `tryRotate`, `tryDownscale` off | 77 ms, 12/s | 214 ms, 3.9/s |
+| + camera region around the label (`decode.roi.onCamera`) | 20 ms, 48/s | 38-43 ms, 18/s |
+
+In order of effect:
+
+1. **Light.** Exposure adds directly to every read: a lamp or a wider aperture costs nothing in processing. Short exposures also reduce motion blur. Light the label from the front and use a fixed exposure:
+   auto exposure isn't reliable with one frame per read, and in a dark room it ended with a black picture (`KNOWN-ISSUES.md` 24).
+2. **Camera region** for a label that stays in one place: less to transfer and to decode. Draw the region with **Region**, tick
+   *Camera sends only the region* in the settings. The picture then shows only the region; **Clear** gets the full frame back. Leave a margin:
+   a label moving out of the region is not read. On an X3 about 1 image in 100 then fails with an error (`KNOWN-ISSUES.md` 26), so a PLC should check `result/ok` and read again.
+3. **Only the symbologies in use**, and rotation and downscaled search off when labels have a fixed orientation and size. These searches also make
+   reading more tolerant, so check the success rate after switching them off.
+4. **Mono8** (default) needs no debayering. Choose a Bayer format only for a color picture; it costs the X3 about 40 ms more per read.
+
+The packet delay is automatic per device type. A camera card or `camera/resent-packets` that counts up means the device is near its limit; `camera/missing-packets`
+or failed images mean it is over it: raise `camera.packetDelayUs`. The X3 resends some packets at any delay. Keep the label away from the picture's edge:
+a code needs its quiet zones.
+
 ## Camera and network
 
 * The camera needs an IP address in a network the CORE reaches directly (here 192.168.1.99 on the CORE's
@@ -123,19 +151,24 @@ by its own thread; the oldest images are deleted above `storage.maxMb`. A medium
 * GigE Vision traffic: GVCP commands to UDP port 3956 of the camera; the replies and the GVSP image stream
   come back to two UDP ports the OS chooses. A stream port reserved by ctrlX OS is not used (the app opens
   another one). `validation/portlist-description.json`.
-* ctrlX OS limits socket receive buffers to 208 KB (`net.core.rmem_max`, both devices) - ~2.5 ms of a camera
-  sending at 1 Gbit/s. Measured on the real CORE with the STC-MCS500POE (5 MP BayerRG8): packet delay 6 µs (the
-  camera's 6000 ticks) and 20 µs lost whole frames (2 of 6, 3 of 6 - Aravis' resends could not catch up),
-  **40 µs: 6 of 6 and 8 of 8 frames complete**, ~208 ms per frame, a few hundred resent packets. If the camera
-  card shows failures / missing packets, raise `camera.packetDelayUs`.
+* ctrlX OS limits socket receive buffers to 208 KB (`net.core.rmem_max`, all devices) - ~2.5 ms of a camera
+  sending at 1 Gbit/s - and a strict snap can't use packet sockets. How close a device runs to that limit depends on its CPU, measured with
+  the STC-MCS500POE (5 MP): the X7 takes the stream at any packet delay, the X3 needs 40 µs. Automatic mode (`camera.packetDelayUs` = -2)
+  starts at 6 µs on amd64 and 40 µs on arm64; two images failing close together raise it a step (6, 12, 24, 40, 60, 100 µs), which the camera card
+  shows; **Reconnect**, a camera settings change or an app restart start over.
 * **Software trigger of the STC-MCS500POE (firmware 20.50) did not work with Aravis 0.8.30** on the CORE:
   `TriggerSoftware`, writing its register directly and `SoftwareSignalPulse` (TriggerSource SoftwareSignal0) all
   gave no frame, with TriggerSelector FrameStart, TriggerMode On, TriggerSource Software, acquisition running,
   burst count 1 - while free run and SingleFrame stream fine. Hence `camera.acquisition` = `singleframe`.
-* No jumbo frames: MTU 1500 on both test devices, packets of 1444 bytes.
-* **One controlling application per camera** (GigE Vision control channel + heartbeat): two devices with this
-  app and the same `camera.address` fight over it - only one gets the camera. The app holds it while it runs
-  (also without reads), and gives it free when it stops or `camera.source` changes.
+* No jumbo frames so far: MTU 1500 on the test devices. Aravis negotiates packets of 1520 B (X3) and 1628 B (X7).
+* **One controlling application per camera** (GigE Vision control channel + heartbeat): of two devices with this
+  app and the same `camera.address`, only one gets the camera; the other's camera error names the holder's address and it keeps trying. The app holds the
+  camera while it runs (also without reads), and gives it free when it stops or `camera.source` changes.
+* Opening the camera resets the region and binning that other software left, without writing to its user sets.
+* **If the camera goes away** (cable, power; two pulls of about 10 s on the X7): the app reconnects by itself and sets the region, exposure and format again, 22-26 s in that test. Reads in between end with
+  an error, and one can block for more than 10 s. `camera/state` can still say `connected` for several seconds, so a PLC should check `result/ok` and `camera/error`.
+* **Configurations:** the settings are saved and loaded with ctrlX configurations (tested on the X3). Loading one without a folder for this app, saved before the app was installed, resets it to defaults, including
+  `camera.source` = `gige`.
 * **ctrlX COREvirtual with port forwarding** (QEMU user networking, address 10.0.2.15): commands reach the camera,
   but the camera can't send the image stream back to 10.0.2.15 - every read ends with "no image within … ms
   - this device has the NAT address …". Use `camera.source` = `simulated` there (or a COREvirtual network
@@ -186,11 +219,11 @@ dynamically and can be replaced; their sources are available through the **writt
 The OpenCV wheel bundles OpenSSL 1.1.1k (end of life); only FFmpeg's network protocols use it, which this app
 never calls (it reads no videos or streams with OpenCV).
 
-## Known limitations (0.1.0)
+## Known limitations (0.2.0)
 
-Details, evidence and open questions: [KNOWN-ISSUES.md](KNOWN-ISSUES.md). In short: the STC-MCS500POE's software
-trigger gives no frame (SingleFrame per read instead), the CORE needs 40 µs packet pacing, the COREvirtual with port
-forwarding gets no images, one camera and 8-bit pixel formats only, no hardware trigger yet, RAM ~128 MB (accepted).
+Details, evidence and open questions: [KNOWN-ISSUES.md](KNOWN-ISSUES.md); plans: [ROADMAP.md](ROADMAP.md). In short: the STC-MCS500POE's software
+trigger gives no frame (SingleFrame per read instead), the X3 needs 40 µs packet pacing, the COREvirtual with port
+forwarding gets no images, one camera and 8-bit pixel formats only, no hardware trigger, RAM ~100 MB, above the 75 MB guideline (accepted by the user; idle is already ~76 MB with OpenCV and zxing-cpp).
 
 ## Files
 

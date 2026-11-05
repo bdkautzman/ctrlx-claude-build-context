@@ -136,6 +136,28 @@ class ReaderTest(unittest.TestCase):
         self.assertTrue(req.done.wait(10))
         self.assertIsNone(req.result["error"])
 
+    def test_timing_and_packet_nodes(self):
+        FakeCamera.packet_stats = {"resentPackets": 7, "missingPackets": 2}
+        req = self.reader.request_read("ui")
+        self.assertTrue(req.done.wait(10))
+        self.assertEqual(self.reg.get("result/decode-ms"), req.result["decodeMs"])
+        self.assertEqual(self.reg.get("camera/resent-packets"), 7)
+        self.assertEqual(self.reg.get("camera/missing-packets"), 2)
+        self.assertIn("decodeMs", json.loads(self.reg.get("result/json")))
+        self.assertEqual(req.result["origin"], [0, 0])
+
+    def test_reconnect_and_settings_forget_the_raised_delay(self):
+        from app import camera as camera_mod
+        self.addCleanup(camera_mod._raised_delay_us.clear)
+        camera_mod._raised_delay_us["192.0.2.5"] = 60.0
+        self.reader.reconnect()
+        self.assertEqual(camera_mod._raised_delay_us, {})
+        camera_mod._raised_delay_us["192.0.2.5"] = 60.0
+        patch(self.store, {"camera": {"exposureUs": 5000.0}})     # no new stream: stays
+        self.assertEqual(camera_mod._raised_delay_us, {"192.0.2.5": 60.0})
+        patch(self.store, {"camera": {"packetDelayUs": 40.0}})
+        self.assertEqual(camera_mod._raised_delay_us, {})
+
     def test_continuous(self):
         self.reg.write("continuous", True)
         self.assertTrue(wait_for(lambda: self.seq() >= 3))
@@ -195,6 +217,50 @@ class ReaderTest(unittest.TestCase):
         self.assertEqual([c["text"] for c in req.result["codes"]], ["RIGHT"])
         self.assertEqual(req.result["region"], [350, 0, 350, 300])
         self.assertGreaterEqual(min(p[0] for p in req.result["codes"][0]["corners"]), 400)   # full-image pixels
+
+    def test_camera_region(self):
+        zx = zxing()
+        a = np.asarray(zx.create_barcode("LEFT", zx.BarcodeFormat.QRCode).to_image(scale=4, add_quiet_zones=True))
+        b = np.asarray(zx.create_barcode("RIGHT", zx.BarcodeFormat.QRCode).to_image(scale=4, add_quiet_zones=True))
+        img = np.full((300, 700), 255, np.uint8)
+        img[20:20 + a.shape[0], 20:20 + a.shape[1]] = a
+        img[20:20 + b.shape[0], 400:400 + b.shape[1]] = b
+        FakeCamera.frame = imaging.Frame(img, "Mono8")
+        roi = {"enabled": True, "x": 350, "y": 0, "width": 350, "height": 300}
+        patch(self.store, {"decode": {"roi": roi}})          # decoded in software: the camera stays open
+        time.sleep(0.3)
+        self.assertEqual(len(FakeCamera.instances), 1)
+        self.assertIsNone(FakeCamera.instances[0].region)
+        patch(self.store, {"decode": {"roi": {"onCamera": True}}})
+        self.assertTrue(wait_for(lambda: len(FakeCamera.instances) == 2))
+        self.assertEqual(FakeCamera.instances[-1].region, (350, 0, 350, 300))
+        self.assertTrue(wait_for(lambda: self.reader.status()["camera"]["state"] == "connected"))
+        req = self.reader.request_read("ui")
+        self.assertTrue(req.done.wait(10))
+        self.assertEqual([c["text"] for c in req.result["codes"]], ["RIGHT"])
+        self.assertEqual((req.result["width"], req.result["height"], req.result["origin"]), (350, 300, [350, 0]))
+        self.assertEqual(req.result["region"], [350, 0, 350, 300])
+        self.assertGreaterEqual(min(p[0] for p in req.result["codes"][0]["corners"]), 400)   # sensor pixels
+        self.assertEqual(self.reader.history()[0]["origin"], [350, 0])
+        patch(self.store, {"decode": {"roi": {"x": 300, "width": 400}}})                     # a new region: reopened
+        self.assertTrue(wait_for(lambda: len(FakeCamera.instances) == 3))
+        self.assertEqual(FakeCamera.instances[-1].region, (300, 0, 400, 300))
+        patch(self.store, {"decode": {"roi": {"enabled": False}}})                           # cleared: full frame
+        self.assertTrue(wait_for(lambda: len(FakeCamera.instances) == 4))
+        self.assertIsNone(FakeCamera.instances[-1].region)
+
+    def test_camera_region_in_live_images(self):
+        patch(self.store, {"decode": {"roi": {"enabled": True, "onCamera": True, "x": 100, "y": 50, "width": 200, "height": 100}}})
+        self.assertTrue(wait_for(lambda: len(FakeCamera.instances) == 2))
+        self.assertTrue(wait_for(lambda: (self.reader.touch_live() or {}).get("seq", 0) >= 1))
+        live = self.reader.touch_live()
+        self.assertEqual((live["width"], live["height"], live["origin"]), (200, 100, (100, 50)))
+
+    def test_short_continuous_interval(self):
+        patch(self.store, {"continuous": {"intervalMs": 10}})
+        self.reg.write("continuous", True)
+        self.assertTrue(wait_for(lambda: self.seq() >= 3))
+        self.reader.set_continuous(False)
 
 
 if __name__ == "__main__":

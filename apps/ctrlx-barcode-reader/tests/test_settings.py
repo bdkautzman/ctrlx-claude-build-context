@@ -84,6 +84,33 @@ class AppRulesTest(unittest.TestCase):
                              defaults, RULES, validator=validate_settings)
         self.assertEqual(errors, [])
 
+    def test_packet_delay_and_interval(self):
+        from app.settings_rules import validate_settings
+        defaults = load_defaults()
+        self.assertEqual(defaults["camera"]["packetDelayUs"], -2.0)        # new installs: automatic
+        self.assertEqual(defaults["camera"]["pixelFormat"], "Mono8")
+        for delay in (-2, -1, 0, 40.0):
+            _, errors = validate({"camera": {"packetDelayUs": delay}}, defaults, RULES, validator=validate_settings)
+            self.assertEqual(errors, [], delay)
+        for delay in (-1.5, -0.5, -3):
+            _, errors = validate({"camera": {"packetDelayUs": delay}}, defaults, RULES, validator=validate_settings)
+            self.assertTrue(any(e.startswith("camera.packetDelayUs") for e in errors), delay)
+        _, errors = validate({"continuous": {"intervalMs": 10}}, defaults, RULES, validator=validate_settings)
+        self.assertEqual(errors, [])
+        _, errors = validate({"continuous": {"intervalMs": 9}}, defaults, RULES, validator=validate_settings)
+        self.assertTrue(errors)
+
+    def test_settings_of_version_0_1_keep_working(self):
+        """A configuration saved by 0.1.0: fixed packet delay and pixel format stay, the region stays in software."""
+        from app.settings_rules import validate_settings
+        old = {"settingsVersion": 1, "camera": {"pixelFormat": "", "packetDelayUs": 40.0},
+               "decode": {"roi": {"enabled": True, "x": 10, "y": 10, "width": 100, "height": 100}}}
+        normalized, errors = validate(old, load_defaults(), RULES, validator=validate_settings)
+        self.assertEqual(errors, [])
+        self.assertEqual(normalized["camera"]["packetDelayUs"], 40.0)
+        self.assertEqual(normalized["camera"]["pixelFormat"], "")
+        self.assertFalse(normalized["decode"]["roi"]["onCamera"])
+
 
 class ItemsPatternSecretRulesTest(unittest.TestCase):
     """Generic rule keys (used e.g. by apps/ctrlx-core-monitor for its list of connections)."""

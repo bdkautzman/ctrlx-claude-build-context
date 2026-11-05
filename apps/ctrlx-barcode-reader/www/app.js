@@ -129,6 +129,10 @@
     const r = settingsNow && settingsNow.decode && settingsNow.decode.roi;
     return r && r.enabled ? [r.x, r.y, r.width, r.height] : null;
   }
+  function cameraRegionOn() {
+    const r = settingsNow && settingsNow.decode && settingsNow.decode.roi;
+    return !!(r && r.enabled && r.onCamera);
+  }
   function updateRegionButtons() { $("btn-region-clear").hidden = !canWrite || !currentRoi(); }
 
   // ---- reader state -------------------------------------------------------------
@@ -165,11 +169,12 @@
     if (info.model) rows.push(["Model", [info.vendor, info.model].filter(Boolean).join(" ")]);
     if (info.serial) rows.push(["Serial", info.serial + (info.firmware ? " · fw " + info.firmware : "")]);
     if (info.address) rows.push(["Address", info.address + (info.interface ? " (via " + info.interface + ")" : "")]);
-    if (info.width) rows.push(["Image", info.width + " × " + info.height + " · " + (info.pixelFormat || "?")]);
+    if (info.width) rows.push(["Image", info.width + " × " + info.height + " · " + (info.pixelFormat || "?") +
+      (info.cameraRegion ? " · camera region at " + info.cameraRegion[0] + ", " + info.cameraRegion[1] : "")]);
     if (info.exposureUs !== undefined && info.exposureUs !== null) rows.push(["Exposure / gain", Math.round(info.exposureUs) + " µs · " + info.gain]);
     if (info.acquisition) rows.push(["Acquisition", info.acquisition]);
     if (info.packetSize) rows.push(["Stream", "port " + info.streamPort + " · packets " + info.packetSize + " B" +
-      (info.packetDelayUs !== undefined ? " · delay " + info.packetDelayUs + " µs" : "")]);
+      (info.packetDelayUs !== undefined ? " · delay " + info.packetDelayUs + " µs" + (info.packetDelayAuto ? " (automatic)" : "") : "")]);
     rows.push(["Images", cam.frames + " received · " + cam.failures + " failed" +
       (stats.missingPackets ? " · " + stats.missingPackets + " packets missing" : "") +
       (stats.resentPackets ? " · " + stats.resentPackets + " resent" : "")]);
@@ -209,7 +214,7 @@
     ov.style.top = img.offsetTop + "px";
     ov.style.width = img.clientWidth + "px";
     ov.style.height = img.clientHeight + "px";
-    ov.setAttribute("viewBox", "0 0 " + shown.width + " " + shown.height);
+    ov.setAttribute("viewBox", shown.x + " " + shown.y + " " + shown.width + " " + shown.height);
     ov.setAttribute("preserveAspectRatio", "none");
     drawOverlay();
   }
@@ -218,13 +223,13 @@
     const ov = $("overlay");
     ov.replaceChildren();
     if (!shown) return;
-    const W = shown.width, H = shown.height;
+    const W = shown.width, H = shown.height, X = shown.x, Y = shown.y;   // the image's place on the sensor
     const scale = W / Math.max(1, $("img").clientWidth);      // image pixels per screen pixel
     const roi = dragRect || (shown.kind === "result" && viewSeq ? shown.result.region : currentRoi());
     if (roi) {
       const [x, y, w, h] = roi;
       ov.append(svg("path", { class: "roi-shade", "fill-rule": "evenodd",
-        d: `M0 0H${W}V${H}H0Z M${x} ${y}V${y + h}H${x + w}V${y}Z` }));
+        d: `M${X} ${Y}H${X + W}V${Y + H}H${X}Z M${x} ${y}V${y + h}H${x + w}V${y}Z` }));
       ov.append(svg("rect", { class: "roi", x, y, width: w, height: h }));
     }
     if (shown.kind !== "result") return;
@@ -235,15 +240,16 @@
       const label = (i + 1) + " " + c.label;
       const fs = 13 * scale, pad = 4 * scale;
       const tw = label.length * fs * 0.6 + 2 * pad;
-      const ty = Math.max(0, top[1] - fs - 2 * pad - 2 * scale);
-      const tx = Math.max(0, Math.min(top[0], W - tw));      // keep the tag inside the image
+      const ty = Math.max(Y, top[1] - fs - 2 * pad - 2 * scale);
+      const tx = Math.max(X, Math.min(top[0], X + W - tw));  // keep the tag inside the image
       ov.append(svg("rect", { class: "code-tag", x: tx, y: ty, width: tw, height: fs + 2 * pad, rx: 3 * scale }));
       ov.append(svg("text", { class: "code-text", x: tx + pad, y: ty + pad + fs * 0.85, "font-size": fs }, label));
     });
   }
 
   async function showResult(result) {
-    shown = { kind: "result", result, width: result.width, height: result.height };
+    const origin = result.origin || [0, 0];
+    shown = { kind: "result", result, width: result.width, height: result.height, x: origin[0], y: origin[1] };
     renderResult(result);
     if (result.width) {
       try {
@@ -337,7 +343,8 @@
       const res = await apiBlob("/live?after=" + liveSeq);
       if (res.blob && liveOn) {
         liveSeq = Number(res.headers.get("X-Live-Seq")) || liveSeq + 1;
-        shown = { kind: "live", width: Number(res.headers.get("X-Image-Width")), height: Number(res.headers.get("X-Image-Height")) };
+        shown = { kind: "live", width: Number(res.headers.get("X-Image-Width")), height: Number(res.headers.get("X-Image-Height")),
+                  x: Number(res.headers.get("X-Image-X")) || 0, y: Number(res.headers.get("X-Image-Y")) || 0 };
         await setImage(res.blob);
         $("img-info").textContent = "Live " + shown.width + " × " + shown.height + " · not decoded · frame " + liveSeq;
       }
@@ -350,6 +357,10 @@
   // ---- decode region: drawn on the image ---------------------------------------------
   let drawing = false, dragStart = null, dragRect = null;
   function toggleRegion() {
+    if (!drawing && cameraRegionOn()) {
+      showBanner("The camera sends only the region. Clear it to get the full frame, then draw a new one.");
+      return;
+    }
     drawing = !drawing;
     setPressed($("btn-region"), drawing);
     $("stage").classList.toggle("drawing", drawing);
@@ -359,7 +370,7 @@
     const r = $("overlay").getBoundingClientRect();
     const x = Math.round((ev.clientX - r.left) / r.width * shown.width);
     const y = Math.round((ev.clientY - r.top) / r.height * shown.height);
-    return [Math.max(0, Math.min(shown.width, x)), Math.max(0, Math.min(shown.height, y))];
+    return [shown.x + Math.max(0, Math.min(shown.width, x)), shown.y + Math.max(0, Math.min(shown.height, y))];
   }
   function onDown(ev) {
     if (!drawing || !shown) return;

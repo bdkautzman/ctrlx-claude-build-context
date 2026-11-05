@@ -60,10 +60,20 @@ class ImagingTest(unittest.TestCase):
         self.assertEqual(imaging.scaled(f, 50).shape, (25, 50))        # halved twice
         self.assertEqual(imaging.scaled(f, 80).shape, (40, 80))        # halved, then linear
         self.assertEqual(imaging.scaled(f, 400).shape, (100, 200))    # never larger
-        self.assertEqual(imaging.shrink(np.zeros((2048, 2448, 3), np.uint8), 1280).shape, (1071, 1280, 3))
+        # close to an exact half: halved, much faster than scaling to the exact width
+        self.assertEqual(imaging.shrink(np.zeros((2048, 2448, 3), np.uint8), 1280).shape, (1024, 1224, 3))
+        self.assertEqual(imaging.shrink(np.zeros((2048, 2448), np.uint8), 1360).shape, (1024, 1224))
+        self.assertEqual(imaging.shrink(np.zeros((2048, 2448), np.uint8), 1400).shape, (1171, 1400))   # not close enough
+        self.assertEqual(imaging.shrink(np.zeros((1024, 1224), np.uint8), 192).shape, (161, 192))
         self.assertTrue(imaging.jpeg(f.data, 80).startswith(b"\xff\xd8"))
         self.assertTrue(imaging.png(f.data).startswith(b"\x89PNG"))
         self.assertEqual(imaging.decode_image(imaging.png(f.data)).shape, (100, 200))
+
+    def test_origin(self):
+        img = np.zeros((10, 20), np.uint8)
+        self.assertEqual(imaging.Frame(img, "Mono8").origin, (0, 0))
+        self.assertEqual(imaging.Frame(img, "Mono8", camera_region=(8, 4, 20, 10)).origin, (8, 4))
+        self.assertEqual(imaging.frame_from_buffer(bytes(200), 20, 10, 0x01080001, camera_region=(8, 4, 20, 10)).origin, (8, 4))
 
     def test_region(self):
         roi = {"enabled": True, "x": 150, "y": 10, "width": 100, "height": 100}

@@ -78,8 +78,30 @@ def run(ui):
     page.locator("#r-seq", has_text="#3").wait_for()
     page.locator("#img-info", has_text="region").wait_for()
     ui.shot("region")
+
+    # the camera sends only the region: image and outlines line up, a new region needs the full frame first
+    s = ui.api("GET", "/settings", as_admin=True)
+    s["decode"]["roi"]["onCamera"] = True
+    ui.api("PUT", "/settings", s, as_admin=True)
+    page.reload()
+    page.locator("#img:not([hidden])").wait_for()
+    before = seq(page)
+    page.click("#btn-read")
+    page.wait_for_function("n => Number(document.getElementById('r-seq').textContent.slice(1)) > n", arg=before)
+    last = ui.api("GET", "/reader", as_admin=True)["last"]
+    x, y = last["origin"]
+    assert last["width"] < s["simulation"]["width"] and (x or y), last
+    assert page.locator("#overlay").get_attribute("viewBox") == "{} {} {} {}".format(x, y, last["width"], last["height"])
+    ui.shot("camera-region")
+    page.click("#btn-region")
+    page.locator("#banner", has_text="Clear it").wait_for()
+    assert page.locator("#btn-region").get_attribute("aria-pressed") != "true"
+
     page.click("#btn-region-clear")
     page.locator("#btn-region-clear").wait_for(state="hidden")
+    s = ui.api("GET", "/settings", as_admin=True)
+    s["decode"]["roi"]["onCamera"] = False
+    ui.api("PUT", "/settings", s, as_admin=True)
 
     # live picture (not decoded), then stop
     page.click("#btn-live")

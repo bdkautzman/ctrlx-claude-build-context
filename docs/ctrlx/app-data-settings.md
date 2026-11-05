@@ -49,6 +49,22 @@ POST body `{"configurationPath": "...", "id": "282xy5", "phase": "..."}`, token 
   `{"state": "pending|running|done|failed"}` on GET.
 * Endpoints must check the token scopes (template: `.rw` or admin).
 
+## Testing save and load over REST
+
+Base path `/solutions/api/v1`. A task answers 201 with an **empty body** and its id in `Location` (`/tasks/<id>`). Poll `GET /tasks/<id>` until `state` is `done` or `failed`; `result.partialResults` lists every
+app's phases and problems. Wait for each task before the next one (gotchas #107).
+
+| Step | Request |
+|---|---|
+| Apps write their data | `POST /tasks` `{"action": "save_async"}` |
+| Keep it as a configuration | `POST /tasks` `{"action": "copy", "parameters": {"source": "solutions/DefaultSolution/configurations/appdata", "destination": "solutions/DefaultSolution/configurations/<name>"}}` |
+| Would a load be accepted? | `POST /tasks` `{"action": "load_async", "parameters": {"configurationPath": "solutions/DefaultSolution/configurations/<name>", "queryOnly": true}}` |
+| Load | the same with `"queryOnly": false` |
+| Prepare a case (old or invalid file, no folder) | WebDAV on the stored configuration: `PUT` or `DELETE /solutions/webdav/<name>/<snap>/settings.json` |
+| Remove it | `DELETE /solutions/DefaultSolution/configurations/<name>` |
+
+A load replaces the settings of every app on the device: get the user's OK first, and compare the other apps' files before and after.
+
 ## Adding a setting (checklist)
 
 1. Add key + default value (with the right JSON type: `1.0` for float, `1` for int) to `defaults/settings.json`.

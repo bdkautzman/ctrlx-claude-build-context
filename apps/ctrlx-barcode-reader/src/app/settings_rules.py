@@ -71,8 +71,8 @@ RULES = {
     "camera.pixelFormat": {
         "label": "Pixel format",
         "enum": PIXEL_FORMATS,
-        "help": "Empty: keep the camera's format. 8-bit formats only. Mono8 is enough for codes, "
-                "a Bayer format shows a color image.",
+        "help": "Empty: keep the camera's format. 8-bit formats only. Mono8 is enough for codes and the "
+                "fastest; a Bayer format shows a color image.",
     },
     "camera.exposureUs": {"label": "Exposure time [us]", "min": 1.0, "max": 10000000.0},
     "camera.exposureAuto": {"label": "Auto exposure", "enum": AUTO_MODES},
@@ -94,10 +94,11 @@ RULES = {
     },
     "camera.packetDelayUs": {
         "label": "Packet delay [us]",
-        "min": -1.0,
+        "min": -2.0,
         "max": 100000.0,
-        "help": "Pause between stream packets. ctrlX limits socket buffers to 208 KB: without a pause a 5 MP "
-                "frame loses packets on a ctrlX CORE (40 us: 5 MP in ~210 ms). -1: keep the camera's value.",
+        "help": "Pause between stream packets; shorter is faster, too short loses images. -2: automatic (6 us on "
+                "amd64 devices such as the X5 and X7, 40 us on arm64 such as the X3; raised step by step after "
+                "repeated failed images, Reconnect starts over). -1: keep the camera's value. 0 or more: this value.",
     },
     "camera.timeoutMs": {"label": "Image timeout [ms]", "min": 200, "max": 60000,
                          "help": "How long a read waits for the image after the trigger."},
@@ -118,6 +119,11 @@ RULES = {
     "decode.maxCodes": {"label": "Max. codes per image", "min": 1, "max": 100},
     "decode.roi": {"label": "Decode region"},
     "decode.roi.enabled": {"label": "Only decode the region"},
+    "decode.roi.onCamera": {
+        "label": "Camera sends only the region",
+        "help": "Much faster for a label that stays in one place: less to transfer and decode. The picture then "
+                "shows only the region; clear the region to see the full frame and draw a new one.",
+    },
     "decode.roi.x": {"label": "X [px]", "min": 0, "max": 100000},
     "decode.roi.y": {"label": "Y [px]", "min": 0, "max": 100000},
     "decode.roi.width": {"label": "Width [px]", "min": 0, "max": 100000},
@@ -127,7 +133,7 @@ RULES = {
     "live.intervalMs": {"label": "Interval [ms]", "min": 100, "max": 10000},
     "live.width": {"label": "Image width [px]", "min": 160, "max": 4096},
     "continuous": {"label": "Continuous reading"},
-    "continuous.intervalMs": {"label": "Interval [ms]", "min": 100, "max": 3600000,
+    "continuous.intervalMs": {"label": "Interval [ms]", "min": 10, "max": 3600000,
                               "help": "Time between the starts of two reads (longer if a read takes longer)."},
     # -- images -------------------------------------------------------------------------------
     "images": {"label": "Images in RAM"},
@@ -166,6 +172,9 @@ RULES = {
 def validate_settings(settings):
     """Cross-field checks -> error messages."""
     errors = []
+    delay = settings.get("camera", {}).get("packetDelayUs", 0)
+    if delay < 0 and delay not in (-1, -2):
+        errors.append("camera.packetDelayUs: -2 (automatic), -1 (keep the camera's value) or 0 and more")
     roi = settings.get("decode", {}).get("roi", {})
     if roi.get("enabled") and (roi.get("width", 0) < 16 or roi.get("height", 0) < 16):
         errors.append("decode.roi: the region must be at least 16 x 16 pixels")

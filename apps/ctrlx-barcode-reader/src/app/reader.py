@@ -48,6 +48,12 @@ class Request:
         self.result = None
 
 
+def _camera_region(s):
+    """The region the camera should send (x, y, w, h), or None for the full frame."""
+    roi = s["decode"]["roi"]
+    return (roi["x"], roi["y"], roi["width"], roi["height"]) if roi["enabled"] and roi["onCamera"] else None
+
+
 def _iso(epoch):
     return datetime.datetime.fromtimestamp(epoch).astimezone().isoformat(timespec="milliseconds")
 
@@ -142,6 +148,7 @@ class Reader:
         return self.call(lambda _cam: camera_mod.discover(simulated))
 
     def reconnect(self):
+        camera_mod.forget_raised_delay()
         with self._cond:
             self._reopen = True
             self._cond.notify_all()
@@ -151,7 +158,8 @@ class Reader:
         old = self._settings
         with self._cond:
             self._settings = s
-            if any(old["camera"][k] != s["camera"][k] for k in REOPEN_KEYS):
+            if any(old["camera"][k] != s["camera"][k] for k in REOPEN_KEYS) or _camera_region(old) != _camera_region(s):
+                camera_mod.forget_raised_delay()
                 self._reopen = True
             elif any(old["camera"][k] != s["camera"][k] for k in EXPOSURE_KEYS):
                 self._exposure_dirty = True
@@ -298,6 +306,10 @@ class Reader:
                           ("frames", "camera/frames"), ("failures", "camera/failures")):
             if key in kw:
                 self._set_node(node, kw[key] if kw[key] is not None else "")
+        if "stats" in kw:
+            stats = kw["stats"] or {}
+            self._set_node("camera/resent-packets", stats.get("resentPackets", 0))
+            self._set_node("camera/missing-packets", stats.get("missingPackets", 0))
         if "info" in kw:
             info = kw["info"] or {}
             self._set_node("camera/model", " ".join(x for x in (info.get("vendor"), info.get("model")) if x))
@@ -306,7 +318,8 @@ class Reader:
     def _open_camera(self):
         s = self._settings
         self._update_cam(state="connecting")
-        cam = self.camera_factory(s["camera"], simulator=self.simulator, sim_settings=s["simulation"])
+        cam = self.camera_factory(s["camera"], simulator=self.simulator, sim_settings=s["simulation"],
+                                  region=_camera_region(s))
         try:
             info = cam.open()
         except CameraError as exc:
@@ -336,7 +349,8 @@ class Reader:
             frame = self._camera.grab(s["camera"]["timeoutMs"])
         except CameraError as exc:
             self._errors_in_row += 1
-            self._update_cam(failures=self._cam["failures"] + 1, error=str(exc), stats=self._camera.stats())
+            self._update_cam(failures=self._cam["failures"] + 1, error=str(exc), stats=self._camera.stats(),
+                             info=dict(self._camera.info))
             if self._errors_in_row >= MAX_CAMERA_ERRORS:
                 self._reopen = True
             raise
@@ -353,7 +367,7 @@ class Reader:
             return
         img = imaging.scaled(frame, s["live"]["width"])
         live = {"jpeg": imaging.jpeg(img, s["images"]["jpegQuality"]), "epoch": frame.timestamp,
-                "width": frame.width, "height": frame.height}
+                "width": frame.width, "height": frame.height, "origin": frame.origin}
         with self._cond:
             live["seq"] = (self._live["seq"] + 1) if self._live else 1
             self._live = live
@@ -370,8 +384,12 @@ class Reader:
             if self._camera is not None and self._camera.simulated:
                 expected = [{"format": f, "text": t} for f, t in self._camera.last_expected]
             gray = imaging.to_gray(frame)
-            region = imaging.clamp_roi(s["decode"]["roi"], frame.width, frame.height)
-            codes, decode_ms = self.decoder.decode(imaging.crop(gray, region), region[:2] if region else (0, 0))
+            if frame.camera_region:          # the camera sent only the region: decode all of it, in sensor pixels
+                region = frame.camera_region
+                codes, decode_ms = self.decoder.decode(gray, frame.origin)
+            else:
+                region = imaging.clamp_roi(s["decode"]["roi"], frame.width, frame.height)
+                codes, decode_ms = self.decoder.decode(imaging.crop(gray, region), region[:2] if region else (0, 0))
         except CameraError as exc:
             error = str(exc)
         except Exception as exc:  # noqa: BLE001 - decoder/imaging problems end the read with an error
@@ -396,6 +414,7 @@ class Reader:
             "error": error,
             "width": frame.width if frame is not None else 0,
             "height": frame.height if frame is not None else 0,
+            "origin": list(frame.origin) if frame is not None else [0, 0],
             "pixelFormat": frame.pixel_format if frame is not None else "",
             "region": list(region) if region else None,
             "saved": False,
@@ -434,14 +453,16 @@ class Reader:
             return
         codes = [{"format": c["format"], "text": c["text"], "corners": c["corners"]} for c in result["codes"]]
         first = codes[0] if codes else {"format": "", "text": ""}
-        summary = {k: result[k] for k in ("sequence", "requestId", "source", "ok", "count", "durationMs",
-                                          "timestamp", "error")}
+        summary = {k: result[k] for k in ("sequence", "requestId", "source", "ok", "count", "durationMs", "grabMs",
+                                          "decodeMs", "timestamp", "error")}
         summary["codes"] = codes
         for name, value in (("result/source", result["source"]), ("result/ok", result["ok"]),
                             ("result/count", result["count"]), ("result/text", first["text"]),
                             ("result/format", first["format"]),
                             ("result/codes", json.dumps(codes, ensure_ascii=False, separators=(",", ":"))),
                             ("result/duration-ms", float(result["durationMs"])),
+                            ("result/grab-ms", float(result["grabMs"] or 0.0)),
+                            ("result/decode-ms", float(result["decodeMs"])),
                             ("result/timestamp", result["timestamp"]), ("result/error", result["error"] or ""),
                             ("result/json", json.dumps(summary, ensure_ascii=False, separators=(",", ":"))),
                             ("result/request-id", result["requestId"]), ("result/sequence", result["sequence"])):

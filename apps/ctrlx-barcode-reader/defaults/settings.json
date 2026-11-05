@@ -7,14 +7,14 @@
   "camera": {
     "source": "gige",
     "address": "192.168.1.99",
-    "pixelFormat": "",
+    "pixelFormat": "Mono8",
     "exposureUs": 20000.0,
     "exposureAuto": "Off",
     "gain": 0.0,
     "gainAuto": "Off",
     "acquisition": "singleframe",
     "packetSize": 0,
-    "packetDelayUs": 40.0,
+    "packetDelayUs": -2.0,
     "timeoutMs": 3000,
     "buffers": 2
   },
@@ -28,6 +28,7 @@
     "maxCodes": 10,
     "roi": {
       "enabled": false,
+      "onCamera": false,
       "x": 0,
       "y": 0,
       "width": 0,
