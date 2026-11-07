@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the snap for ctrlX CORE hardware (X3/X5/X7: arm64), cross-built on amd64 in the ctrlX
+# Build the snap for the arm64 ctrlX COREs (X2, X3), cross-built on amd64 in the ctrlX
 # App Build Environment (multiarch set up by the SDK script install-required-packages.sh).
 # Warnings "Unable to determine library dependencies" may appear when cross-building - ignore them.
 #   ./build-snap-arm64.sh            incremental (default) - only changed parts are rebuilt

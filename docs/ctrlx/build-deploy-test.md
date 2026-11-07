@@ -46,7 +46,7 @@ python3 ../../tools/ui_check.py . --narrow     # + a 390 px wide (phone/HMI) scr
 python3 ../../tools/ui_check.py . --role reader   # as a user with only <snap>.web.all.r (auth on)
 ../../tools/check.sh . --ui                    # unit tests + ctrlX checks + UI check
 ```
-It opens the page, waits for `<body data-ui-ready="true">` (set by `www/app.js` once the data is shown),
+It opens the page, waits for `<body data-ui-ready="true">` (set by `www/app.js` with `Kit.ready()` once the data is shown),
 runs the app's `tests/ui_scenario.py` (clicks, named screenshots; template: Edit -> Set on a value, valid
 and invalid settings) and fails on JavaScript/console errors and HTTP errors. Screenshots land in
 `<app>/.ui-check/` (git-ignored) - **look at them**: layout problems don't fail the run. About 1 min per
@@ -136,13 +136,43 @@ The COREvirtual's license is the 4-hour engineering license; it shuts down after
    devices.toml credentials, opens `/<name>/?token=...` through the reverse proxy like the menu link and
    takes screenshots (scenarios change nothing on a device unless written to). The user still clicks
    through once per release (sidebar entry, permissions).
-3. Users & Permissions: a user with only `.r` sees read-only UI; without scopes the API returns 403.
+3. Users & Permissions: a user with only `.web.all.r` (view) sees no Edit and no Settings button, one with only
+   `.web.operate.x` (operate) edits values but has no Settings; without scopes the API returns 403. Locally:
+   `ui_check.py . --role reader|operator|writer`.
 4. Settings → Data Layer: `<name>/…` nodes readable; writable ones accept/reject correctly.
 5. Manage app data: `<name>/settings.json` exists; save a configuration, change a setting,
    load the configuration → the old value is back (load phases in the log). Over REST: `app-data-settings.md`.
 6. Reboot the device → app comes back, settings persisted.
 7. Before release: the arm64 snap on a real arm64 CORE (different CPU, slower) and the amd64 snap on a real amd64
    CORE if there is one (§3).
+
+## 5. Measuring CPU and memory of an app on a device
+
+Use the **System Analyzer** (`apps/ctrlx-system-analyzer`) as the instrument - no measuring script per app
+(the user's choice 2026-11-07, instead of a new `tools/ctrlx.py` command). Install it once on the test device
+(it stays there; it costs ~2.5 % of one app core on an X3 and ~60 MB RAM itself). It samples every app every 5 s
+from `/proc` (CPU in % of ONE core like `top`, RSS/anon/PSS in MB, threads) and keeps 2 h at 5 s, 24 h per minute,
+7 days per 10 min (min/avg/max). Read it over REST from the build VM:
+
+```bash
+# now: one JSON array with every app (key "snap:<name>": cpu, anonMb, rssMb, pssMb, threads, processes)
+tools/ctrlx.py --device x3 dl-read ctrlx-system-analyzer/apps/summary
+# a test run: rows per sample (raw tier, < 2 h) or per minute, min/avg/max of every metric, all apps -> filter
+t1=$(tools/ctrlx.py --device x3 api GET /ctrlx-system-analyzer/api/v1/status | python3 -c 'import json,sys;print(int(json.load(sys.stdin)["serverTime"]))')
+tools/ctrlx.py --device x3 api GET "/ctrlx-system-analyzer/api/v1/export?level=apps&format=csv&from=$((t1-900))&to=$t1" --out apps.csv
+grep -E '^epoch|snap:<name>,' apps.csv     # columns: cpu_pct_min/avg/max, anon_mb_*, rss_mb_*, pss_mb_*, threads_*
+# memory that grows (leak check over the analysis window, every minute): [] = nothing grows
+tools/ctrlx.py --device x3 dl-read ctrlx-system-analyzer/analysis/growing
+```
+
+* Take `from`/`to` from the device's clock (`serverTime` of its status): a CORE's clock can be days off (gotchas #75).
+* Mark the start of a test in the charts and the CSV: `tools/ctrlx.py --device x3 dl-write ctrlx-system-analyzer/events/marker '"test started"' --type string`
+  (writes to the analyzer only, runtime value).
+* `level=processes` / `threads` gives the same per process / thread; the web UI (`/ctrlx-system-analyzer/`) shows
+  the charts. An app's own key is `snap:<snap name>`.
+* Baseline (X3, ctrlX OS 4.6, 2026-11-07): the template app idles at 32.9 MB RSS / 14.6 MB anon, 0.2 % CPU.
+* Short CPU peaks below 5 s or a process' exact memory map are beyond it: over SSH `systemctl show -p MainPID --value
+  snap.<snap>.service.service`, then `/proc/<pid>/stat` fields 14+15 and `/proc/<pid>/status` (gotchas #58).
 
 ## Debugging
 

@@ -7,19 +7,23 @@ Outside the snap (development) it listens on http://127.0.0.1:8080 with the same
 
 The proxy forwards the FULL path, so every route starts with config.URL_PREFIX.
 
-Routes
+Routes (role = the lowest role that may call it, auth.py: view < operate < configure)
   GET  /<snap>/                      index.html (static, unrestricted, no data!)
-  GET  /<snap>/<file>                static assets from www/
-  GET  /<snap>/api/v1/status         read
-  GET  /<snap>/api/v1/settings       read
-  GET  /<snap>/api/v1/settings/meta  read   (defaults + rules for the UI)
-  PUT  /<snap>/api/v1/settings       write  (validate, persist to app data, apply)
-  POST /<snap>/api/v1/settings/reset write
-  GET  /<snap>/api/v1/values         read   (Data Layer nodes of this app)
-  PUT  /<snap>/api/v1/values/<name>  write  body {"value": ...}
-  POST /<snap>/api/v1/appdata/save   Solutions save command
-  POST /<snap>/api/v1/appdata/load   Solutions load command
+  GET  /<snap>/<file>                static assets from www/ (kit.js/kit.css: shared UI parts, widgets.js)
+  GET  /<snap>/api/v1/status         view       (incl. the caller's role)
+  GET  /<snap>/api/v1/values         view       (Data Layer nodes of this app the caller may see)
+  PUT  /<snap>/api/v1/values/<name>  NodeSpec.write_role (default operate)  body {"value": ...}
+  GET  /<snap>/api/v1/settings       configure
+  GET  /<snap>/api/v1/settings/meta  configure  (defaults + rules for the settings form)
+  PUT  /<snap>/api/v1/settings       configure  (validate, persist to app data, apply)
+  POST /<snap>/api/v1/settings/reset configure
+  POST /<snap>/api/v1/appdata/save   configure  Solutions save command
+  POST /<snap>/api/v1/appdata/load   configure  Solutions load command
 All /api paths are "restricted" in the manifest -> the proxy validates the token.
+
+Helpers for your own routes (Handler): _query() (query parameters), _send_bytes() (binary data and file
+downloads with a file name), _receive_file() (an upload streamed into the app data, never held in memory),
+_read_json() / _send_json() / _problem(). Raise UploadError(status, text) to reject an upload.
 """
 
 import http.server
@@ -30,7 +34,7 @@ import os
 import socketserver
 import threading
 import time
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from app import appdata_commands, auth, config
 from app.datalayer_nodes import NodeWriteError
@@ -38,9 +42,82 @@ from app.settings_store import SettingsError
 
 log = logging.getLogger("web")
 
-MAX_BODY_BYTES = 1024 * 1024
+MAX_BODY_BYTES = 1024 * 1024        # JSON bodies; uploads (_receive_file) have their own limit
+CHUNK_BYTES = 256 * 1024
+DRAIN_MAX_BYTES = 64 * 1024 * 1024  # read at most this much of a rejected upload, else close the connection
 STATIC_TYPES = {".html", ".js", ".css", ".svg", ".png", ".ico", ".json", ".woff2", ".map"}
 _START_TIME = time.monotonic()
+
+
+class UploadError(Exception):
+    """An upload that is rejected (status 400/409/413/...); the rest of the body is read before the answer."""
+
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+
+
+class RequestBody:
+    """A request body: read(n) returns at most the bytes still left of Content-Length."""
+
+    def __init__(self, rfile, length):
+        self._rfile, self.left = rfile, max(0, length)
+
+    def read(self, n):
+        data = self._rfile.read(min(n, self.left)) if self.left else b""
+        self.left = self.left - len(data) if data else 0     # nothing more: the client is gone
+        return data
+
+    def drain(self, limit=DRAIN_MAX_BYTES):
+        """Read the rest so the client gets our answer (http.server would otherwise close the socket and the
+        client sees a reset, gotchas #91). False when more than `limit` is left: close the connection instead."""
+        if self.left > limit:
+            return False
+        while self.left and self.read(CHUNK_BYTES):
+            pass
+        return True
+
+
+def receive_file(body, path, max_bytes, check=None):
+    """Stream a request body into <path>.tmp, then rename it to `path`; returns the size.
+
+    Put uploads into the app data folder (config.APPDATA_DIR): the manifest's appPrivateFiles keeps the
+    *.tmp file out of saved configurations. check(tmp_path) may look at the complete file first and raise
+    UploadError to reject it. Any failure removes the .tmp file; the caller drains the body."""
+    if body.left > max_bytes:
+        raise UploadError(413, "larger than {} bytes".format(max_bytes))
+    tmp = path + ".tmp"
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    try:
+        size = 0
+        with open(tmp, "wb") as f:
+            while body.left:
+                chunk = body.read(CHUNK_BYTES)
+                if not chunk:
+                    raise UploadError(400, "upload incomplete (connection closed)")
+                f.write(chunk)
+                size += len(chunk)
+            f.flush()
+            os.fsync(f.fileno())
+        if check is not None:
+            check(tmp)
+        os.replace(tmp, path)
+        return size
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def content_disposition(filename):
+    """Content-Disposition for a download: ASCII name plus the UTF-8 name (RFC 6266)."""
+    ascii_name = "".join(c if 32 <= ord(c) < 127 and c not in '"\\' else "_" for c in filename)
+    value = 'attachment; filename="{}"'.format(ascii_name)
+    if ascii_name != filename:
+        value += "; filename*=UTF-8''" + quote(filename, safe="")
+    return value
 
 
 class _UnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
@@ -125,6 +202,39 @@ def _make_handler(store, datalayer):
                 body["errors"] = errors
             self._send_json(status, body)
 
+        def _send_bytes(self, status, data, ctype, filename=None, cache_control="no-store"):
+            """Binary data (images, PDF, CSV, ...). filename: a download ("Save as" name, Kit.download() in
+            the page uses it). Content-addressed data may be cached: cache_control="private, max-age=3600"."""
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", cache_control)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            if filename:
+                self.send_header("Content-Disposition", content_disposition(filename))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _query(self):
+            """Query parameters of the request, first value of each: {"from": "17...", ...}."""
+            return {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
+
+        def _receive_file(self, path, max_bytes, check=None):
+            """Stream the request body into `path` (see receive_file); returns the size. On UploadError or
+            OSError the rest of the body is read first, so the client gets the answer (gotchas #91)."""
+            if self.headers.get("Content-Length") is None:
+                raise UploadError(411, "Content-Length required")
+            body = RequestBody(self.rfile, int(self.headers.get("Content-Length") or 0))
+            try:
+                return receive_file(body, path, max_bytes, check)
+            except (UploadError, OSError) as exc:
+                if not body.drain():
+                    self.close_connection = True
+                if isinstance(exc, UploadError):
+                    raise
+                log.error("Upload to %s failed: %s", path, exc)       # e.g. app data full
+                raise UploadError(500, "not stored: {}".format(exc.strerror or exc))
+
         def _read_body(self):
             length = int(self.headers.get("Content-Length") or 0)
             if length > MAX_BODY_BYTES:
@@ -169,6 +279,8 @@ def _make_handler(store, datalayer):
                     self._problem(404, "Not found")
             except auth.AuthError as exc:
                 self._problem(exc.status, exc.title)
+            except UploadError as exc:
+                self._problem(exc.status, "Upload rejected", str(exc))
             except ValueError as exc:
                 self._problem(400, "Bad request", str(exc))
             except Exception:
@@ -200,16 +312,16 @@ def _make_handler(store, datalayer):
         # -- API ----------------------------------------------------------
         def _api(self, method, route):
             if route == "/appdata/save" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_save(self._read_body(), store)
                 return self._send_json(status, body)
             if route == "/appdata/load" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_load(self._read_body(), store)
                 return self._send_json(status, body)
 
             if route == "/status" and method == "GET":
-                scopes = auth.require(self.headers, write=False)
+                scopes = auth.require(self.headers, auth.VIEW)
                 return self._send_json(200, {
                     "app": config.SNAP_NAME,
                     "title": config.APP_TITLE,
@@ -217,35 +329,51 @@ def _make_handler(store, datalayer):
                     "uptimeSeconds": int(time.monotonic() - _START_TIME),
                     "settings": store.status(),
                     "datalayer": datalayer.status(),
-                    "canWrite": auth.can_write(scopes),
+                    "user": auth.user_name(self.headers),
+                    "role": auth.role_of(scopes),           # view | operate | configure
+                    "canOperate": auth.allows(scopes, auth.OPERATE),
+                    "canConfigure": auth.allows(scopes, auth.CONFIGURE),
                 })
 
+            # settings: only for users who may change them (view/operate users don't see them at all; when the
+            # page needs a setting to show its data, give it to them through a view route of its own)
             if route == "/settings" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, store.get_redacted())
             if route == "/settings" and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 try:
                     store.update(self._read_json())
                 except SettingsError as exc:
                     return self._problem(400, "Invalid settings", errors=exc.errors)
-                log.info("Settings changed via web UI")
+                log.info("Settings changed via web UI by %s", auth.user_name(self.headers) or "?")
                 return self._send_json(200, store.get_redacted())
             if route == "/settings/meta" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, {"defaults": store.defaults(), "rules": store.rules(),
                                                  "types": store.types()})
             if route == "/settings/reset" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 store.reset_to_defaults(persist=True)
+                log.info("Settings reset to defaults via web UI by %s", auth.user_name(self.headers) or "?")
                 return self._send_json(200, store.get_redacted())
 
             if route == "/values" and method == "GET":
-                auth.require(self.headers, write=False)
-                return self._send_json(200, datalayer.registry.snapshot())
+                scopes = auth.require(self.headers, auth.VIEW)
+                values = {}
+                for name, entry in datalayer.registry.snapshot().items():
+                    if auth.allows(scopes, entry.pop("viewRole")):
+                        write_role = entry.pop("writeRole")
+                        entry["canWrite"] = entry["writable"] and auth.allows(scopes, write_role)
+                        values[name] = entry
+                return self._send_json(200, values)
             if route.startswith("/values/") and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.VIEW)
                 name = route[len("/values/"):]
+                spec = datalayer.registry.spec(name)
+                if spec is None:
+                    return self._problem(404, "Write rejected", "unknown node " + name)
+                auth.require(self.headers, spec.write_role)
                 body = self._read_json()
                 if not isinstance(body, dict) or "value" not in body:
                     return self._problem(400, "Body must be {\"value\": ...}")

@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Template App</title>
-  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy.
+       kit.css / kit.js: the kit's shared UI parts (don't edit them in an app); style.css / app.js: this app. -->
+  <link rel="stylesheet" href="kit.css">
   <link rel="stylesheet" href="style.css">
   <link rel="icon" href="data:,">
 </head>
@@ -16,13 +18,28 @@
       <h1 id="app-title">Template App</h1>
       <span id="app-version" class="muted"></span>
     </div>
-    <div id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</div>
+    <div class="topbar-right">
+      <!-- only shown to users who may not do everything ("View only", "Operator") -->
+      <span id="role" class="pill pill-role" hidden></span>
+      <span id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</span>
+      <!-- data-role="configure": only users who may change settings see it (kit.js) -->
+      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" data-role="configure" hidden
+              title="Settings" aria-label="Settings" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-sliders"/></svg><span class="btn-label">Settings</span></button>
+      <div class="menu-wrap">
+        <button type="button" id="btn-help" class="btn btn-small btn-help" title="Help" aria-label="Help"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu"><svg class="ic"><use href="#i-help"/></svg></button>
+        <div id="help-menu" class="menu" role="menu" aria-label="Help" hidden>
+          <a role="menuitem" id="help-page" href="https://example.com" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-external"/></svg>App page</a>
+          <button type="button" role="menuitem" id="btn-tutorial"><svg class="ic"><use href="#i-play"/></svg>Tutorial</button>
+        </div>
+      </div>
+    </div>
   </header>
 
   <div id="banner" class="banner" hidden></div>
 
   <main class="grid">
-    <section class="card" aria-labelledby="status-h">
+    <section class="card" id="status-card" aria-labelledby="status-h">
       <h2 id="status-h">Status</h2>
       <dl class="kv" id="status-list">
         <dt>Uptime</dt><dd id="st-uptime">–</dd>
@@ -33,32 +50,36 @@
       <p id="st-error" class="error" hidden></p>
     </section>
 
-    <section class="card" aria-labelledby="values-h">
+    <section class="card" id="values-card" aria-labelledby="values-h">
       <h2 id="values-h">Data Layer values</h2>
       <table class="values">
         <thead><tr><th>Address</th><th>Type</th><th>Value</th><th></th></tr></thead>
         <tbody id="values-body"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
       </table>
     </section>
-
-    <section class="card card-wide" id="settings" aria-labelledby="settings-h">
-      <div class="card-head">
-        <h2 id="settings-h">Settings</h2>
-        <span class="muted">Stored in ctrlX app data · saved and loaded with configurations</span>
-      </div>
-      <form id="settings-form" novalidate>
-        <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
-        <ul id="settings-errors" class="error-list" hidden></ul>
-        <div class="actions">
-          <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
-          <button type="button" id="btn-revert" class="btn">Revert</button>
-          <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
-          <span id="save-state" class="muted" aria-live="polite"></span>
-        </div>
-      </form>
-    </section>
   </main>
 
+  <!-- settings: slide in from the right; only for the configure role (kit.js Kit.setupSettings) -->
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+  <aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="settings-h" aria-hidden="true" inert>
+    <div class="card-head drawer-head">
+      <h2 id="settings-h">Settings</h2>
+      <button type="button" id="btn-close-settings" class="tool tool-bare" title="Close" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="muted drawer-note">Stored in ctrlX app data · saved and loaded with configurations</p>
+    <form id="settings-form" novalidate>
+      <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
+      <ul id="settings-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+        <button type="button" id="btn-revert" class="btn">Revert</button>
+        <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
+        <span id="save-state" class="muted" aria-live="polite"></span>
+      </div>
+    </form>
+  </aside>
+
+  <script src="kit.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

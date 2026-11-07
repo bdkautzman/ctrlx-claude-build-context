@@ -31,5 +31,7 @@ Read `docs/ctrlx/build-deploy-test.md` (and `docs/ctrlx/gotchas.md` when anythin
    the reverse proxy with a login token, screenshots - look at them; changes nothing on the device).
    Then ask the user to click through the UI (sidebar entry, settings save, permissions) - list exactly what to
    check (build-deploy-test.md §4).
+   CPU / memory of the app: read them from the System Analyzer on the device (`build-deploy-test.md` §5;
+   `tools/ctrlx.py --device NAME dl-read ctrlx-system-analyzer/apps/summary`), not with a script of the app's own.
 7. Optional, only when the user asks for one file for both architectures (`.app`): the package-app skill
    (`tools/make-app.sh <app>`). Normal builds and tests stay with the `.snap` files.

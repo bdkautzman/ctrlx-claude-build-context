@@ -19,7 +19,8 @@ Supported rule keys:
   itemPattern: arrays of strings - regular expression every element must match
   unique:   field name that must be unique within an array of objects (also used to match
             elements when restoring secrets)
-  Example with all of them: apps/ctrlx-core-monitor/app/settings_rules.py ("cores").
+  Example with items, unique, secret, pattern, maxItems: apps/ctrlx-core-connector/src/app/settings_rules.py
+  ("cores", the connections to other ctrlX COREs).
 
 The web UI fetches these rules from GET <api>/settings/meta and renders matching inputs.
 When you add a setting: add it to defaults/settings.json AND (if it has limits) here.

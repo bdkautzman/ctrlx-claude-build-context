@@ -13,7 +13,7 @@ and a settings JSON in ctrlX app data.
 | `.claude/agents/ctrlx-reviewer.md` | independent review subagent before hand-over |
 | `.claude/settings.json` | permissions (checks/tests allowed, device installs ask, reference read-only) + a hook that re-checks an app after edits to its snapcraft/manifest/validation files |
 | `docs/ctrlx/` | curated rules (start at `docs/ctrlx/README.md`), `decisions.md` (what was decided and why), `gotchas.md` (grows over time), verbatim SDK 4.6.0 docs in `upstream-sdk-4.6.0/` |
-| `templates/python-webapp/` | known-good template app (web UI + Data Layer provider + app-data settings, 32 unit tests, fake Data Layer, UI scenario for `tools/ui_check.py`) |
+| `templates/python-webapp/` | known-good template app (web UI with three roles, settings drawer, help/tutorial and home screen widget + Data Layer provider + app-data settings, 45 unit tests, fake Data Layer, UI scenario for `tools/ui_check.py`) |
 | `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/call app APIs/logs/ssh on a test device from `devices.toml`), `ui_check.py` + `setup-ui-test.sh` (web UI in headless Chromium with screenshots, locally or on a device), `pdf_check.py` (generated PDFs → PNG), `foss_from_prime.py` |
 | `reference/` | read-only: Python Data Layer API source 3.6.0, SDK 4.6.0 Python samples, ctrlX REST OpenAPI specs, example apps with notes |
 | `apps/` | your apps go here |
@@ -29,17 +29,19 @@ and a settings JSON in ctrlX app data.
    build environment (it also converts stray CRLF) and commit with the `git add --chmod=+x` it prints.
 3. In the build environment follow `docs/ctrlx/build-deploy-test.md` §0 (SDK 4.6.0, snapcraft 8.x,
    ctrlx-datalayer apt repo, `python3-yaml python3-jsonschema squashfs-tools`).
-4. Verify: `tools/check.sh templates/python-webapp --pre-build` → `RESULT: OK`
+4. Optional: `cp kit.example.toml kit.toml` and put your author, URL and (if you want one) the company part of
+   snap names in it - `tools/new_app.py` then needs only `--name <app> --title "..."`.
+5. Verify: `tools/check.sh templates/python-webapp --pre-build` → `RESULT: OK`
    and `python3 -m unittest discover -s tools/tests` → OK.
    Optional, so Claude can check web UIs in a real browser and look at screenshots: `tools/setup-ui-test.sh`
    (no root; prints one `sudo apt-get install` line for missing libraries/fonts, ~42 MB), then
    `python3 tools/ui_check.py templates/python-webapp` → `UI CHECK: OK`.
-5. First real build: `cd templates/python-webapp && ./build-snap-amd64.sh`, install it on the
+6. First real build: `cd templates/python-webapp && ./build-snap-amd64.sh`, install it on the
    COREvirtual (`tools/ctrlx.py install …`), click through. Whatever breaks → `docs/ctrlx/gotchas.md`.
    This one-time shakedown validates the parts of the kit that could not be tested without a device
    (listed under "Unverified assumptions" in gotchas.md).
 
-## Status (2026-11-04)
+## Status (2026-11-07)
 
 Test devices: amd64 tests move to a real amd64 CORE (X7, added 2026-11-04) when one is available (`docs/ctrlx/build-deploy-test.md` §3);
 on the X7 only `ctrlx-barcode-reader` is tested so far (0.2.0, its `KNOWN-ISSUES.md` 22 and 24).
@@ -50,8 +52,12 @@ Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (ar
 * one `.app` with both architectures installs on both devices (#49)
 * UI checks in headless Chromium (`tools/ui_check.py`), locally and on the COREvirtual (#52)
 * apps built with the kit, their versions and what they verified: `apps/README.md`
-* template `templates/python-webapp` 0.1.8 (first-start retry while app data is not writable, listen backlog 64;
-  0.1.7: settings validator hook, `minItems`/`itemPattern`)
+* template `templates/python-webapp` 0.2.0 (2026-11-07, from a review of the five apps: what several apps built
+  separately is now in the template - roles view / operate / configure, shared UI parts `www/kit.js` + `kit.css`
+  with settings drawer and help menu + tutorial, home screen widget, download/upload helpers, JSON nodes; its
+  CHANGELOG; on the X3 as admin - users with only view / operate not yet tried on a device); 0.1.8: first-start retry while app data is not writable, listen backlog 64;
+  0.1.7: settings validator hook, `minItems`/`itemPattern`
+* CPU/RAM of apps on a device: the System Analyzer is the instrument (`docs/ctrlx/build-deploy-test.md` §5)
 * generated PDFs are checked like UI screenshots: `tools/pdf_check.py` (PDFium renders the pages to PNG)
 * network access of a strict snap with the `network` plug, mapped for `ctrlx-network-scanner` (gotchas #61-#65)
 * `/proc` access of a strict snap with `system-observe` (connected by the ctrlX installer, gotchas #67), mapped for
@@ -70,12 +76,9 @@ Open items:
 * `ctrlx-barcode-reader`: real codes tested with one Code 128 label only (other symbologies: simulated); software trigger of the STC-MCS500POE does not work with Aravis 0.8.30 (#100); RAM ~100 MB (accepted for this
   app); its fossinfo is generated by a throwaway script - a kit tool for wheel/deb license files would be a new
   tool (ask first)
-* template candidates from `ctrlx-amr-fleet`: settings rule `format: "color"` with color fields in the
-  generated settings form (`minItems` / `itemPattern` are in the template since 0.1.7); a "settings only for users who may change them" option
-  (that app's `/view-config` pattern, gotchas #55); a help menu (`?`) with a step-by-step tutorial that
-  marks each control (ring overlay + card, `tests/ui_scenario.py` checks it); the help menu + tutorial, the
-  settings drawer (slides in from the right) and the home screen widget are now in two apps (`ctrlx-amr-fleet`,
-  `ctrlx-core-connector` - there the tutorial is a reusable `setupHelp(steps)` in `www/common.js`, spanning two pages)
+* template candidate from `ctrlx-amr-fleet` (one app so far): settings rule `format: "color"` with color fields in the
+  generated settings form. The apps made before template 0.2.0 keep their own versions of roles (read / read-write),
+  drawer, tutorial and widget - not changed (user's decision 2026-11-07)
 * still unverified parts of the kit: gotchas.md → "Unverified assumptions"
 * `ctrlx-system-analyzer`: leak verdicts so far only from 30-60 min test runs (synthetic leak) - no multi-hour/day
   ranges yet; an SD card as medium not tested (a USB stick was)

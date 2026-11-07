@@ -3,6 +3,41 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## 0.2.0
+
+- Roles: **view / operate / configure** (scopes `<snap>.web.all.r`, new `<snap>.web.operate.x`, `<snap>.web.all.rw`;
+  each includes the one before). `auth.require(headers, auth.VIEW|OPERATE|CONFIGURE)` instead of `write=True/False`;
+  `GET /status` answers `role`, `canOperate`, `canConfigure`, `user` (replaces `canWrite`). Writable Data Layer values
+  need operate (`NodeSpec.write_role`), settings and app data commands configure - reading the settings too
+  (view/operate users don't see them, as in ctrlx-amr-fleet and ctrlx-core-connector). `settings/active` is listed
+  in `GET /values` for configure only (`NodeSpec.view_role`). Menus and widget list all three scopes. The log line of
+  a settings change names the user. User's request (review of the five apps, 2026-11-07).
+- Web UI split: `www/kit.js` + `www/kit.css` hold what every app needs (token, `Kit.api` with at most 4 requests at a
+  time - gotchas #102, `Kit.download`, `Kit.upload`, status/role handling with `data-role` elements, the settings
+  form), `app.js` / `style.css` only the app's page. Settings moved into a **drawer** (slides in from the right) and
+  the page got a **help menu with a tutorial** (`Kit.setupHelp(steps)`) - both from ctrlx-amr-fleet /
+  ctrlx-core-connector, where each was built separately.
+- **Home screen widget** `ctrlx-acme-template-widget` (`www/widgets.js`, `www/widget.svg`, manifest `uiExtensions`,
+  `noInitialCreation: true`): the app's state and a few values, "Open" button. From ctrlx-amr-fleet /
+  ctrlx-core-connector.
+- Web server helpers for app routes: `_query()`, `_send_bytes(..., filename=...)` (downloads, `Content-Disposition`
+  also for non-ASCII names), `_receive_file(path, max_bytes, check)` (upload streamed into `<path>.tmp` in the app data,
+  fsync, rename; `UploadError` rejects it after reading the rest of the body - gotchas #91). From ctrlx-amr-fleet,
+  ctrlx-network-scanner, ctrlx-system-analyzer, ctrlx-barcode-reader.
+- Data Layer: JSON nodes - `NodeSpec(..., "string", obj, json=True)`: `set_internal` takes the object (compact JSON),
+  `get_json()`, writes must be valid JSON and `on_write` gets the parsed object. `settings/active` uses it. Every app
+  of the kit published JSON strings with its own `json.dumps`.
+- `tests/ui_scenario.py`: roles (`tools/ui_check.py --role reader|operator|writer`), drawer, tutorial, widget.
+- Build scripts name the right COREs (arm64: X2, X3; amd64: X5, X7, COREvirtual).
+- Verified 2026-11-07 on the ctrlX CORE X3 (arm64, ctrlX OS 4.6; update from 0.1.2, full build 8.5 MB): the device
+  lists the three scopes with their names (`GET /identity-manager/api/v2/scopes`), the widget with all three scopes and
+  `noInitialCreation` (`GET /package-manager/api/v1/manifests`), the app kept its settings, Data Layer 7 nodes incl. the
+  JSON node `settings/active`, `GET /status` answers role `configure` for the admin, `ui_check.py --device x3`
+  (page + widget through the reverse proxy) OK. Locally: `ui_check.py` as admin, reader, operator.
+  **Not tested on a device**: a ctrlX user with only the view or only the operate scope (needs such users on the
+  device), the widget on a real home screen, an upload through the reverse proxy with `_receive_file` (the same
+  pattern passed in ctrlx-amr-fleet 0.5.0, gotchas #91).
+
 ## 0.1.8
 
 - First start after an install: when the app data folder is there but not writable yet (gotchas #82), settings
@@ -44,7 +79,7 @@ Every release needs a higher version than the previous one (ctrlX validation rul
 
 - Settings rules: `items` (arrays of objects), `maxItems`, `unique`, `pattern` and `secret`
   (masked in API responses and the Data Layer node `settings/active`; a masked value sent back
-  keeps the stored one). From apps/ctrlx-core-monitor.
+  keeps the stored one). From apps/ctrlx-core-monitor (now ctrlx-core-connector).
 - Data Layer: a wrong-typed write to a read-only node answers `DL_PERMISSION_DENIED`
   (was `DL_TYPE_MISMATCH`).
 

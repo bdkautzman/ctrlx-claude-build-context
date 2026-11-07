@@ -48,11 +48,21 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
   library: license, size, aarch64 wheel / small custom version: rough size / reduce the feature or check it another
   way) and recommend one. Not needed for the code of the feature the user asked for, unit tests, small helpers or
   throwaway scripts in the scratchpad. Checklist: skill `new-ctrlx-app`; why: `docs/ctrlx/decisions.md`.
-- **Names**: snap `ctrlx-<company>-<app>` ≤ 29 chars; manifest file `<snap>.package-manifest.json` with `id` = snap name;
-  proxy name `<snap>.web`, url `/<snap>`; scopes `<snap>.web.<what>.<r|rw|x>`; Data Layer root `<snap>/`;
-  app-data dir `<snap>/`. Never keep identifiers from samples (`sdk-py-*`, `rexroth-python-webserver`).
+- **Names**: snap `ctrlx-[<company>-]<app>` ≤ 29 chars - the company part is optional (the apps so far have none;
+  the App Guide asks ctrlX World Partners for it before a validation; `company` in the git-ignored `kit.toml`, template
+  `kit.example.toml`); manifest file `<snap>.package-manifest.json` with `id` = snap name;
+  proxy name `<snap>.web`, url `/<snap>`; scopes `<snap>.web.all.r` (view), `<snap>.web.operate.x` (operate),
+  `<snap>.web.all.rw` (configure); Data Layer root `<snap>/`; app-data dir `<snap>/`; widget tag `<snap>-widget`.
+  Never keep identifiers from samples (`sdk-py-*`, `rexroth-python-webserver`).
 - **Web**: Unix socket only (`$SNAP_DATA/package-run/<snap>/web.sock`); all data endpoints under `/<snap>/api/` (restricted
-  in the manifest) with `auth.require()`; static files hold no data; relative URLs; no CDNs.
+  in the manifest) with `auth.require(headers, <role>)`; static files hold no data; relative URLs; no CDNs.
+- **Roles** (user's request 2026-11-07): view < operate < configure. Every route and every UI control belongs to the
+  lowest role that may use it: show = view, run the app (write runtime values, start/stop/trigger) = operate, change
+  its setup (settings, uploads of configuration files) = configure. Settings are configure-only. Ask the user when an
+  action's role is not obvious. Details: `docs/ctrlx/web-ui-and-reverse-proxy.md` "Roles".
+- **Shared UI parts**: `www/kit.js` + `www/kit.css` (API calls, roles, settings drawer, help menu + tutorial,
+  downloads/uploads) stay as they come from the template; app code goes into `app.js` / `style.css`. A feature
+  several apps need goes into the template (kit.js, `web_server.py` helpers), not into each app.
 - **Settings**: only through `SettingsStore` (validated, atomic, app data). Structure in `defaults/settings.json`,
   limits in `src/app/settings_rules.py`. Backward compatible forever (old configurations get loaded).
 - **Flash**: no log files, no cyclic disk writes (also not on Data Layer writes). Log to stdout via `logging`.
@@ -76,10 +86,10 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 
 ## Commands
 ```bash
-python3 tools/new_app.py --name ctrlx-<company>-<app> --title "<Title>" --author "<Company>" --url <url>
+python3 tools/new_app.py --name <app> --title "<Title>"   # prefix, author, url from kit.toml (else --author --url)
 tools/check.sh apps/<app> [--release] [--pre-build] [--snap file.snap]
 cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  (no ctrlX needed)
-python3 tools/ui_check.py apps/<app> [--narrow] [--role reader] [--device [NAME]]   # headless Chromium + screenshots (~1-2 min)
+python3 tools/ui_check.py apps/<app> [--narrow] [--role reader|operator|writer] [--device [NAME]]   # headless Chromium + screenshots (~1-2 min)
 python3 tools/pdf_check.py <file.pdf> [--text]  # a generated PDF: PDFium opens it, pages -> PNG to look at
 cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh; incremental, --clean for hand-over builds
 tools/ctrlx.py devices                         # test devices from devices.toml: name, arch, address, SSH user
@@ -88,6 +98,7 @@ tools/make-app.sh apps/<app> [--build] [--sign <oem-cert> <key>]   # optional, o
 tools/ctrlx.py [--device NAME] dl-read <snap>/status/heartbeat | appdata <snap>/settings.json | logs --snap <snap> | state
 tools/ctrlx.py [--device NAME] api GET /<snap>/api/v1/status [--data JSON] [--out file]   # the app's own API on the device
 tools/ctrlx.py [--device NAME] ssh 'sudo snap logs -n 50 <snap>'
+tools/ctrlx.py [--device NAME] dl-read ctrlx-system-analyzer/apps/summary   # CPU/RAM of every app (build-deploy-test.md §5)
 python3 -m unittest discover -s tools/tests    # self-test of the checker
 ```
 
@@ -100,6 +111,8 @@ python3 -m unittest discover -s tools/tests    # self-test of the checker
 | Data Layer | `docs/ctrlx/datalayer-python.md` |
 | settings / app data | `docs/ctrlx/app-data-settings.md` |
 | build, deploy, debug | `docs/ctrlx/build-deploy-test.md`, then `docs/ctrlx/gotchas.md` |
+| CPU / memory of an app on a device | `docs/ctrlx/build-deploy-test.md` §5 (System Analyzer) |
+| roles, shared UI parts (`kit.js`), uploads/downloads, widget | `docs/ctrlx/web-ui-and-reverse-proxy.md` |
 | hardware of a device: CPU, RAM, flash, ports, USB, SD | `reference/ctrlx-core-hardware/README.md` |
 | release | `docs/ctrlx/release-and-validation.md` |
 | an architectural choice (why X, not Y) | `docs/ctrlx/decisions.md` |

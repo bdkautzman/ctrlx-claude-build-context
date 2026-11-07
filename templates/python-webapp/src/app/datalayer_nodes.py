@@ -7,10 +7,17 @@ unit-testable on any PC.
 
 Address convention:  <DATALAYER_ROOT>/<group>/<name>, lowercase, '-' between words.
 Types: bool8, int64, uint64, float64, string  (map to types/datalayer/<type>).
+JSON nodes: a string node with json=True holds a JSON document (lists, summaries, a whole record from
+a PLC): set_internal() takes the Python object and stores it as compact JSON, get_json() returns it
+parsed, external writes must be valid JSON and on_write gets the parsed object.
 Writable nodes: validate EVERY write (type, range, finite). Never persist a value to
 disk on each Data Layer write - a PLC may write cyclically (flash wear).
+Web API roles (auth.py): view_role = who sees the node in GET /api/v1/values, write_role = who may
+write it through PUT /api/v1/values/<name>. Data Layer clients are not affected (ctrlX Data Layer
+permissions apply there).
 """
 
+import json
 import math
 import threading
 from dataclasses import dataclass, field
@@ -31,7 +38,11 @@ class NodeSpec:
     maximum: Optional[float] = None
     max_length: Optional[int] = None
     # called with the validated value BEFORE it is stored; raise NodeWriteError to reject it
+    # (json=True: with the parsed object)
     on_write: Optional[Callable[[Any], None]] = field(default=None, repr=False)
+    json: bool = False             # string node holding JSON (see the module docstring)
+    view_role: str = "view"        # web API: lowest role that sees the node (settings/active: "configure")
+    write_role: str = "operate"    # web API: lowest role that may write it (writable nodes only)
 
 
 class NodeWriteError(Exception):
@@ -74,6 +85,16 @@ def coerce(vtype, value):
     raise NodeWriteError("type", "unsupported node type " + vtype)
 
 
+def to_json_text(value):
+    """Compact JSON for a json=True node (a str is taken as JSON text already)."""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+
+
+ROLE_NAMES = ("view", "operate", "configure")   # = auth.ROLES (no import: this module stays standalone)
+
+
 class NodeRegistry:
     def __init__(self, root, specs: List[NodeSpec]):
         self.root = root.strip("/")
@@ -85,8 +106,13 @@ class NodeRegistry:
                 raise ValueError("unsupported type {} for {}".format(spec.vtype, spec.name))
             if spec.name in self._specs:
                 raise ValueError("duplicate node " + spec.name)
+            if spec.json and spec.vtype != "string":
+                raise ValueError("json=True needs vtype string: " + spec.name)
+            if spec.view_role not in ROLE_NAMES or spec.write_role not in ROLE_NAMES:
+                raise ValueError("unknown role for " + spec.name)
             self._specs[spec.name] = spec
-            self._values[spec.name] = coerce(spec.vtype, spec.initial)
+            initial = to_json_text(spec.initial) if spec.json else spec.initial
+            self._values[spec.name] = coerce(spec.vtype, initial)
 
     def specs(self):
         return list(self._specs.values())
@@ -98,9 +124,20 @@ class NodeRegistry:
         with self._lock:
             return self._values[name]
 
+    def get_json(self, name):
+        """Value of a json=True node, parsed."""
+        return json.loads(self.get(name))
+
+    def spec(self, name):
+        """The NodeSpec of a node, or None."""
+        return self._specs.get(name)
+
     def set_internal(self, name, value):
-        """Set a value from inside the app (no write-permission check, no on_write)."""
+        """Set a value from inside the app (no write-permission check, no on_write).
+        json=True nodes take the Python object (or JSON text)."""
         spec = self._specs[name]
+        if spec.json:
+            value = to_json_text(value)
         value = coerce(spec.vtype, value)
         with self._lock:
             self._values[name] = value
@@ -119,7 +156,14 @@ class NodeRegistry:
             raise NodeWriteError("range", "{} must be <= {}".format(name, spec.maximum))
         if spec.max_length is not None and isinstance(value, str) and len(value) > spec.max_length:
             raise NodeWriteError("range", "{} longer than {} characters".format(name, spec.max_length))
-        if spec.on_write:
+        if spec.json:
+            try:
+                parsed = json.loads(value)
+            except ValueError as exc:
+                raise NodeWriteError("invalid", "{}: not valid JSON ({})".format(name, exc))
+            if spec.on_write:
+                spec.on_write(parsed)  # may reject the document by raising NodeWriteError
+        elif spec.on_write:
             spec.on_write(value)  # may reject the value by raising NodeWriteError
         with self._lock:
             self._values[name] = value
@@ -136,6 +180,9 @@ class NodeRegistry:
                 "writable": spec.writable,
                 "description": spec.description,
                 "unit": spec.unit,
+                "json": spec.json,
+                "viewRole": spec.view_role,
+                "writeRole": spec.write_role,
             }
             for name, spec in self._specs.items()
         }
@@ -149,7 +196,7 @@ def build_node_specs(settings, version):
         NodeSpec("status/state", "string", "starting", description="Application state"),
         NodeSpec("status/heartbeat", "uint64", 0,
                  description="Counter incremented every general.heartbeatIntervalMs"),
-        NodeSpec("settings/active", "string", "{}",
+        NodeSpec("settings/active", "string", {}, json=True, view_role="configure",
                  description="Active settings as JSON (read-only, change via web UI or app data)"),
         NodeSpec("values/label", "string", example.get("label", ""),
                  description="Example read-only string from settings example.label"),

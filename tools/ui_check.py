@@ -6,7 +6,8 @@
                                                              opened through the reverse proxy with a login token
     options: --out DIR (default <app>/.ui-check/)  --narrow (also a 390 px wide screenshot)
              --no-scenario (only the start page)
-             --role reader|writer   local only: as a user with only <snap>.web.all.r / .rw (default: admin,
+             --role reader|operator|writer   local only: as a user with only <snap>.web.all.r / .web.operate.x /
+                                    .web.all.rw = the roles view / operate / configure (default: admin,
                                     auth off); screenshots get the role in their name
 
 One-time setup: tools/setup-ui-test.sh (Playwright + Chromium in ~/.cache, pinned; prints one sudo apt line).
@@ -17,7 +18,7 @@ What it does
      on a free port (APP_DEV_NO_AUTH=1, own app data, Data Layer off) - the app folder is not touched.
      --device: logs in with the devices.toml credentials and opens /<snap>/?token=... like the ctrlX menu.
   2. opens the page (1400 x 860) and waits until <body data-ui-ready="true">: index.html starts with
-     data-ui-ready="false", www/app.js sets "true" when its data is shown (and "false" while it loads
+     data-ui-ready="false", www/app.js sets "true" (Kit.ready()) when its data is shown (and "false" while it loads
      more). Pages without the attribute: load event + 3 s.
   3. runs run(ui) from the app's tests/ui_scenario.py (prepare(ui) before the page opens), see the template.
   4. exit 1 on JavaScript errors, console errors, HTTP responses >= 400 (unless the scenario allowed them)
@@ -101,7 +102,8 @@ class LocalApp:
             env["APP_DEV_NO_AUTH"] = "1"
         else:   # real scope checks with a token like the ctrlX menu link gives
             env.pop("APP_DEV_NO_AUTH", None)
-            suffix = {"reader": ".web.all.r", "writer": ".web.all.rw"}[role]
+            # the template's roles (auth.py): reader = view, operator = operate, writer = configure
+            suffix = {"reader": ".web.all.r", "operator": ".web.operate.x", "writer": ".web.all.rw"}[role]
             self.token = unsigned_token([snap + suffix], "ui-check-" + role)
         self.log_path = os.path.join(self.tmp, "app.log")
         self.log = open(self.log_path, "w")
@@ -234,8 +236,9 @@ def main():
     ap.add_argument("--out", help="screenshot folder (default <app>/.ui-check)")
     ap.add_argument("--narrow", action="store_true", help="also a 390 px wide (phone/HMI) screenshot")
     ap.add_argument("--no-scenario", action="store_true", help="ignore tests/ui_scenario.py")
-    ap.add_argument("--role", choices=("admin", "writer", "reader"), default="admin",
-                    help="local only: user role (reader = only <snap>.web.all.r); default admin, auth off")
+    ap.add_argument("--role", choices=("admin", "writer", "operator", "reader"), default="admin",
+                    help="local only: user role - reader = only <snap>.web.all.r (view), operator = only "
+                         "<snap>.web.operate.x (operate), writer = <snap>.web.all.rw (configure); default admin, auth off")
     args = ap.parse_args()
 
     app_dir = os.path.abspath(args.app)
@@ -247,7 +250,7 @@ def main():
     os.makedirs(out, exist_ok=True)
     prefix = ("local" if local else "device") + ("" if args.role == "admin" else "-" + args.role)
     for old in os.listdir(out):  # keep the folder about this run only (and this role)
-        if re.fullmatch(re.escape(prefix) + r"-(?!reader-|writer-)[^/]*\.png", old):
+        if re.fullmatch(re.escape(prefix) + r"-(?!reader-|writer-|operator-)[^/]*\.png", old):
             os.remove(os.path.join(out, old))
     scenario = None if args.no_scenario else load_scenario(app_dir)
 

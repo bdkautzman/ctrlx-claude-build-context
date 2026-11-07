@@ -15,4 +15,6 @@ Read `docs/ctrlx/app-data-settings.md` first.
 4. Compatibility: old `settings.json` files without the key still load (defaults fill it). Renames or
    meaning changes need a `settingsVersion` bump + migration in `SettingsStore.load_from_disk` + a test.
 5. Tests: `tests/test_settings.py` (validation of the new rule; the "every rule has a default" test must pass).
-6. The web form updates automatically (`/api/v1/settings/meta`). Check `./run-local.sh` → Settings card.
+6. The web form updates automatically (`/api/v1/settings/meta`, settings drawer in `www/kit.js`; only users with
+   the configure role see settings). Check `./run-local.sh` → Settings button. When the page needs the value to
+   show its data to view/operate users, give it to them through a view route of its own (not `/settings`).

@@ -1,0 +1,15 @@
+# Your defaults for tools/new_app.py, so a new app needs only its name and title.
+#
+#   cp kit.example.toml kit.toml      # then edit; kit.toml is git-ignored (the kit may be shared with others)
+#
+# Command-line options (--author, --url) win over this file.
+
+# Optional company part of new snap names: ctrlx-<company>-<app>. The ctrlX App Guide asks ctrlX World Partners to
+# put their company name into the snap name (needed before a Bosch app validation; renaming an app later means a
+# settings migration, see apps/ctrlx-core-connector/src/app/migrate.py). Empty: ctrlx-<app>.
+# With a company set, `new_app.py --name conveyor` creates ctrlx-<company>-conveyor.
+company = ""
+
+# Written into snap/snapcraft.yaml (description) and used as the "App page" link of the help menu.
+author = "ACME Automation"
+url = "https://acme.example"

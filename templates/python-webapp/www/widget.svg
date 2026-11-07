@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" width="240" height="160">
+  <!-- picture of the widget in the ctrlX home screen's widget list (manifest uiExtensions.dashboard[].image) -->
+  <rect x="1" y="1" width="238" height="158" rx="8" fill="#ffffff" stroke="#e1e4e8" stroke-width="2"/>
+  <text x="16" y="30" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#1f2328">Template App</text>
+  <rect x="124" y="16" width="62" height="20" rx="10" fill="none" stroke="#7fc3a4"/>
+  <text x="155" y="30" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#00884a" text-anchor="middle">running</text>
+  <rect x="192" y="16" width="36" height="20" rx="4" fill="none" stroke="#c9ced4"/>
+  <text x="210" y="30" font-family="Arial, sans-serif" font-size="11" fill="#007bc0" text-anchor="middle">Open</text>
+  <line x1="12" y1="46" x2="228" y2="46" stroke="#e1e4e8"/>
+  <g font-family="Arial, sans-serif" font-size="12">
+    <text x="16" y="70" fill="#6a737d">State</text><text x="96" y="70" fill="#1f2328">running</text>
+    <text x="16" y="94" fill="#6a737d">Label</text><text x="96" y="94" fill="#1f2328">Hello ctrlX</text>
+    <text x="16" y="118" fill="#6a737d">Setpoint</text><text x="96" y="118" fill="#1f2328">12.5</text>
+    <text x="16" y="142" fill="#6a737d">Enabled</text><text x="96" y="142" fill="#1f2328">true</text>
+  </g>
+</svg>

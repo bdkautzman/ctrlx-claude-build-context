@@ -11,12 +11,17 @@
         {
           "identifier": "ctrlx-acme-template.web.all.r",
           "name": "View Template App",
-          "description": "View status, values and settings of the Template App"
+          "description": "View: status and values of the Template App"
+        },
+        {
+          "identifier": "ctrlx-acme-template.web.operate.x",
+          "name": "Operate Template App",
+          "description": "View and operate: also write runtime values and start actions of the Template App (no settings)"
         },
         {
           "identifier": "ctrlx-acme-template.web.all.rw",
-          "name": "Manage Template App",
-          "description": "View and change values and settings of the Template App"
+          "name": "Configure Template App",
+          "description": "View, operate and configure: also change the settings of the Template App"
         }
       ]
     }
@@ -43,6 +48,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-acme-template.web.all.r",
+          "ctrlx-acme-template.web.operate.x",
           "ctrlx-acme-template.web.all.rw"
         ],
         "items": []
@@ -58,6 +64,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-acme-template.web.all.r",
+          "ctrlx-acme-template.web.operate.x",
           "ctrlx-acme-template.web.all.rw"
         ],
         "items": []
@@ -94,6 +101,39 @@
     ],
     "appPrivateFiles": [
       "^ctrlx-acme-template/.*\\.tmp$"
+    ]
+  },
+  "uiExtensions": {
+    "dashboard": [
+      {
+        "order": 100,
+        "src": "/ctrlx-acme-template/widgets.js",
+        "tag": "ctrlx-acme-template-widget",
+        "title": "Template App",
+        "description": "Status and values of the Template App",
+        "image": "/ctrlx-acme-template/widget.svg",
+        "initialSize": {
+          "cols": 3,
+          "rows": 3
+        },
+        "minSize": {
+          "cols": 3,
+          "rows": 2
+        },
+        "maxSize": {
+          "cols": 6,
+          "rows": 6
+        },
+        "noInitialCreation": true,
+        "permissions": [
+          "ctrlx-acme-template.web.all.r",
+          "ctrlx-acme-template.web.operate.x",
+          "ctrlx-acme-template.web.all.rw"
+        ],
+        "categories": [
+          "Apps"
+        ]
+      }
     ]
   }
 }

@@ -10,7 +10,11 @@ Read `docs/ctrlx/datalayer-python.md` first.
 1. Define it in `src/app/datalayer_nodes.py::build_node_specs()`:
    `NodeSpec("<group>/<name>", "<bool8|int64|uint64|float64|string>", initial, writable=..., minimum=..., maximum=...,
    max_length=..., description="...", unit="...", on_write=callback)`. Address: lowercase, `-` between words,
-   below the app root (= snap name).
+   below the app root (= snap name). A JSON document (list, summary, a record from a PLC): `"string"` with
+   `json=True` - `set_internal(name, obj)` stores compact JSON, writes must be valid JSON, `on_write` gets the object.
+   Web API roles: `write_role="operate"` (default; `"configure"` for nodes that change the setup), `view_role="view"`
+   (default; `"configure"` hides it from the others in `GET /values`). Data Layer clients follow the ctrlX user's
+   Data Layer permissions instead.
 2. Values set by the app: `registry.set_internal(name, value)` (e.g. from a worker thread or settings listener).
    Writes from outside: validated by `NodeRegistry.write`; side effects in `on_write` (fast, non-blocking,
    **no disk writes**).

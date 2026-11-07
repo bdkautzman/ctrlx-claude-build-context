@@ -3,9 +3,13 @@
 
     python3 tools/new_app.py --name ctrlx-acme-conveyor --title "Conveyor Monitor" \
         --author "ACME Automation" --url https://acme.example
+    python3 tools/new_app.py --name conveyor --title "Conveyor Monitor"     # with kit.toml
 
 Creates apps/<name>/ with every identifier replaced (snap name, manifest id, proxy URL,
-scopes, Data Layer root, app-data directory, file names), then runs the checks.
+scopes, Data Layer root, app-data directory, widget tag, file names), then runs the checks.
+
+Defaults come from <kit>/kit.toml (git-ignored; template kit.example.toml): `author`, `url` and the optional
+`company`. A --name without the "ctrlx-" prefix becomes ctrlx-<company>-<name> (ctrlx-<name> without a company).
 """
 
 import argparse
@@ -16,6 +20,11 @@ import stat
 import subprocess
 import sys
 
+try:
+    import tomllib  # Python 3.11+
+except ImportError:  # pragma: no cover
+    tomllib = None
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 KIT = os.path.dirname(HERE)
 TEMPLATE = os.path.join(KIT, "templates", "python-webapp")
@@ -24,21 +33,51 @@ T_NAME = "ctrlx-acme-template"
 T_TITLE = "Template App"
 T_AUTHOR = "ACME Automation"
 T_URL = "https://example.com"
-TEXT_EXT = {".py", ".json", ".yaml", ".yml", ".toml", ".md", ".sh", ".html", ".js", ".css", ".txt", ""}
+TEXT_EXT = {".py", ".json", ".yaml", ".yml", ".toml", ".md", ".sh", ".html", ".js", ".css", ".svg", ".txt", ""}
+KIT_TOML = os.path.join(KIT, "kit.toml")
+
+
+def load_kit_defaults(path=KIT_TOML):
+    """author / url / company from kit.toml ({} without the file)."""
+    if not os.path.exists(path):
+        return {}
+    if tomllib is None:
+        sys.exit("reading {} needs Python 3.11+ (tomllib)".format(path))
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return {k: str(data[k]).strip() for k in ("author", "url", "company") if k in data}
+
+
+def snap_name(name, company=""):
+    """--name as given (ctrlx-...), or ctrlx-[<company>-]<name> for a short name."""
+    name = name.strip()
+    if name.startswith("ctrlx-"):
+        return name
+    return "ctrlx-" + (company + "-" if company else "") + name
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--name", required=True, help="snap name: ctrlx-<company>-<app>, lowercase, <= 29 chars")
+    ap.add_argument("--name", required=True,
+                    help="snap name ctrlx-[<company>-]<app> (lowercase, <= 29 chars), or just <app>: "
+                         "the prefix then comes from kit.toml (company)")
     ap.add_argument("--title", required=True, help="display title, 3..40 chars")
-    ap.add_argument("--author", required=True, help="company / author for the snap description")
-    ap.add_argument("--url", required=True, help="company / product URL for the snap description")
+    ap.add_argument("--author", help="company / author for the snap description (default: kit.toml author)")
+    ap.add_argument("--url", help="company / product URL: snap description, help menu link (default: kit.toml url)")
     ap.add_argument("--dest", default=os.path.join(KIT, "apps"))
     args = ap.parse_args()
 
-    name, title = args.name.strip(), args.title.strip()
-    if not re.fullmatch(r"ctrlx-[a-z0-9]+(-[a-z0-9]+)+", name):
-        sys.exit("name must look like ctrlx-<company>-<app> (lowercase letters, digits, single dashes)")
+    defaults = load_kit_defaults()
+    author = (args.author or defaults.get("author") or "").strip()
+    url = (args.url or defaults.get("url") or "").strip()
+    if not author or not url:
+        sys.exit("--author and --url are needed (or set author / url in kit.toml, template kit.example.toml)")
+    company = defaults.get("company", "")
+    name, title = snap_name(args.name, company), args.title.strip()
+    if not re.fullmatch(r"ctrlx-[a-z0-9]+(-[a-z0-9]+)*", name):
+        sys.exit("name must look like ctrlx-<app> or ctrlx-<company>-<app> (lowercase letters, digits, single dashes)")
+    if company and not name.startswith("ctrlx-{}-".format(company)):
+        print("Note: kit.toml has company = {!r}, but {} does not contain it".format(company, name))
     if len(name) > 29:
         sys.exit("name must be <= 29 characters (socket path limit of the reverse proxy)")
     if not 3 <= len(title) <= 40:
@@ -60,7 +99,7 @@ def main():
 
     shutil.copytree(TEMPLATE, dest, ignore=ignore)
 
-    replacements = [(T_NAME, name), (T_TITLE, title), (T_AUTHOR, args.author), (T_URL, args.url)]
+    replacements = [(T_NAME, name), (T_TITLE, title), (T_AUTHOR, author), (T_URL, url)]
     for root, _, files in os.walk(dest):
         for fn in files:
             path = os.path.join(root, fn)

@@ -3,8 +3,11 @@
 ctrlX OS 4.6 app (snap, `core24`) written in Python:
 
 * **Web UI** served on a Unix socket behind the ctrlX reverse proxy, opened from the ctrlX
-  sidebar / overview (new tab), permissions via ctrlX scopes. No Settings-page tile: the ctrlX
-  Settings page can't open a new tab (docs/ctrlx/package-manifest.md).
+  sidebar / overview (new tab). No Settings-page tile: the ctrlX Settings page can't open a new tab
+  (docs/ctrlx/package-manifest.md). Settings in a drawer, help menu with a tutorial.
+* **Three roles** (ctrlX scopes, Settings → Users & Permissions): *View* (`ctrlx-acme-template.web.all.r`: status
+  and values), *Operate* (`.web.operate.x`: also write the runtime values), *Configure* (`.web.all.rw`: also settings).
+* **Home screen widget** "Template App" (state and values, "Open" button) - add it from the home screen's widget list.
 * **Data Layer provider** with nodes under `ctrlx-acme-template/…`.
 * **Settings** as `settings.json` in the ctrlX **app data** (Solutions active configuration),
   saved/loaded with configurations and editable in the web UI or "Manage app data".
@@ -23,18 +26,20 @@ ctrlX OS 4.6 app (snap, `core24`) written in Python:
 | `src/app/settings_rules.py` | value rules for settings (enum/min/max/labels) |
 | `src/app/datalayer_nodes.py` | **the nodes this app provides** (`build_node_specs`) |
 | `src/app/datalayer_service.py` | ctrlxdatalayer provider glue (reconnects automatically) |
-| `src/app/web_server.py` | HTTP routes (static UI + `/api/v1/...`) |
+| `src/app/web_server.py` | HTTP routes (static UI + `/api/v1/...`) with their roles; helpers for downloads and uploads |
+| `src/app/auth.py` | roles view / operate / configure from the token's scopes |
 | `src/app/settings_store.py` | load/validate/persist/watch settings in app data |
 | `src/app/appdata_commands.py` | Solutions save/load phases |
-| `www/` | web UI (plain HTML/JS/CSS, no CDN) |
+| `www/` | web UI (plain HTML/JS/CSS, no CDN): `index.html` + `app.js` + `style.css` = this app's page; `kit.js` + `kit.css` = the kit's shared parts (leave them as they are); `widgets.js` + `widget.svg` = home screen widget |
 | `validation/` | slot/plug, unix socket, port descriptions (Bosch app validation) |
-| `tests/` | unit tests incl. a fake `ctrlxdatalayer` |
+| `tests/` | unit tests incl. a fake `ctrlxdatalayer`; `ui_scenario.py` for `tools/ui_check.py` |
 
 ## Develop
 
 ```bash
 python3 -m unittest discover -s tests -t .     # tests, any PC
 ./run-local.sh                                  # http://127.0.0.1:8080/ctrlx-acme-template/
+python3 ../../tools/ui_check.py . --role operator   # the page in headless Chromium as an operator (reader, writer)
 ../../tools/check.sh .                          # ctrlX compliance checks
 ./build-snap-amd64.sh                           # snap for amd64: CORE X5/X7, COREvirtual (incremental)
 ./build-snap-arm64.sh                           # snap for arm64: CORE X2/X3

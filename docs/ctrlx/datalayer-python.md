@@ -9,8 +9,16 @@ do not guess signatures.** SDK samples: `reference/sdk-4.6.0-samples-python/data
 
 * `src/app/datalayer_nodes.py` – **edit here**: `build_node_specs()` returns `NodeSpec`s
   (`name`, `vtype` ∈ bool8/int64/uint64/float64/string, `initial`, `writable`, `minimum`,
-  `maximum`, `max_length`, `description`, `unit`, `on_write`). `NodeRegistry` holds values,
-  validates writes. Pure Python → unit-testable.
+  `maximum`, `max_length`, `description`, `unit`, `on_write`, `json`, `view_role`, `write_role`).
+  `NodeRegistry` holds values, validates writes. Pure Python → unit-testable.
+* **JSON nodes** (template 0.2.0): `NodeSpec("apps/summary", "string", [], json=True)` - every app of the kit
+  publishes lists and summaries as JSON strings. `registry.set_internal(name, obj)` stores the object as compact
+  JSON (UTF-8, no spaces), `registry.get_json(name)` parses it; a writable one rejects text that isn't JSON
+  (`DL_INVALID_VALUE`) and its `on_write` gets the parsed object. `max_length` counts the JSON text.
+  Example: `settings/active`.
+* `view_role` / `write_role` ("view" | "operate" | "configure", defaults "view" / "operate"): who sees / writes the
+  node through the app's web API (`GET/PUT /api/v1/values`). Data Layer clients (PLC, REST) are NOT affected:
+  there the ctrlX user's Data Layer permissions apply.
 * `src/app/datalayer_service.py` – glue to `ctrlxdatalayer` (lazy import), provider lifecycle,
   automatic reconnect every 5 s, heartbeat. Rarely needs changes.
 * `tests/fakes/ctrlxdatalayer` – minimal fake used by `tests/test_datalayer_glue.py`.
@@ -81,7 +89,7 @@ subtree (gotchas #88). Keep the address logic in a pure-Python class (`amr_input
 number type on writes (a PLC writes REAL or INT); merge many single writes into one state update when the
 writes pause, not per write.
 
-## Client (reading other nodes) - verified 2026-10-21, see `apps/ctrlx-core-monitor`
+## Client (reading other nodes) - verified 2026-10-21, see `apps/ctrlx-core-connector` (until 0.1.x `ctrlx-core-monitor`)
 
 * Same `System` as the provider: `client = system.factory().create_client("ipc://")`; close it
   before `system.stop()`. Wrap it in a small adapter (read / create / remove that raise an

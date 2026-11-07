@@ -20,9 +20,14 @@ API_PREFIX = URL_PREFIX + "/api/v1"
 # Root of all Data Layer nodes this app provides
 DATALAYER_ROOT = SNAP_NAME
 
-# Scopes declared in the package manifest (scopes-declaration)
-SCOPE_READ = SNAP_NAME + ".web.all.r"
-SCOPE_WRITE = SNAP_NAME + ".web.all.rw"
+# Scopes declared in the package manifest (scopes-declaration) - three roles, each includes the one before
+# (auth.py, docs/ctrlx/web-ui-and-reverse-proxy.md "Roles"):
+#   view       see status, values and results
+#   operate    + run the app: write runtime values, start/stop/trigger actions (no settings)
+#   configure  + settings and everything else
+SCOPE_VIEW = SNAP_NAME + ".web.all.r"
+SCOPE_OPERATE = SNAP_NAME + ".web.operate.x"
+SCOPE_CONFIGURE = SNAP_NAME + ".web.all.rw"
 SCOPE_ADMIN = "rexroth-device.all.rwx"  # built-in ctrlX admin scope: always full access
 
 # ---------------------------------------------------------------------------

@@ -14,3 +14,6 @@ apps/*/*.app
 /reference/ctrlx-core-hardware/pdf/
 # device credentials for tools/ctrlx.py (template: devices.example.toml)
 /devices.toml
+
+# your defaults for tools/new_app.py (template: kit.example.toml)
+/kit.toml

@@ -66,7 +66,7 @@ class ValidateTest(unittest.TestCase):
 
 
 class ItemsPatternSecretRulesTest(unittest.TestCase):
-    """Generic rule keys (used e.g. by apps/ctrlx-core-monitor for its list of connections)."""
+    """Generic rule keys (used e.g. by apps/ctrlx-core-connector for its list of connections)."""
     DEFAULTS = {"token": "", "peers": []}
     RULES = {
         "token": {"secret": True},

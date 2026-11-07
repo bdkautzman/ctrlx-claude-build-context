@@ -14,7 +14,6 @@ ctrlxdatalayer is imported lazily so the rest of the app (web UI, settings) can 
 PC without the native libcomm_datalayer library.
 """
 
-import json
 import logging
 import threading
 
@@ -29,7 +28,7 @@ RECONNECT_DELAY_S = 5.0
 class DataLayerService:
     def __init__(self, settings, version):
         self.registry = NodeRegistry(config.DATALAYER_ROOT, build_node_specs(settings, version))
-        self.registry.set_internal("settings/active", json.dumps(settings, separators=(",", ":")))
+        self.registry.set_internal("settings/active", settings)   # a JSON node (json=True)
         self._heartbeat_s = settings["general"]["heartbeatIntervalMs"] / 1000.0
         self._stop = threading.Event()
         self._thread = None
@@ -55,7 +54,7 @@ class DataLayerService:
 
     def on_settings_changed(self, settings):
         """SettingsStore listener."""
-        self.registry.set_internal("settings/active", json.dumps(settings, separators=(",", ":")))
+        self.registry.set_internal("settings/active", settings)
         self.registry.set_internal("values/label", settings["example"]["label"])
         self._heartbeat_s = settings["general"]["heartbeatIntervalMs"] / 1000.0
 

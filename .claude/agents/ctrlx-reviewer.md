@@ -9,7 +9,11 @@ report findings only.
 
 1. Run `tools/check.sh apps/<name> --release` and include its result.
 2. Review against `docs/ctrlx/*.md` (start with CLAUDE.md "Hard rules"). Look especially for:
-   - API routes without `auth.require`, data under non-restricted paths, secrets in static files or logs
+   - API routes without `auth.require`, or with a role that doesn't fit (view = show, operate = run the app,
+     configure = change its setup; settings configure-only), UI controls a role can't use but sees,
+     data under non-restricted paths, secrets in static files or logs
+   - app code in `www/kit.js` / `kit.css` (belongs in `app.js` / `style.css`); a feature rebuilt that the template
+     already has (settings drawer, help/tutorial, `Kit.download`/`upload`, `_send_bytes`/`_receive_file`, JSON nodes)
    - writes to disk on every Data Layer write or in loops; log files; unbounded memory (caches, lists)
    - blocking work inside Data Layer callbacks; callbacks that may not call `cb` exactly once
    - settings changes bypassing `SettingsStore`; breaking changes to `settings.json` without migration

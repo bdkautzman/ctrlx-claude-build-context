@@ -1,6 +1,7 @@
 # Web UI behind the ctrlX reverse proxy
 
-Implementation: `templates/python-webapp/src/app/web_server.py`, `src/app/auth.py`, `www/`.
+Implementation: `templates/python-webapp/src/app/web_server.py`, `src/app/auth.py`, `www/` (`kit.js` + `kit.css`:
+shared UI parts, `app.js` + `style.css` + `index.html`: the app's page, `widgets.js` + `widget.svg`: home screen widget).
 
 ## Request path
 
@@ -24,18 +25,44 @@ Browser ──HTTPS──► ctrlX reverse proxy (port 443) ──HTTP over Unix
 ## Authentication & authorization
 
 1. Menu link `"/<name>/?token=${bearertoken}"` → ctrlX inserts the user's JWT.
-2. `www/app.js` moves the token from the URL to `sessionStorage` (removes it from history) and
+2. `www/kit.js` (apps before template 0.2.0: `www/app.js`) moves the token from the URL to `sessionStorage` (removes it from history) and
    sends `Authorization: Bearer <token>` with every API call.
 3. Manifest `restricted: ["/<name>/api"]` → the proxy validates signature/expiry of the token
    for those paths and rejects invalid ones.
 4. The app reads the `scope` claim (list) from the JWT payload **without** signature
    verification - safe only because of step 3 and the Unix-socket-only binding.
-5. Read endpoints need `<name>.web.all.r` or `.rw` or `rexroth-device.all.rwx`; write endpoints
-   need `.rw` or admin. Return 401 (no/invalid token) / 403 (missing scope) as Problem JSON.
+5. Every API route names the lowest role that may call it: `auth.require(self.headers, auth.VIEW | auth.OPERATE |
+   auth.CONFIGURE)` ("Roles" below). Return 401 (no/invalid token) / 403 (role missing) as Problem JSON.
 6. Static files are unrestricted (the page must load without a header) → **never put data or
    secrets into static files**; anything data-bearing goes under `/api`.
 
 Token lifetime is limited; on 401 the UI tells the user to reopen the app from the ctrlX menu.
+
+## Roles: view / operate / configure (template 0.2.0, user's request 2026-11-07)
+
+| Role | Scope | May | Template routes |
+|---|---|---|---|
+| view | `<name>.web.all.r` | see status, values, results | `GET /status`, `GET /values` |
+| operate | `<name>.web.operate.x` | + write runtime values, start/stop/trigger/abort, acknowledge | `PUT /values/<name>` (`NodeSpec.write_role`) |
+| configure | `<name>.web.all.rw`, `rexroth-device.all.rwx` | + settings, uploads that change the configuration, app data commands | `/settings*`, `/appdata/*` |
+
+* Each role includes the ones before it (`auth.allows(scopes, role)`, `auth.role_of(scopes)`). The ctrlX admin always
+  configures. Same three levels as ctrlX OS's own services (`scheduler.view/operate/manage`).
+* Decide per route: does it only show something (view), run the app without changing how it is set up (operate),
+  or change the setup (configure)? Examples from the apps: trigger a barcode read, start/abort a scan, write a marker,
+  switch continuous reading = operate; scan profiles, camera address, connections to other cores, map uploads = configure.
+* Settings are configure-only, reading included (amr-fleet and core-connector both hid them from read-only users,
+  gotchas #55). When the page needs a setting to show its data (a unit, a color), give it to everyone through a view
+  route of its own with just those values (amr-fleet: `GET /view-config`).
+* Data Layer nodes: `NodeSpec(view_role=..., write_role=...)` for the web API (`GET /values` lists only what the role
+  may see and says `canWrite` per node; `settings/active` is configure-only). **Writes through the Data Layer itself
+  (PLC, REST `/automation/api/v2/nodes`) are not affected** - there the ctrlX user's Data Layer permissions apply.
+* `GET /status` answers `role`, `canOperate`, `canConfigure` and `user` (login name; also in the log line of a
+  settings change). In the page: `Kit.can("operate")`, and `data-role="operate"|"configure"` on elements only those
+  roles see (kit.js hides them for the others); a pill in the top bar says "View only" / "Operator".
+* Test locally: `python3 tools/ui_check.py <app> --role reader|operator|writer` (view / operate / configure);
+  unit tests: `tests/test_web_and_nodes.py` `test_roles_on_routes`. On a device: a user with only one of the scopes
+  (Settings → Users & Permissions).
 
 Alternative: restricted path object with `"headersForwarding": ["X-Auth-Scopes", ...]` lets
 the proxy pass decoded claims as headers (format not verified in this kit - see gotchas).
@@ -51,33 +78,62 @@ the proxy pass decoded claims as headers (format not verified in this kit - see 
   slow down to ≥ 2 s while `document.hidden`. (CPU load on a real CORE: not measured yet.)
 * **Images/binary data from the API**: `<img src="api/...">` can't send the `Authorization` header
   (→ 401 on restricted paths). Use `fetch()` with the header → `res.blob()` → `createImageBitmap()`
-  (canvas) or `URL.createObjectURL()` (`<img>`). Content-addressed URLs (hash in the path) can be
-  cached: `Cache-Control: private, max-age=...`.
+  (canvas) or `URL.createObjectURL()` (`<img>`). Server: `self._send_bytes(200, data, "image/png")`;
+  content-addressed URLs (hash in the path) can be cached: `cache_control="private, max-age=3600"`.
 * **File downloads (PDF/CSV/JSON reports) from the API**: an `<a href="api/...">` can't send the header
-  either. `fetch()` with the header → `res.blob()` → `URL.createObjectURL()` → a temporary
-  `<a download>` that is clicked and removed; the server sets `Content-Disposition: attachment;
-  filename="..."` and the page takes the name from it. Example: `apps/ctrlx-network-scanner/www/app.js`
-  `download()`; `tests/ui_scenario.py` checks it with Playwright's `page.expect_download()`.
+  either. Page: `Kit.download(path, fallbackName)` (fetch with the token → blob → a temporary `<a download>`);
+  server: `self._send_bytes(200, data, "text/csv", filename="report.csv")` sets `Content-Disposition` (also for
+  non-ASCII names). `tests/ui_scenario.py` checks a download with Playwright's `page.expect_download()`.
+* **File uploads** (maps, recipes, images): page `Kit.upload("PUT", path, file, onProgress)` (XMLHttpRequest: progress);
+  server `size = self._receive_file(path, max_bytes, check=None)` streams the body into `<path>.tmp` in the app data
+  (manifest `appPrivateFiles` keeps `*.tmp` out of configurations), fsyncs and renames it - never in memory. Raise
+  `UploadError(status, text)` (also from `check(tmp_path)`) to reject; the rest of the body is read before the answer,
+  otherwise the client sees a reset instead of it (gotchas #91). The reverse proxy passes big uploads (8.7 MB tested).
+* **Many requests at once**: `Kit.api` runs at most 4 at a time and queues the rest - the reverse proxy answered 502
+  when a page fired ~50 at once (gotchas #102; the server's listen backlog is 64 since template 0.1.8).
 * **PDF documents**: no PDF library is needed - `apps/ctrlx-network-scanner/src/app/pdf_writer.py` (stdlib,
   standard fonts, tables via `report_pdf.py`) is self-contained and reusable. Look at what it produces
   with `python3 tools/pdf_check.py file.pdf` (pages → PNG + text), like UI screenshots.
 * Large pictures (maps, layouts): serve tiles per zoom level and load only the visible ones -
   `apps/ctrlx-amr-fleet/src/app/occupancy_map.py` (1-bit palette PNG with stdlib `zlib`) and the
   tile cache in its `www/app.js`.
-* Show permission state: disable inputs when the user lacks the write scope (`/status` returns `canWrite`).
-* `<body data-ui-ready="false">` in `index.html`; `app.js` sets `"true"` once the data is shown (and
-  `"false"` while it loads more, e.g. map tiles). `tools/ui_check.py` waits for it before screenshots -
+* Show permission state: hide what the user's role can't do (`data-role="operate"|"configure"`, `Kit.can(...)`;
+  `GET /values` says `canWrite` per node) instead of showing controls that answer 403.
+* `<body data-ui-ready="false">` in `index.html`; `app.js` calls `Kit.ready()` once the data is shown (and
+  `Kit.ready(false)` while it loads more, e.g. map tiles). `tools/ui_check.py` waits for it before screenshots -
   Playwright's "network idle" never happens on a page that polls.
 * Errors from the API are RFC 7807 Problem JSON: `{"type","title","status","detail", "errors"?}`.
 
 ## Adding an endpoint (checklist)
 
-1. Route in `web_server.py` `_api()` with `auth.require(headers, write=...)`.
-2. Path below `/api/v1` (already restricted). Validate input; return Problem JSON on errors.
-3. Unit test in `tests/test_web_and_nodes.py` (incl. 401/403 cases).
+1. Route in `web_server.py` `_api()` with `auth.require(self.headers, auth.VIEW|OPERATE|CONFIGURE)` ("Roles").
+2. Path below `/api/v1` (already restricted). Validate input; return Problem JSON on errors (`self._problem`).
+   Helpers: `self._query()`, `self._read_json()`, `self._send_json()`, `self._send_bytes()`, `self._receive_file()`.
+3. Unit test in `tests/test_web_and_nodes.py` (incl. 401/403 per role).
 4. If it changes settings → go through `SettingsStore.update()` (persists + notifies).
 
+## Shared UI parts: `www/kit.js` + `www/kit.css` (template 0.2.0)
+
+What every app of the kit built the same way lives there instead of in each `app.js` (the user's request
+2026-11-07: features several apps need are built once, in the kit): token handling and `Kit.api` (with the
+request limit), `Kit.download` / `Kit.upload`, `Kit.refreshStatus` (title, version, Data Layer pill, role pill,
+`data-role` elements), the **settings drawer** (`Kit.setupSettings`: form generated from `GET /settings/meta`,
+slides in from the right, configure role only), the **help menu + tutorial** (`Kit.setupHelp(steps)`: a card that
+steps through the page's controls and rings each one, "Show me" actions, ← → keys; from ctrlx-amr-fleet and
+ctrlx-core-connector), `Kit.ready`, `Kit.poll` (skips while the tab is hidden), icons (`Kit.icon`, `<use href="#i-...">`).
+The list of functions is at the top of `kit.js`.
+
+* An app keeps its own code in `app.js` / `style.css` and leaves `kit.js` / `kit.css` as they came from the
+  template, so a newer version can be copied over. Something every app needs → change it in the template.
+* `index.html` holds the markup kit.js works with (top bar buttons, help menu, drawer); its comments name the ids.
+* Apps made before 0.2.0 have their own copies of these parts (`www/app.js`, core-connector `www/common.js`).
+
 ## Home screen widgets (`uiExtensions.dashboard`) - verified on ctrlX OS 4.6 (COREvirtual, 2026-10-23), see `apps/ctrlx-amr-fleet`
+
+The template has one since 0.2.0: `www/widgets.js` (the app's state and the nodes listed in `ROWS`, an "Open" button)
+and `www/widget.svg` (its picture in the widget list); manifest `uiExtensions.dashboard` with all three role scopes
+and `"noInitialCreation": true` (users add it from the list - a new app doesn't put itself on every home screen;
+remove the flag when it should). Adapt `ROWS` and the title, or remove the three pieces when the app has no use for one.
 
 * A widget is a **Web Component** in a JS file the app serves as a static file (e.g. `/<snap>/widgets.js`,
   unrestricted like other static files - it holds no data). The manifest entry names `src`, `tag`

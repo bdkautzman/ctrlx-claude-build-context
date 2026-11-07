@@ -17,12 +17,18 @@ Template: `templates/python-webapp/configs/package-assets/ctrlx-acme-template.pa
 ### `scopes-declaration` (permissions)
 ```json
 {"identifier": "<name>.web", "name": "...", "description": "...",
- "scopes": [{"identifier": "<name>.web.all.r",  "name": "View ...",   "description": "..."},
-            {"identifier": "<name>.web.all.rw", "name": "Manage ...", "description": "..."}]}
+ "scopes": [{"identifier": "<name>.web.all.r",      "name": "View ...",      "description": "..."},
+            {"identifier": "<name>.web.operate.x",  "name": "Operate ...",   "description": "..."},
+            {"identifier": "<name>.web.all.rw",     "name": "Configure ...", "description": "..."}]}
 ```
-Scope id pattern `<id>.<service>.<scope_name>.<access>` with access `r|w|rw|x`. The admin scope
-`rexroth-device.all.rwx` must always grant full access. The app **must enforce** scopes itself
-(`src/app/auth.py`). Don't copy scope ids from samples (`rexroth-python-webserver.web…` appears in
+Three roles since template 0.2.0 (user's request 2026-11-07): **view** (status, values, results), **operate**
+(+ write runtime values, start/stop/trigger actions - no settings), **configure** (+ settings); each includes the
+one before. ctrlX OS's own services use the same three levels (`scheduler.view/operate/manage`,
+`diagnosis.*`, `logbook.*` on a CORE's Users & Permissions page). Apps made before 0.2.0 have only `.r` and `.rw`.
+Every menu entry and widget lists all three scopes in `permissions`, otherwise users with only one of the
+lower roles don't see it. Scope id pattern `<id>.<service>.<scope_name>.<access>` with access `r|w|rw|x`.
+The admin scope `rexroth-device.all.rwx` must always grant full access. The app **must enforce** scopes itself
+(`src/app/auth.py`: `auth.require(headers, auth.OPERATE)`, docs/ctrlx/web-ui-and-reverse-proxy.md "Roles"). Don't copy scope ids from samples (`rexroth-python-webserver.web…` appears in
 real apps that were copied from the SDK sample - check `MANIFEST-SCOPES`).
 
 ### `services.proxyMapping` (reverse proxy)
