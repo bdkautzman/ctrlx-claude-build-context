@@ -100,7 +100,9 @@ First device test, 2026-10-20 (App Build Environment VM → ctrlX COREvirtual 4.
 28. **First start: `Data Layer provider start failed: Result.CLIENT_NOT_CONNECTED`** → the content
     interfaces are connected (by Device Admin) after the first start; snapd restarts the service
     and the provider comes up. Also on every SERVICE↔OPERATING switch the provider disconnects
-    and reconnects within seconds. Harmless as long as the app retries (template does).
+    and reconnects within seconds. Harmless as long as the app retries (template does). Since template 0.3.0 this is
+    logged as INFO; ERROR only when the Data Layer is still missing after 60 s (`DownTimeLog`) - before, every kit app
+    put an error line into the Logbook at every boot.
 29. **`tools/tests` `test_template_passes` fails with `SRC-EXEC-BIT`, `tools/check.sh: Permission denied`**
     after the Windows transfer → `bash tools/fix-permissions.sh` (see #2); in git the restored
     bits show up as mode changes - commit them so a fresh clone keeps them.
@@ -694,3 +696,11 @@ App `ctrlx-barcode-reader` (GigE Vision camera, Aravis + OpenCV + zxing-cpp), 20
     save, which matters for a default that reaches for hardware (`camera.source`). Other apps didn't restart and their settings files stayed the same over 11 loads.
 109. **A GigE camera that is gone: closing it blocks** (Aravis 0.8.30, X7, 2026-11-05). Dropping the `ArvCamera` after `control-lost` took about 8 s, and a read during that time waits. Set a status such as `camera/state` before
     closing, not after, or it reports `connected` all that time. The heartbeat does notice a pulled cable while idle.
+110. **"Too many sessions": the device refuses logins of the devices.toml user** (X3, ctrlX OS 4.6, 2026-11-07). `POST
+    /identity-manager/api/v2/auth/token` answered HTTP 400 `"dynamicDescription":"Too many sessions"` (diagnosis 080E0200 /
+    0C7A0202) after a day of tests: `tools/ctrlx.py` logged in on every call and never logged out, and every
+    `ui_check.py --device` run added one more session - the identity manager limits sessions per user
+    (`GET/PUT /identity-manager/api/v2/settings/session`: `maxSessionsPerUser`, `sessionTimeout`, `tokenValidity`;
+    open ones: `GET /sessions`, `DELETE /sessions/{id}`). The same user's browser login is then refused too. Fix:
+    both tools end their session with `DELETE /identity-manager/api/v2/auth/token` (`Device.logout()`). Scripts that
+    log in themselves must log out as well. Old sessions end only with their timeout.

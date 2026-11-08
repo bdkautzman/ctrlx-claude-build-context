@@ -80,6 +80,11 @@
       text: () => "The nodes this app provides in the ctrlX Data Layer (" + Kit.PREFIX.slice(1) + "/…). " +
         (can("operate") ? "Writable ones have an Edit button: the value holds until the app restarts."
           : "Users with the operate permission can change the writable ones here.") },
+    { title: "A command", target: () => [...document.querySelectorAll("#values-body tr")]
+        .filter((tr) => tr.textContent.includes("/commands/set-setpoint/")),
+      text: "commands/set-setpoint shows how a PLC starts something in the app (Execute / Busy / Done / Error): write " +
+        "target, then execute true; busy is true while it works, then done (or error with error-text). Writing " +
+        "execute false resets done and error. Here it copies target into values/setpoint after 1 s." },
     { title: "Settings", when: () => can("configure"), target: () => $("btn-settings"),
       text: "Opens the settings. They are stored in the ctrlX app data, so they are saved and loaded with " +
         "configurations. Only users who may change settings see this button.",

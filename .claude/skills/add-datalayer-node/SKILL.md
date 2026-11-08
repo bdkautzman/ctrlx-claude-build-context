@@ -15,6 +15,9 @@ Read `docs/ctrlx/datalayer-python.md` first.
    Web API roles: `write_role="operate"` (default; `"configure"` for nodes that change the setup), `view_role="view"`
    (default; `"configure"` hides it from the others in `GET /values`). Data Layer clients follow the ctrlX user's
    Data Layer permissions instead.
+   A PLC starts an action in the app (trigger, start, measure): `PlcCommand(path, run, params=[...])` and
+   `*cmd.specs()` - Execute / Busy / Done / Error, the kit's standard handshake (`docs/ctrlx/datalayer-python.md`
+   "PLC commands"); no own trigger/request-id scheme. The worker behind it: `Commands` + `bind()`.
 2. Values set by the app: `registry.set_internal(name, value)` (e.g. from a worker thread or settings listener).
    Writes from outside: validated by `NodeRegistry.write`; side effects in `on_write` (fast, non-blocking,
    **no disk writes**).

@@ -148,6 +148,7 @@ class DeviceApp:
         import ctrlx  # the kit's REST client: devices.toml, login
         target = ctrlx.resolve_target(ctrlx.load_devices(ctrlx.DEFAULT_DEVICES_FILE), os.environ, device)
         dev = ctrlx.Device(target["api_host"], target["api_user"], target["api_password"], target["verify_tls"])
+        self.dev = dev
         self.token = dev.token()
         self.verify_tls = target["verify_tls"]
         self.base = "{}/{}".format(dev.base, snap)
@@ -155,7 +156,7 @@ class DeviceApp:
         self.name = device or "default device"
 
     def stop(self):
-        pass
+        self.dev.logout()   # end the session of this login (gotchas #110)
 
 
 class UI:

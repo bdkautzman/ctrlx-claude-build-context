@@ -53,6 +53,25 @@ def run(ui):
         setpoint.get_by_role("button", name="Set").click()
         setpoint.locator("td.val", has_text="12.5").wait_for()
 
+        # the example PLC command (PlcCommand): target -> execute true -> done -> execute false
+        def row(name):
+            return page.locator("#values-body tr", has_text="/commands/set-setpoint/" + name)
+
+        def set_value(name, value, select=False):
+            row(name).get_by_role("button", name="Edit").click()
+            field = row(name).locator("select" if select else "input")
+            field.select_option(value) if select else field.fill(value)
+            row(name).get_by_role("button", name="Set").click()
+            row(name).locator("td.val", has_text=value).wait_for()
+
+        set_value("target", "33")
+        set_value("execute", "true", select=True)
+        row("done").locator("td.val", has_text="true").wait_for()           # after ~1 s
+        setpoint.locator("td.val", has_text="33").wait_for()
+        ui.shot("command-done")
+        set_value("execute", "false", select=True)
+        row("done").locator("td.val", has_text="false").wait_for()
+
     if configure:  # settings drawer: a valid change is saved, an invalid one is rejected with a field error
         page.click("#btn-settings")
         page.locator("#drawer.open #f-example-label").wait_for()

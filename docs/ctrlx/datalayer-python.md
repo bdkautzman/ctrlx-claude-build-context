@@ -67,6 +67,50 @@ Client (reading other nodes) – same system, `system.factory().create_client("i
   or a JSON string node (simple, used by community apps; consumers must parse it).
 * Node names in Data Layer UI: Settings → Data Layer → `<name>/`.
 
+## PLC commands: Execute / Busy / Done / Error (template 0.3.0, the kit's standard, user's choice 2026-11-07)
+
+When a PLC starts something in the app (a measurement, a read, a scan, a job), use `PlcCommand` from
+`src/app/datalayer_nodes.py` - before 0.3.0 four apps did this four different ways (a string that starts, an abort
+bool, a trigger the app resets, a request id). It is the PLCopen function-block pattern PLC programmers know:
+
+| Node `<path>/...` | Type | | Meaning |
+|---|---|---|---|
+| `execute` | bool8 | W | a rising edge starts; a start while busy is rejected (`DL_INVALID_VALUE`); true written again does nothing (cyclic writes are fine) |
+| `busy` | bool8 | R | true while it runs |
+| `done` | bool8 | R | finished without error - until `execute` is written false |
+| `error` / `error-text` | bool8 / string | R | failed, and why - until `execute` is written false |
+| `<param>` | any | W | parameters, read at the rising edge (`params=[NodeSpec("target", "float64", 0.0, ...)]`) |
+
+PLC sequence: write the parameters → `execute := TRUE` → wait for `done OR error` → read the results →
+`execute := FALSE`. When `execute` goes false while it is still busy, `done`/`error` show the result until the
+next start (a Data Layer node has no "one PLC cycle", unlike a PLCopen function block).
+
+```python
+def run_scan(params, registry):             # its own thread, one at a time
+    result = scanner.scan(params["profile"])    # may take seconds
+    registry.set_internal("last/summary", result)   # results first: complete when done goes true
+    # raise CommandError("unknown profile") -> error = true, error-text = that text
+
+scan = PlcCommand("scan/start", run_scan, description="start a scan",
+                  params=[NodeSpec("profile", "string", "quick", max_length=32)])
+return [..., *scan.specs()]                 # in build_node_specs
+```
+
+* The web UI writes the same nodes (operate role: `write_role`), so the page and a PLC use one path.
+* The action needs the app's worker, which needs the registry: `Commands` (below) binds it after both exist.
+* Example in the template: `commands/set-setpoint` (copies `target` into `values/setpoint` after 1 s; error while
+  `values/enabled` is false), unit tests `tests/test_web_and_nodes.py` `PlcCommandTest`, UI step in `tests/ui_scenario.py`.
+* Not tried with a real ctrlX PLC yet (only REST and the web UI); a PLC writes `execute` as BOOL = bool8.
+
+## Nodes that call the app: `Commands` (template 0.3.0)
+
+The nodes are built before the object that does the work (it needs `datalayer.registry` to publish its results).
+`main.py`: `commands = Commands()` → `DataLayerService(settings, version, commands)` (passed on to
+`build_node_specs(settings, version, commands)`) → `worker = Worker(registry=datalayer.registry)` →
+`commands.bind(worker)`. In the nodes, `commands.start(...)`; before `bind()` every call is rejected with
+`DL_INVALID_VALUE` ("not ready"), and `need(commands)` rejects when tests pass no commands. Three apps had built
+this by hand (`ReaderCommands`, `DataLayerCommands`, `commands=services.queries`).
+
 ## JSON string input node (structured data from a PLC) - see `apps/ctrlx-amr-fleet`
 
 When a PLC/fleet manager sends a whole list at once (e.g. all AMR positions), one writable `string`

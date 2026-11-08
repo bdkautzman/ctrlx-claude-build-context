@@ -91,5 +91,36 @@ class GlueTest(unittest.TestCase):
         self.assertEqual(self.provider.nodes, {})  # unregistered on disconnect
 
 
+class DownTimeLogTest(unittest.TestCase):
+    """No ERROR in the Logbook while a missing Data Layer is expected (first start, state switch, gotchas #28)."""
+
+    def test_levels(self):
+        from app.datalayer_service import DownTimeLog
+        now = [100.0]
+        down = DownTimeLog(grace_s=60, repeat_s=600, clock=lambda: now[0])
+
+        def levels(text):
+            with self.assertLogs("datalayer", level="DEBUG") as logs:
+                down.failed(text)
+            return [r.levelname for r in logs.records]
+
+        self.assertEqual(levels("start failed"), ["INFO"])            # right after the app start
+        now[0] += 59
+        self.assertEqual(levels("start failed"), ["INFO"])
+        now[0] += 2
+        self.assertEqual(levels("start failed"), ["ERROR"])           # lasts > 60 s
+        now[0] += 5
+        self.assertEqual(levels("start failed"), ["DEBUG"])           # not at every retry
+        now[0] += 600
+        self.assertEqual(levels("start failed"), ["ERROR"])           # again after 10 min
+        with self.assertLogs("datalayer", level="INFO") as logs:
+            down.up()
+        self.assertIn("connected again", logs.output[0])
+        now[0] += 1000
+        down.down()                                                     # e.g. SERVICE <-> OPERATING
+        now[0] += 10
+        self.assertEqual(levels("start failed"), ["INFO"])
+
+
 if __name__ == "__main__":
     unittest.main()

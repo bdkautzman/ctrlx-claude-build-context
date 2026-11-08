@@ -70,7 +70,8 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
   large libraries, big buffers), say so with an estimate and ask the user before building (AskUserQuestion, with
   ways to stay below it); an accepted exception goes into the app README and `docs/ctrlx/decisions.md`.
 - **Data Layer**: look up signatures in `reference/ctrlxdatalayer-api-3.6.0/` – never guess. Callbacks call `cb` exactly once.
-  Nodes are declared in `src/app/datalayer_nodes.py::build_node_specs`.
+  Nodes are declared in `src/app/datalayer_nodes.py::build_node_specs`. A PLC starts actions through `PlcCommand`
+  (Execute / Busy / Done / Error, user's choice 2026-11-07) - no app-specific trigger schemes.
 - **Secrets**: no credentials in snap code (`ipc://` needs none). Device credentials only in the git-ignored
   `devices.toml` (template `devices.example.toml`) or env vars for tools - never in committed files.
 - **Versions**: bump `version` (snap/snapcraft.yaml + src/pyproject.toml) and CHANGELOG for every build you hand over.

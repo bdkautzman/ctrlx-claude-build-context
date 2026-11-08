@@ -16,6 +16,7 @@ PC without the native libcomm_datalayer library.
 
 import logging
 import threading
+import time
 
 from app import config
 from app.datalayer_nodes import NodeRegistry, NodeWriteError, build_node_specs
@@ -23,17 +24,58 @@ from app.datalayer_nodes import NodeRegistry, NodeWriteError, build_node_specs
 log = logging.getLogger("datalayer")
 
 RECONNECT_DELAY_S = 5.0
+DOWN_GRACE_S = 60.0      # no Data Layer for this long is expected (first start, SERVICE <-> OPERATING): INFO, not ERROR
+DOWN_REPEAT_S = 600.0    # a longer outage: ERROR again every 10 min, not at every retry
+
+
+class DownTimeLog:
+    """Log lines while the provider can't start or lost its connection. Right after the app starts (the content
+    interfaces are connected after the daemon starts) and at every SERVICE <-> OPERATING switch the Data Layer is
+    gone for a few seconds (gotchas #28): INFO then - every kit app wrote an ERROR into the Logbook at every boot.
+    ERROR only when it lasts longer than grace_s, then again every repeat_s."""
+
+    def __init__(self, grace_s=DOWN_GRACE_S, repeat_s=DOWN_REPEAT_S, clock=time.monotonic):
+        self.grace_s, self.repeat_s, self.clock = grace_s, repeat_s, clock
+        self.since = clock()          # the app starts without a connection
+        self.last_error = None
+
+    def down(self):
+        """The connection was lost."""
+        if self.since is None:
+            self.since = self.clock()
+
+    def failed(self, text):
+        """The provider could not start (it retries)."""
+        now = self.clock()
+        if self.since is None:
+            self.since = now
+        lasting = now - self.since
+        if lasting < self.grace_s:
+            log.info("%s - waiting for the Data Layer, retry in %.0f s", text, RECONNECT_DELAY_S)
+        elif self.last_error is None or now - self.last_error >= self.repeat_s:
+            self.last_error = now
+            log.error("%s - no Data Layer for %.0f s, still retrying", text, lasting)
+        else:
+            log.debug(text)
+
+    def up(self):
+        """Connected (again)."""
+        if self.since is not None and self.last_error is not None:
+            log.info("Data Layer connected again after %.0f s", self.clock() - self.since)
+        self.since, self.last_error = None, None
 
 
 class DataLayerService:
-    def __init__(self, settings, version):
-        self.registry = NodeRegistry(config.DATALAYER_ROOT, build_node_specs(settings, version))
+    def __init__(self, settings, version, commands=None):
+        """commands: the app's actions behind command nodes (datalayer_nodes.Commands), passed to build_node_specs."""
+        self.registry = NodeRegistry(config.DATALAYER_ROOT, build_node_specs(settings, version, commands))
         self.registry.set_internal("settings/active", settings)   # a JSON node (json=True)
         self._heartbeat_s = settings["general"]["heartbeatIntervalMs"] / 1000.0
         self._stop = threading.Event()
         self._thread = None
         self._status_lock = threading.Lock()
         self._status = {"enabled": False, "connected": False, "error": None, "registered": 0}
+        self._downtime = DownTimeLog()
 
     # -- public -------------------------------------------------------------
     def start(self):
@@ -109,7 +151,7 @@ class DataLayerService:
                 result = provider.start()
                 if result != Result.OK:
                     self._set_status(connected=False, error="provider.start() failed: {}".format(result))
-                    log.error("Data Layer provider start failed: %s (%s)", result, conn.split("@")[-1])
+                    self._downtime.failed("Data Layer provider start failed: {} ({})".format(result, conn.split("@")[-1]))
                     return
                 nodes = []
                 for spec in self.registry.specs():
@@ -122,6 +164,7 @@ class DataLayerService:
                     nodes.append(node)  # keep references: GC would destroy the callbacks
                 self.registry.set_internal("status/state", "running")
                 self._set_status(connected=True, error=None, registered=len(nodes))
+                self._downtime.up()
                 log.info("Data Layer provider running, %d nodes under %s/", len(nodes), self.registry.root)
 
                 while not self._stop.is_set() and provider.is_connected():
@@ -129,7 +172,8 @@ class DataLayerService:
                     self._tick()
 
                 if not self._stop.is_set():
-                    log.warning("Data Layer provider disconnected - reconnecting")
+                    log.info("Data Layer provider disconnected - reconnecting")   # e.g. SERVICE <-> OPERATING (#28)
+                    self._downtime.down()
                 self._set_status(connected=False, registered=0)
                 for node in nodes:
                     provider.unregister_node(self.registry.address(node.spec.name))

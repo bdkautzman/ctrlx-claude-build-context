@@ -190,6 +190,21 @@ class Device:
             self._token = body["access_token"]
         return self._token
 
+    def logout(self):
+        """End the session of this login (DELETE /auth/token). The identity manager allows a user only so many
+        sessions: one login per call without a logout ended in "Too many sessions" (HTTP 400 on login) for the
+        devices.toml user after a day of tests - also for that user's browser login (gotchas #110)."""
+        if self._token is None:
+            return
+        token, self._token = self._token, None
+        req = urllib.request.Request(self.base + "/identity-manager/api/v2/auth/token", method="DELETE",
+                                     headers={"Authorization": "Bearer " + token})
+        try:
+            with self.opener.open(req, timeout=15):
+                pass
+        except Exception:   # the session times out on the device anyway
+            pass
+
 
 def cmd_packages(dev, args):
     _, _, pkgs = dev.request("GET", "/package-manager/api/v1/packages")
@@ -217,6 +232,7 @@ STATE_NODE = "scheduler/admin/state"  # writable: SERVICE / SETUP / OPERATING (c
 
 def _get_state(dev):
     """Operating state of the device, or None if the device has no scheduler node."""
+    dev.token()    # a failed login is an error, not "no state" (it printed None during gotchas #110)
     try:
         _, _, body = dev.request("GET", _node_path(STATE_NODE))
     except SystemExit:
@@ -487,7 +503,10 @@ def main():
     args.target = resolve_target(args.devices, os.environ, args.device, args.host, args.user, args.password)
     t = args.target
     dev = Device(t["api_host"], t["api_user"], t["api_password"], t["verify_tls"])  # logs in on first request
-    args.fn(dev, args)
+    try:
+        args.fn(dev, args)
+    finally:
+        dev.logout()        # one session per call, ended right away (gotchas #110)
 
 
 if __name__ == "__main__":

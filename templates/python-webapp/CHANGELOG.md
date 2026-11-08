@@ -3,6 +3,25 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## 0.3.0
+
+- **PLC commands** with the PLCopen handshake Execute / Busy / Done / Error (+ error-text, parameters):
+  `PlcCommand(path, run, params=[...])` in `datalayer_nodes.py`, the kit's standard (user's choice 2026-11-07).
+  Example `commands/set-setpoint` (copies `target` into `values/setpoint` after 1 s; error while `values/enabled`
+  is false), unit tests, UI-scenario step, tutorial step. Before, four apps built four different trigger schemes.
+- `Commands` + `bind()`: nodes that call the app's worker, which is created after the registry (`build_node_specs(...,
+  commands)`, `DataLayerService(..., commands)`); three apps had built this by hand.
+- Data Layer not there at the start or after a SERVICE <-> OPERATING switch: INFO instead of ERROR, ERROR only when it
+  lasts over 60 s, then every 10 min (`DownTimeLog`, gotchas #28) - every app logged an error at every boot (X3 Logbook).
+- `NodeSpec.group`: an object with `bind(registry)` that made the node (used by `PlcCommand`).
+- Verified 2026-11-07 on the ctrlX CORE X3 (arm64, incremental build 8.5 MB): 13 nodes; the handshake over the Data Layer
+  REST API (as a PLC writes): target + execute true -> done and values/setpoint set, error with error-text while
+  values/enabled is false, true written again ignored, execute false resets; the start-up log has no error line
+  (an update: the Data Layer was there at once). Locally: unit tests, `ui_check.py` as admin, reader, operator.
+  **Not tested on a device**: a start while busy (unit tests only - each REST call from the build VM takes ~1 s, longer
+  than the example's work), the log levels after a reboot, `ui_check.py --device` for 0.3.0 (the X3 refused logins
+  of the test user at that point, gotchas #110), a real ctrlX PLC writing the nodes.
+
 ## 0.2.0
 
 - Roles: **view / operate / configure** (scopes `<snap>.web.all.r`, new `<snap>.web.operate.x`, `<snap>.web.all.rw`;

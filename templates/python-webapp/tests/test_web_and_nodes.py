@@ -10,7 +10,8 @@ import time
 import unittest
 
 from app import auth, config
-from app.datalayer_nodes import NodeRegistry, NodeSpec, NodeWriteError, build_node_specs
+from app.datalayer_nodes import (CommandError, Commands, NodeRegistry, NodeSpec, NodeWriteError, PlcCommand,
+                                  build_node_specs, need)
 from app.datalayer_service import DataLayerService
 from app.settings_rules import RULES
 from app.settings_store import SettingsStore
@@ -127,12 +128,124 @@ class NodeRegistryTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             NodeRegistry("root", [NodeSpec("j/x", "string", "", view_role="admin")])
 
+    def test_commands_bound_later(self):
+        """Command nodes call the app through a Commands that is bound after the registry exists."""
+        class Worker:
+            def __init__(self):
+                self.started = []
+
+            def start(self, what):
+                self.started.append(what)
+
+        commands = Commands()
+        reg = NodeRegistry("root", [NodeSpec("cmd/start", "string", "", writable=True,
+                                             on_write=lambda v: commands.start(v))])
+        with self.assertRaises(NodeWriteError) as ctx:          # not bound yet: rejected, no exception
+            reg.write("cmd/start", "a")
+        self.assertEqual(ctx.exception.reason, "invalid")
+        worker = Worker()
+        commands.bind(worker)
+        reg.write("cmd/start", "b")
+        self.assertEqual(worker.started, ["b"])
+        with self.assertRaises(NodeWriteError):
+            need(None)
+
     def test_template_specs_are_valid(self):
         with open(DEFAULTS_FILE, encoding="utf-8") as f:
             settings = json.load(f)
         reg = NodeRegistry(config.DATALAYER_ROOT, build_node_specs(settings, "1.0.0"))
         for name in reg.snapshot():
             self.assertRegex(name, r"^[a-z0-9-]+(/[a-z0-9-]+)*$", "use lowercase-dash node names")
+
+
+class PlcCommandTest(unittest.TestCase):
+    """The kit's PLC handshake: execute (rising edge) -> busy -> done | error (+ error-text) -> execute false."""
+
+    def setUp(self):
+        import threading
+        self.go = threading.Event()        # the action waits for it: the test decides when it finishes
+        self.calls = []
+        self.fail = None
+
+        def run(params, registry):
+            self.calls.append(params)
+            self.assertTrue(self.go.wait(5))
+            if self.fail:
+                raise self.fail
+            registry.set_internal("result", params["target"] * 2)
+
+        self.cmd = PlcCommand("cmd/do", run, params=[NodeSpec("target", "float64", 1.0)])
+        self.reg = NodeRegistry("root", [NodeSpec("result", "float64", 0.0)] + self.cmd.specs())
+
+    def status(self):
+        return tuple(self.reg.get("cmd/do/" + n) for n in PlcCommand.STATUS)   # busy, done, error, error-text
+
+    def finish(self):
+        self.go.set()
+        self.assertTrue(self.cmd.wait(5))
+        self.go.clear()
+
+    def test_done(self):
+        self.reg.write("cmd/do/target", 21.0)
+        self.reg.write("cmd/do/execute", True)
+        self.assertEqual(self.status(), (True, False, False, ""))
+        self.reg.write("cmd/do/execute", True)                   # cyclic writes: no new start
+        self.finish()
+        self.assertEqual(self.status(), (False, True, False, ""))
+        self.assertEqual(self.reg.get("result"), 42.0)          # results are there when done is true
+        self.assertEqual(self.calls, [{"target": 21.0}])
+        self.reg.write("cmd/do/execute", False)                  # reset
+        self.assertEqual(self.status(), (False, False, False, ""))
+
+    def test_error_and_restart(self):
+        self.fail = CommandError("no part")
+        self.reg.write("cmd/do/execute", True)
+        self.finish()
+        self.assertEqual(self.status(), (False, False, True, "no part"))
+        self.reg.write("cmd/do/execute", False)
+        self.fail = RuntimeError("bug")
+        self.reg.write("cmd/do/execute", True)
+        self.finish()
+        self.assertEqual(self.status()[:3], (False, False, True))
+        self.assertIn("internal error", self.status()[3])
+
+    def test_start_while_busy_is_rejected(self):
+        self.reg.write("cmd/do/execute", True)
+        self.reg.write("cmd/do/execute", False)                  # reset while busy: allowed, keeps running
+        with self.assertRaises(NodeWriteError) as ctx:
+            self.reg.write("cmd/do/execute", True)               # a new start while busy
+        self.assertEqual(ctx.exception.reason, "invalid")
+        self.assertFalse(self.reg.get("cmd/do/execute"))        # the rejected write changed nothing
+        self.finish()
+        self.assertEqual(self.status(), (False, True, False, ""))  # result stays until the next start
+        self.reg.write("cmd/do/execute", True)
+        self.assertEqual(self.status(), (True, False, False, ""))  # the next start clears it
+        self.finish()
+        self.assertEqual(len(self.calls), 2)
+
+    def test_nodes(self):
+        specs = {s.name: s for s in self.cmd.specs()}
+        self.assertEqual(set(specs), {"cmd/do/execute", "cmd/do/busy", "cmd/do/done", "cmd/do/error",
+                                      "cmd/do/error-text", "cmd/do/target"})
+        self.assertTrue(specs["cmd/do/execute"].writable and specs["cmd/do/target"].writable)
+        self.assertFalse(any(specs["cmd/do/" + n].writable for n in PlcCommand.STATUS))
+        self.assertEqual(specs["cmd/do/execute"].write_role, "operate")
+
+    def test_template_example(self):
+        """commands/set-setpoint of the template: target -> values/setpoint; error while values/enabled is false."""
+        with open(DEFAULTS_FILE, encoding="utf-8") as f:
+            settings = json.load(f)
+        reg = NodeRegistry(config.DATALAYER_ROOT, build_node_specs(settings, "1.0.0"))
+        cmd = reg.spec("commands/set-setpoint/execute").group
+        reg.write("commands/set-setpoint/target", 7.5)
+        reg.write("commands/set-setpoint/execute", True)
+        self.assertTrue(cmd.wait(5))
+        self.assertEqual((reg.get("values/setpoint"), reg.get("commands/set-setpoint/done")), (7.5, True))
+        reg.write("commands/set-setpoint/execute", False)
+        reg.write("values/enabled", False)
+        reg.write("commands/set-setpoint/execute", True)
+        self.assertTrue(cmd.wait(5))
+        self.assertEqual(reg.get("commands/set-setpoint/error-text"), "values/enabled is false")
 
 
 class WebApiTest(unittest.TestCase):

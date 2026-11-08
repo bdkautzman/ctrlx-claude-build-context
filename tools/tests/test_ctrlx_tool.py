@@ -151,5 +151,24 @@ class DeviceRequestTest(unittest.TestCase):
         self.assertIn("Connection to", str(ctx.exception))
 
 
+    def test_logout_ends_the_session(self):
+        """gotchas #110: every call logs out again, else the device runs out of sessions for the user."""
+        dev = ctrlx.Device("127.0.0.1:1", "u", "p", False)
+        seen = []
+
+        class Opener:
+            def open(self, req, timeout):
+                from urllib.parse import urlsplit
+                seen.append((req.get_method(), urlsplit(req.full_url).path, req.headers.get("Authorization")))
+                raise OSError("nothing listens")
+        dev.opener = Opener()
+        dev.logout()                      # never logged in: nothing to end
+        self.assertEqual(seen, [])
+        dev._token = "t"
+        dev.logout()                      # errors are ignored (the session times out on the device)
+        self.assertEqual(seen, [("DELETE", "/identity-manager/api/v2/auth/token", "Bearer t")])
+        self.assertIsNone(dev._token)
+
+
 if __name__ == "__main__":
     unittest.main()

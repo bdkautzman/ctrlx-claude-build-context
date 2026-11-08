@@ -15,15 +15,22 @@ disk on each Data Layer write - a PLC may write cyclically (flash wear).
 Web API roles (auth.py): view_role = who sees the node in GET /api/v1/values, write_role = who may
 write it through PUT /api/v1/values/<name>. Data Layer clients are not affected (ctrlX Data Layer
 permissions apply there).
+Commands a PLC starts (trigger a measurement, start a job): PlcCommand - Execute / Busy / Done / Error,
+the kit's standard handshake (example: commands/set-setpoint in build_node_specs).
 """
 
+import dataclasses
 import json
+import logging
 import math
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 SUPPORTED_TYPES = ("bool8", "int64", "uint64", "float64", "string")
+
+log = logging.getLogger("commands")
 
 
 @dataclass
@@ -43,6 +50,8 @@ class NodeSpec:
     json: bool = False             # string node holding JSON (see the module docstring)
     view_role: str = "view"        # web API: lowest role that sees the node (settings/active: "configure")
     write_role: str = "operate"    # web API: lowest role that may write it (writable nodes only)
+    # an object with bind(registry) that made this node (PlcCommand): the registry hands itself over once
+    group: Any = field(default=None, repr=False)
 
 
 class NodeWriteError(Exception):
@@ -95,6 +104,169 @@ def to_json_text(value):
 ROLE_NAMES = ("view", "operate", "configure")   # = auth.ROLES (no import: this module stays standalone)
 
 
+class Commands:
+    """The app's actions behind writable command nodes, bound once the object that runs them exists.
+
+    The nodes are built first (DataLayerService(..., commands)), but the object behind them usually needs
+    the node registry to publish its results - so main.py creates a Commands, hands it to the nodes, creates
+    the worker with datalayer.registry and binds it:
+
+        commands = Commands()
+        datalayer = DataLayerService(settings, version, commands)
+        worker = Worker(registry=datalayer.registry)
+        commands.bind(worker)
+
+    In build_node_specs, an on_write calls e.g. commands.start(profile). Before bind() (and in tests that
+    pass None for commands: use need(commands)) every call is rejected with NodeWriteError("invalid") -> the
+    writer gets DL_INVALID_VALUE instead of an exception."""
+
+    def __init__(self, target=None):
+        self.__dict__["_target"] = target
+
+    def bind(self, target):
+        self.__dict__["_target"] = target
+
+    def __getattr__(self, name):
+        target = self.__dict__["_target"]
+        if target is None:
+            raise NodeWriteError("invalid", "the app is not ready yet")
+        return getattr(target, name)
+
+
+def need(commands):
+    """commands, or NodeWriteError("invalid") when there is none (build_node_specs called without one)."""
+    if commands is None:
+        raise NodeWriteError("invalid", "not available")
+    return commands
+
+
+class CommandError(Exception):
+    """Raised by a PlcCommand's run function: the command ends with error = true and this text."""
+
+
+class PlcCommand:
+    """A command that a PLC (or the web UI) starts through the Data Layer, PLCopen style: Execute / Busy / Done /
+    Error - the kit's standard handshake (user's choice 2026-11-07, docs/ctrlx/datalayer-python.md "PLC commands").
+
+    Nodes below <path>/ (runtime only, never persisted):
+      execute     bool8   writable  a rising edge (false -> true) starts the command. Rejected (DL_INVALID_VALUE)
+                                    while it is busy; true written again while it is true does nothing, so cyclic
+                                    writes are fine
+      busy        bool8             true while it runs
+      done        bool8             true when it finished without error  } back to false / "" when execute is
+      error       bool8             true when it failed                  } written false. Written false while
+      error-text  string            why it failed, "" otherwise          } busy: they show the result until the next start
+      <param>     ...     writable  parameters (params=[NodeSpec("target", ...)]), read at the rising edge
+
+    PLC: write the parameters -> execute := TRUE -> wait for done OR error -> read the results ->
+    execute := FALSE. Write roles in the web API: execute and parameters `write_role` (default operate).
+
+    run(params, registry) runs in a thread of its own, one at a time: params = {name: value} of the parameter nodes
+    at the rising edge. Set the app's result nodes with registry.set_internal() before returning - they are complete
+    when done goes true. Return = done; raise CommandError("text") = error with that text; any other exception =
+    error "internal error: ..." (logged with traceback).
+        cmd = PlcCommand("scan/start", run_scan, params=[NodeSpec("profile", "string", "quick", max_length=32)])
+        specs = [...] + cmd.specs()      # in build_node_specs
+    """
+
+    STATUS = ("busy", "done", "error", "error-text")
+
+    def __init__(self, path, run, params=(), description="", write_role="operate"):
+        self.path = path.strip("/")
+        self._run = run
+        self._param_specs = list(params)
+        self.description = description
+        self.write_role = write_role
+        self._registry = None
+        self._lock = threading.Lock()
+        self._busy = False
+        self._execute = False
+        self._thread = None
+
+    def _name(self, name):
+        return self.path + "/" + name
+
+    def specs(self):
+        """The NodeSpecs of this command (add them to build_node_specs' list)."""
+        what = self.description or self.path
+        specs = [
+            NodeSpec(self._name("execute"), "bool8", False, writable=True, on_write=self._on_execute,
+                     write_role=self.write_role, group=self,
+                     description="Write true to start: {}. Then wait for done or error and write false (resets "
+                                 "them). A start while busy is rejected.".format(what)),
+            NodeSpec(self._name("busy"), "bool8", False, group=self, description="true while the command runs"),
+            NodeSpec(self._name("done"), "bool8", False, group=self,
+                     description="true when it finished without error, until execute is written false"),
+            NodeSpec(self._name("error"), "bool8", False, group=self,
+                     description="true when it failed, until execute is written false"),
+            NodeSpec(self._name("error-text"), "string", "", group=self, description="why it failed, else empty"),
+        ]
+        for param in self._param_specs:
+            specs.append(dataclasses.replace(param, name=self._name(param.name), writable=True,
+                                             write_role=self.write_role, group=self))
+        return specs
+
+    def bind(self, registry):
+        self._registry = registry
+
+    def busy(self):
+        with self._lock:
+            return self._busy
+
+    def wait(self, timeout=None):
+        """Wait until a running command has finished (tests, shutdown). True when nothing runs."""
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout)
+        return not self.busy()
+
+    def _set(self, name, value):
+        self._registry.set_internal(self._name(name), value)
+
+    def _on_execute(self, value):
+        """on_write of <path>/execute: edges decide; raising rejects the write (the node keeps its value)."""
+        if self._registry is None:
+            raise NodeWriteError("invalid", "not ready")
+        with self._lock:
+            rising, falling = value and not self._execute, self._execute and not value
+            if rising and self._busy:
+                raise NodeWriteError("invalid", "{} is busy - wait for done or error".format(self.path))
+            self._execute = value
+            if falling and not self._busy:
+                self._set("done", False)
+                self._set("error", False)
+                self._set("error-text", "")
+            if not rising:
+                return
+            params = {p.name: self._registry.get(self._name(p.name)) for p in self._param_specs}
+            self._set("done", False)
+            self._set("error", False)
+            self._set("error-text", "")
+            self._busy = True
+            self._set("busy", True)
+            self._thread = threading.Thread(target=self._work, args=(params,), name="command " + self.path,
+                                            daemon=True)
+            self._thread.start()
+
+    def _work(self, params):
+        started = time.monotonic()
+        error = None
+        try:
+            self._run(params, self._registry)
+        except CommandError as exc:
+            error = str(exc) or "failed"
+        except Exception as exc:
+            log.exception("Command %s failed", self.path)
+            error = "internal error: {}".format(exc)
+        with self._lock:          # results first, then done/error, busy last: a PLC polling done sees all of it
+            self._set("error-text", error or "")
+            self._set("error" if error else "done", True)
+            self._busy = False
+            self._set("busy", False)
+        log.info("Command %s %s after %.0f ms%s", self.path, "failed" if error else "done",
+                 (time.monotonic() - started) * 1000, ": " + error if error else "")
+
+
 class NodeRegistry:
     def __init__(self, root, specs: List[NodeSpec]):
         self.root = root.strip("/")
@@ -113,6 +285,8 @@ class NodeRegistry:
             self._specs[spec.name] = spec
             initial = to_json_text(spec.initial) if spec.json else spec.initial
             self._values[spec.name] = coerce(spec.vtype, initial)
+        for group in {id(s.group): s.group for s in specs if s.group is not None}.values():
+            group.bind(self)
 
     def specs(self):
         return list(self._specs.values())
@@ -188,9 +362,22 @@ class NodeRegistry:
         }
 
 
-def build_node_specs(settings, version):
-    """The nodes of this app. Edit this function to add your own nodes."""
+def build_node_specs(settings, version, commands=None):
+    """The nodes of this app. Edit this function to add your own nodes.
+    commands: the app's actions for command nodes (a Commands, see above); None in tests that only look at values."""
     example = settings.get("example", {})
+
+    def set_setpoint(params, registry):
+        """Example command action (runs in its own thread): copies target into values/setpoint after 1 s."""
+        time.sleep(1.0)       # stands for the real work: a measurement, a camera image, a calculation
+        if not registry.get("values/enabled"):
+            raise CommandError("values/enabled is false")
+        registry.set_internal("values/setpoint", params["target"])
+
+    set_setpoint_cmd = PlcCommand(
+        "commands/set-setpoint", set_setpoint, description="copy target into values/setpoint (takes 1 s)",
+        params=[NodeSpec("target", "float64", 0.0, minimum=-1.0e6, maximum=1.0e6,
+                         description="Value for values/setpoint - write it before execute")])
     return [
         NodeSpec("status/version", "string", version, description="Installed app version"),
         NodeSpec("status/state", "string", "starting", description="Application state"),
@@ -205,4 +392,6 @@ def build_node_specs(settings, version):
                  description="Example writable value (runtime only, not persisted)"),
         NodeSpec("values/enabled", "bool8", example.get("enabled", True), writable=True,
                  description="Example writable boolean (runtime only, not persisted)"),
+        # example command: execute / busy / done / error / error-text + parameter target (PlcCommand)
+        *set_setpoint_cmd.specs(),
     ]

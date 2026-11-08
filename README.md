@@ -11,7 +11,7 @@ and a settings JSON in ctrlX app data.
 | `CLAUDE.md` | Always-loaded rules for Claude Code (baseline, hard rules, definition of done, commands) |
 | `.claude/skills/` | `/new-ctrlx-app`, `/ctrlx-check`, `/add-datalayer-node`, `/add-app-setting`, `/build-and-deploy`, `/ctrlx-release`, `/package-app`, `/record-gotcha` |
 | `.claude/agents/ctrlx-reviewer.md` | independent review subagent before hand-over |
-| `.claude/settings.json` | permissions (checks/tests allowed, device installs ask, reference read-only) + a hook that re-checks an app after edits to its snapcraft/manifest/validation files |
+| `.claude/settings.json` | permissions (checks, tests, builds, UI checks, read-only device commands and installs allowed - also with `--device NAME`; Data Layer writes ask; reference read-only) + a hook that re-checks an app after edits to its snapcraft/manifest/validation files |
 | `docs/ctrlx/` | curated rules (start at `docs/ctrlx/README.md`), `decisions.md` (what was decided and why), `gotchas.md` (grows over time), verbatim SDK 4.6.0 docs in `upstream-sdk-4.6.0/` |
 | `templates/python-webapp/` | known-good template app (web UI with three roles, settings drawer, help/tutorial and home screen widget + Data Layer provider + app-data settings, 45 unit tests, fake Data Layer, UI scenario for `tools/ui_check.py`) |
 | `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/call app APIs/logs/ssh on a test device from `devices.toml`), `ui_check.py` + `setup-ui-test.sh` (web UI in headless Chromium with screenshots, locally or on a device), `pdf_check.py` (generated PDFs → PNG), `foss_from_prime.py` |
@@ -52,7 +52,8 @@ Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (ar
 * one `.app` with both architectures installs on both devices (#49)
 * UI checks in headless Chromium (`tools/ui_check.py`), locally and on the COREvirtual (#52)
 * apps built with the kit, their versions and what they verified: `apps/README.md`
-* template `templates/python-webapp` 0.2.0 (2026-11-07, from a review of the five apps: what several apps built
+* template `templates/python-webapp` 0.3.0 (2026-11-07): PLC commands with Execute / Busy / Done / Error (`PlcCommand`),
+  `Commands` binding, no ERROR log line while the Data Layer is expected to be missing; 0.2.0 (2026-11-07, from a review of the five apps: what several apps built
   separately is now in the template - roles view / operate / configure, shared UI parts `www/kit.js` + `kit.css`
   with settings drawer and help menu + tutorial, home screen widget, download/upload helpers, JSON nodes; its
   CHANGELOG; on the X3 as admin - users with only view / operate not yet tried on a device); 0.1.8: first-start retry while app data is not writable, listen backlog 64;

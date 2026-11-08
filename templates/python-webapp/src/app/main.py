@@ -82,7 +82,9 @@ def main():
     logsetup.set_level(settings["general"]["logLevel"])
     store.add_listener(lambda s: logsetup.set_level(s["general"]["logLevel"]))
 
-    # the Data Layer node settings/active gets redacted settings (`secret` rules masked)
+    # the Data Layer node settings/active gets redacted settings (`secret` rules masked).
+    # Command nodes that start something in the app: commands = datalayer_nodes.Commands(), pass it here
+    # (DataLayerService(..., commands)), create the worker with datalayer.registry, then commands.bind(worker).
     datalayer = DataLayerService(store.get_redacted(), config.app_version())
     store.add_listener(lambda _s: datalayer.on_settings_changed(store.get_redacted()))
     datalayer.start()
