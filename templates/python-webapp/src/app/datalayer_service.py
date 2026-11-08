@@ -9,6 +9,8 @@ Lifecycle:
     -> provider.stop()/close() -> system.stop(False)/close()
 The thread reconnects automatically when the provider loses its connection
 (e.g. Data Layer broker restart, app started before automationcore).
+Reading/writing OTHER nodes: pass on_client - the thread opens a client on the same connection and hands a
+datalayer_client.DataLayerClient to on_client(client), on_client(None) when it is gone (datalayer_client.py).
 
 ctrlxdatalayer is imported lazily so the rest of the app (web UI, settings) can run on a
 PC without the native libcomm_datalayer library.
@@ -19,7 +21,7 @@ import threading
 import time
 
 from app import config
-from app.datalayer_nodes import NodeRegistry, NodeWriteError, build_node_specs
+from app.datalayer_nodes import ARRAY_OF, NodeRegistry, NodeWriteError, build_node_specs
 
 log = logging.getLogger("datalayer")
 
@@ -66,9 +68,11 @@ class DownTimeLog:
 
 
 class DataLayerService:
-    def __init__(self, settings, version, commands=None):
-        """commands: the app's actions behind command nodes (datalayer_nodes.Commands), passed to build_node_specs."""
+    def __init__(self, settings, version, commands=None, on_client=None):
+        """commands: the app's actions behind command nodes (datalayer_nodes.Commands), passed to build_node_specs.
+        on_client: called with a DataLayerClient while connected and with None when not (no client without it)."""
         self.registry = NodeRegistry(config.DATALAYER_ROOT, build_node_specs(settings, version, commands))
+        self._on_client = on_client
         self.registry.set_internal("settings/active", settings)   # a JSON node (json=True)
         self._heartbeat_s = settings["general"]["heartbeatIntervalMs"] / 1000.0
         self._stop = threading.Event()
@@ -167,9 +171,21 @@ class DataLayerService:
                 self._downtime.up()
                 log.info("Data Layer provider running, %d nodes under %s/", len(nodes), self.registry.root)
 
-                while not self._stop.is_set() and provider.is_connected():
-                    self._stop.wait(self._heartbeat_s)
-                    self._tick()
+                client = dl_client = None
+                if self._on_client is not None:
+                    from app.datalayer_client import DataLayerClient
+                    client = system.factory().create_client(conn)
+                    dl_client = DataLayerClient(system, client)
+                    self._on_client(dl_client)
+                try:
+                    while not self._stop.is_set() and provider.is_connected():
+                        self._stop.wait(self._heartbeat_s)
+                        self._tick()
+                finally:
+                    if dl_client is not None:
+                        self._on_client(None)
+                        dl_client.close()
+                        client.close()
 
                 if not self._stop.is_set():
                     log.info("Data Layer provider disconnected - reconnecting")   # e.g. SERVICE <-> OPERATING (#28)
@@ -210,18 +226,27 @@ class _ProviderNode:
         self.metadata.close()
 
     # Variant helpers -------------------------------------------------------
+    # vtype -> Variant method / VariantType: "float32" -> set_float32 / FLOAT32, "array-of-int16" -> set_array_int16 /
+    # ARRAY_INT16. The writer's type must be exactly the node's: the get_* methods would convert ("auto convert if
+    # possible", e.g. a float64 into an int8), so the type is checked first and nothing is converted.
+    def _variant_name(self):
+        return self.spec.vtype.replace(ARRAY_OF, "array_")
+
     def _to_variant(self, value):
-        from ctrlxdatalayer.variant import Variant
+        from ctrlxdatalayer.variant import Result, Variant
         variant = Variant()
-        getattr(variant, "set_" + self.spec.vtype)(value)
+        result = getattr(variant, "set_" + self._variant_name())(value)
+        if result != Result.OK:
+            variant.close()
+            raise RuntimeError("Variant.set_{} failed: {}".format(self._variant_name(), result))
         return variant
 
     def _from_variant(self, variant):
         from ctrlxdatalayer.variant import VariantType
-        expected = getattr(VariantType, self.spec.vtype.upper())
+        expected = getattr(VariantType, self._variant_name().upper())
         if variant.get_type() != expected:
             raise NodeWriteError("type", "expected " + self.spec.vtype)
-        return getattr(variant, "get_" + self.spec.vtype)()
+        return getattr(variant, "get_" + self._variant_name())()
 
     # Callbacks: signature (userdata, address, [data,] cb). ALWAYS call cb exactly once.
     def _on_create(self, userdata, address, data, cb):

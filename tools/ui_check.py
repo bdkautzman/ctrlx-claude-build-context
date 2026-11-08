@@ -6,9 +6,11 @@
                                                              opened through the reverse proxy with a login token
     options: --out DIR (default <app>/.ui-check/)  --narrow (also a 390 px wide screenshot)
              --no-scenario (only the start page)
-             --role reader|operator|writer   local only: as a user with only <snap>.web.all.r / .web.operate.x /
-                                    .web.all.rw = the roles view / operate / configure (default: admin,
-                                    auth off); screenshots get the role in their name
+             --role reader|operator|writer   as a user with only <snap>.web.all.r / .web.operate.x /
+                                    .web.all.rw = the roles view / operate / configure (default: admin; locally
+                                    auth off); screenshots get the role in their name. With --device: logs in as
+                                    the device's test user kit-view / kit-operate / kit-configure (tools/ctrlx.py
+                                    test-users) and gives it the app's scope first if it lacks it
 
 One-time setup: tools/setup-ui-test.sh (Playwright + Chromium in ~/.cache, pinned; prints one sudo apt line).
 This script re-runs itself with that venv's Python, so plain `python3` works.
@@ -16,7 +18,8 @@ This script re-runs itself with that venv's Python, so plain `python3` works.
 What it does
   1. local: copies src/ www/ defaults/ (data/) of the app to a temp folder and starts `python3 -m app.main` there
      on a free port (APP_DEV_NO_AUTH=1, own app data, Data Layer off) - the app folder is not touched.
-     --device: logs in with the devices.toml credentials and opens /<snap>/?token=... like the ctrlX menu.
+     --device: logs in with the devices.toml credentials (--role: as the test user of that role) and opens
+     /<snap>/?token=... like the ctrlX menu.
   2. opens the page (1400 x 860) and waits until <body data-ui-ready="true">: index.html starts with
      data-ui-ready="false", www/app.js sets "true" (Kit.ready()) when its data is shown (and "false" while it loads
      more). Pages without the attribute: load event + 3 s.
@@ -143,11 +146,22 @@ class LocalApp:
 class DeviceApp:
     """The installed app on a device from devices.toml, through the reverse proxy."""
 
-    def __init__(self, device, snap):
+    def __init__(self, device, snap, role="admin"):
         sys.path.insert(0, HERE)
         import ctrlx  # the kit's REST client: devices.toml, login
         target = ctrlx.resolve_target(ctrlx.load_devices(ctrlx.DEFAULT_DEVICES_FILE), os.environ, device)
         dev = ctrlx.Device(target["api_host"], target["api_user"], target["api_password"], target["verify_tls"])
+        if role != "admin":   # the device's test user of this role, with the app's scope of the role
+            user, _ = ctrlx.test_user(role)
+            if not target["test_users_password"]:
+                sys.exit("No test user password for device '{}' (devices.toml [<device>.test_users]): "
+                         "tools/ctrlx.py --device {} test-users".format(target["name"], target["name"] or "NAME"))
+            try:
+                for name in ctrlx.grant_test_users(dev, snap, roles=[role], quiet=True):
+                    print("   (gave {} its {} scope)".format(name, snap))
+            finally:
+                dev.logout()
+            dev = ctrlx.Device(target["api_host"], user, target["test_users_password"], target["verify_tls"])
         self.dev = dev
         self.token = dev.token()
         self.verify_tls = target["verify_tls"]
@@ -238,15 +252,14 @@ def main():
     ap.add_argument("--narrow", action="store_true", help="also a 390 px wide (phone/HMI) screenshot")
     ap.add_argument("--no-scenario", action="store_true", help="ignore tests/ui_scenario.py")
     ap.add_argument("--role", choices=("admin", "writer", "operator", "reader"), default="admin",
-                    help="local only: user role - reader = only <snap>.web.all.r (view), operator = only "
-                         "<snap>.web.operate.x (operate), writer = <snap>.web.all.rw (configure); default admin, auth off")
+                    help="user role - reader = only <snap>.web.all.r (view), operator = only <snap>.web.operate.x "
+                         "(operate), writer = <snap>.web.all.rw (configure); default admin (locally: auth off). "
+                         "--device: as the device's test user of that role (tools/ctrlx.py test-users)")
     args = ap.parse_args()
 
     app_dir = os.path.abspath(args.app)
     snap = snap_name(app_dir)
     local = args.device is None
-    if not local and args.role != "admin":
-        sys.exit("--role works locally only (on a device the devices.toml user decides)")
     out = os.path.abspath(args.out or os.path.join(app_dir, ".ui-check"))
     os.makedirs(out, exist_ok=True)
     prefix = ("local" if local else "device") + ("" if args.role == "admin" else "-" + args.role)
@@ -264,7 +277,7 @@ def main():
     print("== {} {}{} ({})".format(snap, "local" if local else "on device " + (args.device or "(default)"),
                                    "" if args.role == "admin" else " as " + args.role,
                                    "scenario tests/ui_scenario.py" if scenario else "start page only"))
-    app = LocalApp(app_dir, snap, args.role) if local else DeviceApp(args.device or None, snap)
+    app = LocalApp(app_dir, snap, args.role) if local else DeviceApp(args.device or None, snap, args.role)
     mark("app ready" if local else "logged in")
     problems = []
     ui = None

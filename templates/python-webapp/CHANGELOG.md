@@ -3,6 +3,28 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## 0.4.0
+
+- **Node types for PLC variables** (user's choice 2026-11-08): every scalar type of the Data Layer (bool8, int8 ..
+  uint64, float32, float64, string) and `array-of-<type>`; each node accepts only its own type, nothing is converted.
+  A PLC REAL needs a float32 node, DINT int32, ... (table: `docs/ctrlx/datalayer-python.md`). Before, only
+  float64/int64/uint64 nodes existed and the X3 refused every PLC-typed write to them with `DL_TYPE_MISMATCH`
+  (gotchas #111). float32 nodes hold the float32 a REAL holds; arrays are tuples, `NodeSpec.max_items`;
+  `minimum`/`maximum`/`max_length` apply to each element. Example node `values/limits` (array-of-float32).
+  The page shows float32 values with the fewest digits that give the same float32 and edits arrays as JSON.
+- **`DataLayerClient`** (`datalayer_client.py`, from core-connector's `ClientAdapter`): read / read_typed /
+  read_json / write (exact type) / write_json / browse / metadata / remove and bulk read / browse / metadata;
+  `DataLayerService(..., on_client=callback)` opens it on the provider's connection (opt-in).
+- `tests/ui_scenario.py`: the 403 check for settings also runs on a device (a GET); with `tools/ui_check.py --device
+  NAME --role reader|operator|writer` it runs as the device's test users (`tools/ctrlx.py test-users`).
+- Verified 2026-11-08 on the ctrlX CORE X3 (arm64, incremental build 8.5 MB): `DataLayerClient` inside the snap with
+  the real library (read, read_typed, read_json, write, write_json, browse, metadata, the three bulk calls, result
+  names; float32 into float64 and int32 into float64 refused); REST writes to `values/limits` as `arfloat32` / `arfloat`
+  taken, `arfloat64` / `ardouble` refused; `ui_check.py --device x3` as admin and as the test users kit-view,
+  kit-operate, kit-configure (first role check on a device with real ctrlX users); RAM 34.6 MB RSS / 23.5 MB PSS idle,
+  as 0.3.0 (gotchas #112). Also on 0.3.0 that day: a start while busy is refused (`DL_INVALID_VALUE`) and the running
+  command still ends with done. **Not tested**: a real ctrlX PLC writing the nodes; a scalar float32 node on a device.
+
 ## 0.3.0
 
 - **PLC commands** with the PLCopen handshake Execute / Busy / Done / Error (+ error-text, parameters):

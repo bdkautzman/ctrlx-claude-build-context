@@ -13,7 +13,7 @@ and a settings JSON in ctrlX app data.
 | `.claude/agents/ctrlx-reviewer.md` | independent review subagent before hand-over |
 | `.claude/settings.json` | permissions (checks, tests, builds, UI checks, read-only device commands and installs allowed - also with `--device NAME`; Data Layer writes ask; reference read-only) + a hook that re-checks an app after edits to its snapcraft/manifest/validation files |
 | `docs/ctrlx/` | curated rules (start at `docs/ctrlx/README.md`), `decisions.md` (what was decided and why), `gotchas.md` (grows over time; read through its topic index), verbatim SDK 4.6.0 docs in `upstream-sdk-4.6.0/` |
-| `templates/python-webapp/` | known-good template app (web UI with three roles, settings drawer, help/tutorial and home screen widget + Data Layer provider + app-data settings, 45 unit tests, fake Data Layer, UI scenario for `tools/ui_check.py`) |
+| `templates/python-webapp/` | known-good template app (web UI with three roles, settings drawer, help/tutorial and home screen widget + Data Layer provider with every PLC type + Data Layer client + app-data settings, 60 unit tests, fake Data Layer, UI scenario for `tools/ui_check.py`) |
 | `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/call app APIs/logs/ssh on a test device from `devices.toml`), `ui_check.py` + `setup-ui-test.sh` (web UI in headless Chromium with screenshots, locally or on a device), `pdf_check.py` (generated PDFs → PNG), `foss_from_prime.py` |
 | `reference/` | read-only: Python Data Layer API source 3.6.0, SDK 4.6.0 Python samples, ctrlX REST OpenAPI specs, example apps with notes |
 | `apps/` | your apps go here |
@@ -52,11 +52,14 @@ Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (ar
 * one `.app` with both architectures installs on both devices (#49)
 * UI checks in headless Chromium (`tools/ui_check.py`), locally and on the COREvirtual (#52)
 * apps built with the kit, their versions and what they verified: `apps/README.md`
-* template `templates/python-webapp` 0.3.0 (2026-11-07): PLC commands with Execute / Busy / Done / Error (`PlcCommand`),
+* template `templates/python-webapp` 0.4.0 (2026-11-08): node types for every PLC variable type (each node takes only
+  its own type, no conversions), `DataLayerClient` (from core-connector) - both verified on the X3; test users per role
+  (`tools/ctrlx.py test-users`, on the X3) and `ui_check.py --device --role`; RAM 35 MB part by part (gotchas #112).
+  0.3.0 (2026-11-07): PLC commands with Execute / Busy / Done / Error (`PlcCommand`),
   `Commands` binding, no ERROR log line while the Data Layer is expected to be missing; 0.2.0 (2026-11-07, from a review of the five apps: what several apps built
   separately is now in the template - roles view / operate / configure, shared UI parts `www/kit.js` + `kit.css`
   with settings drawer and help menu + tutorial, home screen widget, download/upload helpers, JSON nodes; its
-  CHANGELOG; on the X3 as admin - users with only view / operate not yet tried on a device); 0.1.8: first-start retry while app data is not writable, listen backlog 64;
+  CHANGELOG; roles on the X3 with real ctrlX users since 0.4.0); 0.1.8: first-start retry while app data is not writable, listen backlog 64;
   0.1.7: settings validator hook, `minItems`/`itemPattern`
 * CPU/RAM of apps on a device: the System Analyzer is the instrument (`docs/ctrlx/build-deploy-test.md` §5)
 * generated PDFs are checked like UI screenshots: `tools/pdf_check.py` (PDFium renders the pages to PNG)

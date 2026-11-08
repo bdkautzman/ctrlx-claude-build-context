@@ -136,9 +136,15 @@ The COREvirtual's license is the 4-hour engineering license; it shuts down after
    devices.toml credentials, opens `/<name>/?token=...` through the reverse proxy like the menu link and
    takes screenshots (scenarios change nothing on a device unless written to). The user still clicks
    through once per release (sidebar entry, permissions).
-3. Users & Permissions: a user with only `.web.all.r` (view) sees no Edit and no Settings button, one with only
+3. Roles: a user with only `.web.all.r` (view) sees no Edit and no Settings button, one with only
    `.web.operate.x` (operate) edits values but has no Settings; without scopes the API returns 403. Locally:
-   `ui_check.py . --role reader|operator|writer`.
+   `ui_check.py . --role reader|operator|writer`. On the device: `ui_check.py . --device NAME --role reader`
+   (and `operator`, `writer`) logs in as the device's **test user** of that role and gives it the app's scope first.
+   Test users (user's request 2026-11-08): `kit-view`, `kit-operate`, `kit-configure`, one password for the three in
+   devices.toml `[<device>.test_users]`. `tools/ctrlx.py --device NAME test-users [--snap <name>]` shows them;
+   missing ones: **ask the user**, then `test-users create` (they stay on the device for later apps; `test-users
+   delete` removes them). `test-users grant <name>` gives each its role's scope of an installed app. On the X3 they
+   exist since 2026-11-08.
 4. Settings → Data Layer: `<name>/…` nodes readable; writable ones accept/reject correctly.
 5. Manage app data: `<name>/settings.json` exists; save a configuration, change a setting,
    load the configuration → the old value is back (load phases in the log). Over REST: `app-data-settings.md`.

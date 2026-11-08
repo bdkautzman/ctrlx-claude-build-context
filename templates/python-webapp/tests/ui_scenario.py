@@ -3,6 +3,7 @@
     python3 ../../tools/ui_check.py .                  # app started locally (Data Layer off), as admin
     python3 ../../tools/ui_check.py . --role reader    # as a user with only the view permission (also: operator, writer)
     python3 ../../tools/ui_check.py . --device         # the installed app on the default device
+    python3 ../../tools/ui_check.py . --device x3 --role reader   # ... as the device's test user kit-view
 
 tools/ui_check.py calls prepare(ui) before the page opens, then opens it, saves the screenshot "start"
 and calls run(ui). Any JavaScript error, console error or HTTP error >= 400 fails the run.
@@ -13,7 +14,8 @@ and calls run(ui). Any JavaScript error, console error or HTTP error >= 400 fail
                    as_admin (local only) e.g. to set up a test that runs with --role reader
   ui.shot(name, locator)       screenshot of one element instead of the page
   ui.new_page()                another tab (e.g. the home screen widget on its own)
-  ui.role          "admin" (default, auth off), "writer" (configure), "operator" (operate) or "reader" (view)
+  ui.role          "admin" (default; locally auth off), "writer" (configure), "operator" (operate) or "reader" (view);
+                   on a device the test user kit-configure / kit-operate / kit-view (tools/ctrlx.py test-users)
   ui.allow_http(400)           before provoking an expected HTTP error
   ui.local         False with --device: don't change anything on a device unless the user asked
 Click the real buttons (gotchas #35: "Set" wrote the old value back, Enter worked).
@@ -43,6 +45,10 @@ def run(ui):
     assert (page.locator("#values-body tr", has_text="/settings/active").count() == 1) == configure, \
         "settings/active is for the configure role only"
 
+    if not configure:   # the API refuses settings too (a GET: fine on a device)
+        ui.allow_http(403)
+        page.evaluate("Kit.api('GET', '/settings').catch(() => null)")
+
     widget(ui)
     if not ui.local:
         return  # on a device: no changes
@@ -52,6 +58,13 @@ def run(ui):
         setpoint.locator("input").fill("12.5")
         setpoint.get_by_role("button", name="Set").click()
         setpoint.locator("td.val", has_text="12.5").wait_for()
+
+        # an array of float32 (PLC ARRAY OF REAL): JSON in, shown as the PLC shows REALs (0.1, not 0.100000001...)
+        limits = page.locator("#values-body tr", has_text="/values/limits")
+        limits.get_by_role("button", name="Edit").click()
+        limits.locator("input").fill("[1.5, 0.1]")
+        limits.get_by_role("button", name="Set").click()
+        limits.locator("td.val", has_text="[1.5,0.1]").wait_for()
 
         # the example PLC command (PlcCommand): target -> execute true -> done -> execute false
         def row(name):
@@ -87,9 +100,6 @@ def run(ui):
         page.click("#btn-close-settings")
         page.locator("#drawer.open").wait_for(state="detached")
         page.locator("#values-body td.val", has_text="UI check").wait_for()   # values/label follows the setting
-    else:
-        ui.allow_http(403)
-        page.evaluate("Kit.api('GET', '/settings').catch(() => null)")       # the API refuses them too
 
     # tutorial: help menu -> Tutorial, step through to the end (steps depend on the role)
     page.click("#btn-help")

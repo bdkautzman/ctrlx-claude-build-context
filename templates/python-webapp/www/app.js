@@ -20,6 +20,20 @@
 
   // ---- values --------------------------------------------------------------
   // GET /values lists the nodes the user may see; canWrite says whether they may write one (operate role).
+  // Shown as stored, except float32 (PLC REAL): with the fewest digits that give the same float32 - the node holds
+  // 0.10000000149011612 for 0.1, the PLC shows 0.1. Arrays as JSON. int64/uint64 above 2^53 lose digits in the
+  // browser (JavaScript numbers): don't edit such values here.
+  const isArray = (type) => type.startsWith("array-of-");
+  function f32(x) {
+    if (typeof x !== "number" || !isFinite(x)) return x;
+    for (let p = 1; p <= 9; p++) { const s = Number(x.toPrecision(p)); if (Math.fround(s) === x) return s; }
+    return x;
+  }
+  function show(type, value) {
+    const elemType = isArray(type) ? type.slice(9) : type;
+    const one = (x) => (elemType === "float32" ? f32(x) : x);
+    return isArray(type) ? JSON.stringify(value.map(one)) : String(one(value));
+  }
   let editing = null; // name of the value currently edited (do not overwrite while typing)
   async function refreshValues() {
     if (editing) return;
@@ -29,7 +43,7 @@
     const body = $("values-body");
     body.replaceChildren();
     for (const [name, v] of Object.entries(values)) {
-      const full = String(v.value);
+      const full = show(v.type, v.value);
       const valueCell = el("td", { class: "val", text: full.length > 80 ? full.slice(0, 77) + "…" : full, title: full });
       const actionCell = el("td");
       if (v.canWrite) {
@@ -47,18 +61,20 @@
     editing = name;
     const input = v.type === "bool8"
       ? el("select", {}, el("option", { value: "true", text: "true" }), el("option", { value: "false", text: "false" }))
-      : el("input", { type: v.type === "string" ? "text" : "number", step: "any" });
-    input.value = String(v.value);
+      : el("input", { type: v.type === "string" || isArray(v.type) ? "text" : "number", step: "any" });
+    input.value = show(v.type, v.value);
     cell.replaceChildren(input);
     input.focus();
     btn.textContent = "Set";
     const done = async (commit) => {
       if (commit) {
         let value = input.value;
-        if (v.type === "bool8") value = value === "true";
-        else if (v.type !== "string") value = Number(value);
-        try { await api("PUT", "/values/" + encodeURIComponent(name), { value }); }
-        catch (e) { alert("Write rejected: " + e.message); }
+        try {
+          if (v.type === "bool8") value = value === "true";
+          else if (isArray(v.type)) value = JSON.parse(value);          // e.g. [1.5, 2]
+          else if (v.type !== "string") value = Number(value);
+          await api("PUT", "/values/" + encodeURIComponent(name), { value });
+        } catch (e) { alert("Write rejected: " + e.message); }
       }
       editing = null;
       refreshValues();

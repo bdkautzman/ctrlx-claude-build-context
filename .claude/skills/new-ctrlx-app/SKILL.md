@@ -38,6 +38,12 @@ Goal from the user: $ARGUMENTS
      answer, take the option with the least custom code and say so in the report.
 2. Create it: `python3 tools/new_app.py --name <app> --title "..."` (`--author`/`--url` without `kit.toml`) →
    `apps/<name>/`. It must end with `RESULT: OK`.
+   **Test users** (user's request 2026-11-08): for each test device this app will be tested on (CLAUDE.md "Test
+   devices"), run `tools/ctrlx.py --device <device> test-users`. If any is MISSING, ask the user (AskUserQuestion)
+   whether to create the test users kit-view / kit-operate / kit-configure on that device for testing; on yes:
+   `tools/ctrlx.py --device <device> test-users create` (they stay there for later apps). On no: the role tests
+   run locally only - put that into `KNOWN-ISSUES.md`. Device unreachable: say so and check again before the first
+   device test.
 3. Read `docs/ctrlx/README.md`, then implement in this order, running `tools/check.sh apps/<name>` after each step:
    1. `defaults/settings.json` + `src/app/settings_rules.py` (see skill `add-app-setting`)
    2. `src/app/datalayer_nodes.py::build_node_specs` (see skill `add-datalayer-node`); replace the example nodes
@@ -64,4 +70,5 @@ Goal from the user: $ARGUMENTS
 7. UI: adapt `tests/ui_scenario.py` to the new page (click the real buttons, name the screenshots, the tutorial),
    keep the `data-ui-ready` marker working (`Kit.ready()` in `app.js`), run `python3 tools/ui_check.py apps/<name> --narrow`
    and with `--role reader` and `--role operator`, and look at the screenshots. If `tools/setup-ui-test.sh --check`
-   fails, tell the user the UI was not seen.
+   fails, tell the user the UI was not seen. Installed on a device: the same with `--device <device>` (as admin) and
+   `--device <device> --role reader|operator|writer` (as the test users).

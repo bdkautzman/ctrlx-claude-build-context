@@ -25,7 +25,8 @@ ctrlX OS 4.6 app (snap, `core24`) written in Python:
 | `defaults/settings.json` | default settings = structure + types of `settings.json` |
 | `src/app/settings_rules.py` | value rules for settings (enum/min/max/labels) |
 | `src/app/datalayer_nodes.py` | **the nodes this app provides** (`build_node_specs`) |
-| `src/app/datalayer_service.py` | ctrlxdatalayer provider glue (reconnects automatically) |
+| `src/app/datalayer_service.py` | ctrlxdatalayer provider glue (reconnects automatically); `on_client` for a client |
+| `src/app/datalayer_client.py` | `DataLayerClient`: read / write / browse / metadata of other nodes (PLC variables) |
 | `src/app/web_server.py` | HTTP routes (static UI + `/api/v1/...`) with their roles; helpers for downloads and uploads |
 | `src/app/auth.py` | roles view / operate / configure from the token's scopes |
 | `src/app/settings_store.py` | load/validate/persist/watch settings in app data |

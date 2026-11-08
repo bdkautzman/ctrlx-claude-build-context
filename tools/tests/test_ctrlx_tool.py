@@ -170,5 +170,106 @@ class DeviceRequestTest(unittest.TestCase):
         self.assertIsNone(dev._token)
 
 
+class FakeIdm:
+    """The identity manager calls of tools/ctrlx.py test-users, in memory."""
+
+    def __init__(self, users=(), app_scopes=None):
+        self.users = {name: {"id": str(1002 + i), "scopes": []} for i, name in enumerate(users)}
+        self.app_scopes = app_scopes or {}
+        self.passwords, self.calls = {}, []
+
+    def request(self, method, path, body=None, **kw):
+        self.calls.append((method, path))
+        p = path[len(ctrlx.IDM):]
+        by_id = {u["id"]: n for n, u in self.users.items()}
+        parts = p.strip("/").split("/")
+        if (method, p) == ("GET", "/users"):
+            return 200, {}, [{"name": n, "id": u["id"]} for n, u in self.users.items()]
+        if (method, p) == ("POST", "/users"):
+            uid = str(1100 + len(self.users))
+            self.users[body["name"]] = {"id": uid, "scopes": []}
+            return 201, {}, {"name": body["name"], "id": uid}
+        if (method, p) == ("GET", "/scopes"):
+            return 200, {}, {"apps": [{"identifier": snap + ".web", "scopes": [
+                {"identifier": snap + sfx, "name": sfx, "description": "d"} for sfx in sfxs]}
+                for snap, sfxs in self.app_scopes.items()]}
+        name = by_id[parts[1]]
+        if parts[2:] == ["scopes"] and method == "GET":
+            return 200, {}, list(self.users[name]["scopes"])
+        if parts[2:] == ["scopes"] and method == "PUT":
+            self.users[name]["scopes"] = list(body)
+            return 204, {}, ""
+        if parts[2:] == ["credentials"]:
+            self.passwords[name] = body["newPassword"]
+            return 204, {}, ""
+        if parts[2:] == ["pwdchgatnextlogin"]:
+            self.users[name]["forced"] = body["forced"]
+            return 204, {}, ""
+        if method == "DELETE" and len(parts) == 2:
+            del self.users[name]
+            return 204, {}, ""
+        raise AssertionError((method, path))
+
+
+class TestUsersTest(unittest.TestCase):
+    """tools/ctrlx.py test-users: one user per role, the app's scope of that role (user's request 2026-11-08)."""
+    ROLES = (".web.all.r", ".web.operate.x", ".web.all.rw")
+
+    def test_grant_adds_only_the_role_scope_and_keeps_others(self):
+        idm = FakeIdm(["kit-view", "kit-operate", "kit-configure"], {"ctrlx-a": self.ROLES})
+        idm.users["kit-view"]["scopes"] = [{"identifier": "other.web.all.r", "name": "o", "description": "d"}]
+        with contextlib.redirect_stdout(io.StringIO()):
+            changed = ctrlx.grant_test_users(idm, "ctrlx-a")
+        self.assertEqual(changed, ["kit-view", "kit-operate", "kit-configure"])
+        self.assertEqual([g["identifier"] for g in idm.users["kit-view"]["scopes"]],
+                         ["other.web.all.r", "ctrlx-a.web.all.r"])
+        self.assertEqual([g["identifier"] for g in idm.users["kit-operate"]["scopes"]], ["ctrlx-a.web.operate.x"])
+        self.assertEqual([g["identifier"] for g in idm.users["kit-configure"]["scopes"]], ["ctrlx-a.web.all.rw"])
+        self.assertEqual(ctrlx.grant_test_users(idm, "ctrlx-a", quiet=True), [])        # nothing twice
+        self.assertEqual(ctrlx.test_user("operator"), ("kit-operate", ".web.operate.x"))
+
+    def test_grant_needs_the_app_and_the_users(self):
+        with self.assertRaises(SystemExit) as ctx:
+            ctrlx.grant_test_users(FakeIdm(["kit-view"], {}), "ctrlx-a")
+        self.assertIn("installed", str(ctx.exception))
+        with self.assertRaises(SystemExit) as ctx:
+            ctrlx.grant_test_users(FakeIdm([], {"ctrlx-a": self.ROLES}), "ctrlx-a", roles=["reader"])
+        self.assertIn("ask the user", str(ctx.exception))
+
+    def test_create_stores_one_password_and_checks_the_logins(self):
+        idm = FakeIdm(["kit-view"])
+        logins = []
+
+        class FakeDevice:
+            def __init__(self, host, user, password, verify):
+                logins.append((user, password))
+
+            def token(self):
+                return "t"
+
+            def logout(self):
+                logins.append("logout")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "devices.toml")
+            with open(path, "w") as f:
+                f.write('[core]\nhost = "192.168.1.7"\n')
+            devices = ctrlx.load_devices(path)
+            args = type("Args", (), {"action": "create", "snap": None, "devices_file": path, "devices": devices,
+                                     "target": ctrlx.resolve_target(devices, {}, "core")})()
+            orig, ctrlx.Device = ctrlx.Device, FakeDevice
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    ctrlx.cmd_test_users(idm, args)
+            finally:
+                ctrlx.Device = orig
+            stored = ctrlx.load_devices(path)["core"]["test_users"]["password"]
+        self.assertEqual(sorted(idm.users), ["kit-configure", "kit-operate", "kit-view"])
+        self.assertEqual(idm.passwords, {"kit-operate": stored, "kit-configure": stored})   # kit-view existed
+        self.assertFalse(idm.users["kit-operate"]["forced"])                # no password change at the first login
+        self.assertEqual(logins, [("kit-operate", stored), "logout", ("kit-configure", stored), "logout"])
+        self.assertRegex(stored, r"[A-Z]")
+        self.assertRegex(stored, r"[0-9]")
+
+
 if __name__ == "__main__":
     unittest.main()

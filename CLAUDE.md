@@ -67,12 +67,16 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 - **Settings**: only through `SettingsStore` (validated, atomic, app data). Structure in `defaults/settings.json`,
   limits in `src/app/settings_rules.py`. Backward compatible forever (old configurations get loaded).
 - **Flash**: no log files, no cyclic disk writes (also not on Data Layer writes). Log to stdout via `logging`.
-- **RAM: < 75 MB per app** (App Guide 6.2) stays the target. When an app will likely need more (image processing,
+- **RAM: < 75 MB per app** (App Guide 6.2) stays the target; the template alone takes ~35 MB RSS (Python + Data
+  Layer library, gotchas #112), so an app has ~40 MB for its own work. When an app will likely need more (image processing,
   large libraries, big buffers), say so with an estimate and ask the user before building (AskUserQuestion, with
   ways to stay below it); an accepted exception goes into the app README and `docs/ctrlx/decisions.md`.
 - **Data Layer**: look up signatures in `reference/ctrlxdatalayer-api-3.6.0/` – never guess. Callbacks call `cb` exactly once.
   Nodes are declared in `src/app/datalayer_nodes.py::build_node_specs`. A PLC starts actions through `PlcCommand`
-  (Execute / Busy / Done / Error, user's choice 2026-11-07) - no app-specific trigger schemes.
+  (Execute / Busy / Done / Error, user's choice 2026-11-07) - no app-specific trigger schemes. A node has the type of
+  the PLC variable behind it (REAL = float32, DINT = int32, ...; `docs/ctrlx/datalayer-python.md`) and accepts only
+  that type: no conversions (user's choice 2026-11-08). Other nodes (PLC variables, `system/info`) through the
+  template's `DataLayerClient` (`DataLayerService(..., on_client=...)`) - no own client wrapper.
 - **Secrets**: no credentials in snap code (`ipc://` needs none). Device credentials only in the git-ignored
   `devices.toml` (template `devices.example.toml`) or env vars for tools - never in committed files.
 - **Versions**: bump `version` (snap/snapcraft.yaml + src/pyproject.toml) and CHANGELOG for every build you hand over.
@@ -82,7 +86,8 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
   available (none in `devices.toml`, or not reachable), or for checks that need SSH when the real CORE has no `ssh_user` or doesn't allow SSH; everything else still
   runs on the real CORE. Test arm64 builds on a real arm64 CORE (X2, X3). Name the device with every result.
   During active app development, installing the app and `--service` on these devices need no asking, whatever else is
-  installed there. Details: `docs/ctrlx/build-deploy-test.md` §3.
+  installed there. Details: `docs/ctrlx/build-deploy-test.md` §3. Roles on a device: the test users kit-view /
+  kit-operate / kit-configure (`tools/ctrlx.py test-users`; creating them on a device: ask first, §4).
 - Don't run `snap install`/`snapcraft` with sudo tricks, don't touch other snaps, don't change device settings
   (e.g. `--allow-unknown`) unless the human asked.
 
@@ -101,6 +106,8 @@ tools/ctrlx.py [--device NAME] dl-read <snap>/status/heartbeat | appdata <snap>/
 tools/ctrlx.py [--device NAME] api GET /<snap>/api/v1/status [--data JSON] [--out file]   # the app's own API on the device
 tools/ctrlx.py [--device NAME] ssh 'sudo snap logs -n 50 <snap>'
 tools/ctrlx.py [--device NAME] dl-read ctrlx-system-analyzer/apps/summary   # CPU/RAM of every app (build-deploy-test.md §5)
+tools/ctrlx.py --device NAME test-users [--snap <snap>]   # test users per role (kit-view/-operate/-configure); missing: ask, then `create`
+python3 tools/ui_check.py apps/<app> --device NAME --role reader|operator|writer   # on the device as that test user
 python3 -m unittest discover -s tools/tests    # self-tests of the tools and of the gotchas index
 ```
 

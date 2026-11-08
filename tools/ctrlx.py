@@ -35,6 +35,13 @@ Commands:
                                               e.g. ctrlx-acme-demo/settings.json
     ctrlx.py logs [--snap NAME] [--search TEXT] [--limit N]
                                               recent Logbook entries (newest first)
+    ctrlx.py test-users [--snap NAME]         the test users of the roles view / operate / configure on the
+                                              device (kit-view, kit-operate, kit-configure): there? app scope granted?
+    ctrlx.py test-users create                create the missing ones (ask the user first); the password goes into
+                                              devices.toml [<device>.test_users] (or CTRLX_TEST_USERS_PASSWORD)
+    ctrlx.py test-users grant <snap>          give each one its role's scope of an installed app
+                                              (tools/ui_check.py --device --role does this itself)
+    ctrlx.py test-users delete                remove them from the device
 
 API sources: reference/rest-api/*.openapi.json (package manager 1.15, identity manager 2.10,
 Data Layer 2.1.5, logbook 2.4). Built from the OpenAPI specs - if a call fails on your
@@ -42,10 +49,12 @@ device version, fix it here and note it in docs/ctrlx/gotchas.md.
 """
 
 import argparse
+import datetime
 import http.client
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import ssl
@@ -112,6 +121,8 @@ def resolve_target(devices, env, device=None, host=None, user=None, password=Non
         "ssh_password": e.get("CTRLX_SSH_PASSWORD") or d.get("ssh_password") or "",
         "arch": d.get("arch", ""),
         "verify_tls": env.get("CTRLX_VERIFY_TLS") == "1" or bool(d.get("verify_tls")),
+        # one password for the three test users of this device (test-users create writes it into devices.toml)
+        "test_users_password": e.get("CTRLX_TEST_USERS_PASSWORD") or (d.get("test_users") or {}).get("password", ""),
     }
     return t
 
@@ -413,6 +424,145 @@ def cmd_logs(dev, args):
                                         str(e.get("dynamicDescription") or e.get("mainTitle") or "")))
 
 
+# ---- test users: one per role of the kit's apps (user's request 2026-11-08) ------------------------------------
+# view / operate / configure = ui_check.py --role reader / operator / writer = scopes <snap>.web.all.r /
+# <snap>.web.operate.x / <snap>.web.all.rw. Created once per test device, kept for later tests; each app's scope is
+# added when it is tested (test-users grant <snap>, or ui_check.py --device --role ... by itself).
+IDM = "/identity-manager/api/v2"
+TEST_USERS = (("view", "reader", "kit-view", ".web.all.r"),
+              ("operate", "operator", "kit-operate", ".web.operate.x"),
+              ("configure", "writer", "kit-configure", ".web.all.rw"))
+
+
+def test_user(ui_role):
+    """(user name, scope suffix) of a ui_check.py role (reader / operator / writer)."""
+    for _, role, name, suffix in TEST_USERS:
+        if role == ui_role:
+            return name, suffix
+    raise KeyError(ui_role)
+
+
+def _users(dev):
+    """{name: id} of the device's users."""
+    _, _, users = dev.request("GET", IDM + "/users")
+    return {u.get("name"): u.get("id") for u in users} if isinstance(users, list) else {}
+
+
+def _granted(dev, user_id):
+    _, _, scopes = dev.request("GET", "{}/users/{}/scopes".format(IDM, user_id))
+    return scopes if isinstance(scopes, list) else []
+
+
+def _app_scopes(dev, snap):
+    """{identifier: scope} of an installed app (GET /scopes lists them by app)."""
+    _, _, body = dev.request("GET", IDM + "/scopes")
+    for app in (body.get("apps", []) if isinstance(body, dict) else []):
+        if app.get("identifier") == snap + ".web":
+            return {s["identifier"]: {k: s.get(k, "") for k in ("identifier", "name", "description")}
+                    for s in app.get("scopes", [])}
+    return {}
+
+
+def grant_test_users(dev, snap, roles=None, quiet=False):
+    """Add the role scope of <snap> to each test user (all, or the ui_check roles given) that lacks it.
+    Returns the names of users that got a scope. SystemExit when the app is not installed or a user is missing."""
+    scopes = _app_scopes(dev, snap)
+    if not scopes:
+        raise SystemExit("{} has no scopes on this device - is the app installed?".format(snap))
+    ids, changed = _users(dev), []
+    for _, ui_role, name, suffix in TEST_USERS:
+        if roles is not None and ui_role not in roles:
+            continue
+        if name not in ids:
+            raise SystemExit("Test user {} is not on this device: tools/ctrlx.py test-users create (ask the user "
+                             "first)".format(name))
+        scope = scopes.get(snap + suffix)
+        if scope is None:
+            raise SystemExit("{} has no scope {} (manifest)".format(snap, snap + suffix))
+        granted = _granted(dev, ids[name])
+        if any(g.get("identifier") == scope["identifier"] for g in granted):
+            continue
+        keep = [{k: g.get(k, "") for k in ("identifier", "name", "description")} for g in granted]
+        dev.request("PUT", "{}/users/{}/scopes".format(IDM, ids[name]), keep + [scope])   # PUT = the whole list
+        changed.append(name)
+        if not quiet:
+            print("Granted {} to {}".format(scope["identifier"], name))
+    return changed
+
+
+def _store_password(args, password):
+    """Append [<device>.test_users] password = ... to the devices file (git-ignored)."""
+    name = args.target["name"]
+    if not name or name not in args.devices:
+        print("No device entry in {} to keep the password in - set CTRLX_TEST_USERS_PASSWORD={} for later "
+              "tests".format(args.devices_file, password))
+        return
+    with open(args.devices_file, "a", encoding="utf-8") as f:
+        f.write('\n[{}.test_users]   # tools/ctrlx.py test-users create, {} ({})\npassword = "{}"\n'.format(
+            name, datetime.date.today().isoformat(), ", ".join(u[2] for u in TEST_USERS), password))
+    print("Password stored in {} [{}.test_users]".format(args.devices_file, name))
+
+
+def cmd_test_users(dev, args):
+    action = args.action or "status"
+    if action == "grant":
+        if not args.snap:
+            raise SystemExit("test-users grant <snap>")
+        if not grant_test_users(dev, args.snap):
+            print("All test users already have their {} scope".format(args.snap))
+        return
+    ids = _users(dev)
+    if action == "status":
+        where = "devices.toml [{}.test_users]".format(args.target["name"]) if args.target["test_users_password"] \
+            else "no password in devices.toml / CTRLX_TEST_USERS_PASSWORD"
+        print("Test users on {} (password: {}):".format(args.target["name"] or args.target["api_host"], where))
+        scopes = _app_scopes(dev, args.snap) if args.snap else {}
+        for role, ui_role, name, suffix in TEST_USERS:
+            line = "  {:10} {:14} {}".format(role, name, "exists" if name in ids else "MISSING")
+            if args.snap and name in ids:
+                has = any(g.get("identifier") == args.snap + suffix for g in _granted(dev, ids[name]))
+                line += "   {}: {}".format(args.snap + suffix, "granted" if has else
+                                           "not granted" if scopes else "app not installed")
+            print(line + "   (ui_check.py --role {})".format(ui_role))
+        if any(u[2] not in ids for u in TEST_USERS):
+            print("Missing users: ask the user, then tools/ctrlx.py --device {} test-users create".format(
+                args.target["name"] or "NAME"))
+        return
+    if action == "delete":
+        for _, _, name, _ in TEST_USERS:
+            if name in ids:
+                dev.request("DELETE", "{}/users/{}".format(IDM, ids[name]))
+                print("Deleted", name)
+        print("The password stays in {} - remove [{}.test_users] there if you like".format(
+            args.devices_file, args.target["name"]))
+        return
+    # create
+    missing = [name for _, _, name, _ in TEST_USERS if name not in ids]
+    if not missing:
+        print("All test users exist")
+        return
+    password = args.target["test_users_password"]
+    new_password = not password
+    if new_password:
+        password = "Kt-9" + secrets.token_urlsafe(18)   # upper, lower, digit, special: fits strict password policies
+    for name in missing:
+        _, _, user = dev.request("POST", IDM + "/users", {"name": name})
+        user_id = user.get("id") if isinstance(user, dict) else None
+        user_id = user_id or _users(dev).get(name)
+        if not user_id:
+            raise SystemExit("Created {}, but the device lists no id for it".format(name))
+        dev.request("PUT", "{}/users/{}/credentials".format(IDM, user_id), {"newPassword": password})
+        dev.request("PUT", "{}/users/{}/pwdchgatnextlogin".format(IDM, user_id), {"forced": False})
+        print("Created {} (id {})".format(name, user_id))
+    if new_password:
+        _store_password(args, password)
+    for name in missing:   # proves the password and ends the session right away (gotchas #110)
+        user_dev = Device(args.target["api_host"], name, password, args.target["verify_tls"])
+        user_dev.token()
+        user_dev.logout()
+    print("Login as {} works".format(", ".join(missing)))
+
+
 def cmd_devices(dev, args):
     devices = args.devices
     if not devices:
@@ -497,7 +647,14 @@ def main():
     p.add_argument("--search", help="case-insensitive text filter (client-side)")
     p.add_argument("--limit", type=int, default=50)
     p.set_defaults(fn=cmd_logs)
+    p = sub.add_parser("test-users", help="test users of the roles view / operate / configure")
+    p.add_argument("action", nargs="?", choices=["status", "create", "grant", "delete"])
+    p.add_argument("snap", nargs="?", help="grant: the app whose scopes they get")
+    p.add_argument("--snap", dest="status_snap", help="status: also show this app's scopes")
+    p.set_defaults(fn=cmd_test_users)
     args = ap.parse_args()
+    if args.cmd == "test-users":
+        args.snap = args.snap or args.status_snap
     args.devices_file = os.environ.get("CTRLX_DEVICES_FILE", DEFAULT_DEVICES_FILE)
     args.devices = load_devices(args.devices_file)
     args.target = resolve_target(args.devices, os.environ, args.device, args.host, args.user, args.password)

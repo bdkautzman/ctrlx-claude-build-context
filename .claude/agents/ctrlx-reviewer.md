@@ -13,7 +13,10 @@ report findings only.
      configure = change its setup; settings configure-only), UI controls a role can't use but sees,
      data under non-restricted paths, secrets in static files or logs
    - app code in `www/kit.js` / `kit.css` (belongs in `app.js` / `style.css`); a feature rebuilt that the template
-     already has (settings drawer, help/tutorial, `Kit.download`/`upload`, `_send_bytes`/`_receive_file`, JSON nodes)
+     already has (settings drawer, help/tutorial, `Kit.download`/`upload`, `_send_bytes`/`_receive_file`, JSON nodes,
+     `PlcCommand`, `DataLayerClient`)
+   - Data Layer nodes whose type isn't the PLC variable's type, or that accept more than one type (conversions are
+     ruled out, `docs/ctrlx/datalayer-python.md` "Node types for PLC variables")
    - writes to disk on every Data Layer write or in loops; log files; unbounded memory (caches, lists)
    - blocking work inside Data Layer callbacks; callbacks that may not call `cb` exactly once
    - settings changes bypassing `SettingsStore`; breaking changes to `settings.json` without migration

@@ -8,8 +8,9 @@ do not guess signatures.** SDK samples: `reference/sdk-4.6.0-samples-python/data
 ## Template structure
 
 * `src/app/datalayer_nodes.py` – **edit here**: `build_node_specs()` returns `NodeSpec`s
-  (`name`, `vtype` ∈ bool8/int64/uint64/float64/string, `initial`, `writable`, `minimum`,
-  `maximum`, `max_length`, `description`, `unit`, `on_write`, `json`, `view_role`, `write_role`).
+  (`name`, `vtype` (every scalar type and `array-of-<type>`, see "Node types for PLC variables"), `initial`,
+  `writable`, `minimum`, `maximum`, `max_length`, `max_items`, `description`, `unit`, `on_write`, `json`,
+  `view_role`, `write_role`).
   `NodeRegistry` holds values, validates writes. Pure Python → unit-testable.
 * **JSON nodes** (template 0.2.0): `NodeSpec("apps/summary", "string", [], json=True)` - every app of the kit
   publishes lists and summaries as JSON strings. `registry.set_internal(name, obj)` stores the object as compact
@@ -37,10 +38,7 @@ with ctrlxdatalayer.system.System("") as system:        # "" = automatic IPC pat
     system.stop(False)   # returns False/blocks while clients/providers still exist
 ```
 
-Client (reading other nodes) – same system, `system.factory().create_client("ipc://")`, then
-`client.read_sync(addr) -> (Result, Variant)`, `client.write_sync(addr, variant)`,
-`client.metadata_sync(addr)`; subscriptions via `subscription_sync`/`subscription_async`
-(see sample `datalayer.client.sub`). Prefer subscriptions over polling for frequent values.
+Client (reading/writing other nodes): the template's `DataLayerClient` (template 0.4.0, section "Client" below).
 
 ## Callbacks (`ProviderNodeCallbacks(on_create, on_remove, on_browse, on_read, on_write, on_metadata)`)
 
@@ -62,9 +60,50 @@ Client (reading other nodes) – same system, `system.factory().create_client("i
 ## Addresses & types
 
 * Root = snap name (`<name>/…`), lowercase, `-` between words, groups like `status/`, `values/`, `settings/`.
-* Type addresses: `types/datalayer/bool8|int8..int64|uint8..uint64|float32|float64|string|…`.
+* Type addresses: `types/datalayer/bool8|int8..int64|uint8..uint64|float32|float64|string|array-of-<type>|…`
+  (on the X3, ctrlX OS 4.6: also `double`, `array-of-double`, `timestamp`, `array-of-timestamp`, `raw`).
   Complex data: flatbuffers (`register_type(address, bfbs_path)`, see sample `datalayer.provider`)
   or a JSON string node (simple, used by community apps; consumers must parse it).
+
+### Node types for PLC variables (template 0.4.0, user's choice 2026-11-08)
+
+A write must come with **exactly** the node's type, and nothing is converted. On the X3 (ctrlX OS 4.6, 2026-11-07),
+the Data Layer handed REST writes of float32, int16, int32, int64, uint8, uint32 and bool8 to the template's
+float64 node unchanged, and the template answered `DL_TYPE_MISMATCH`; a bool8 node refused 0 and 1. A PLC writes
+with its variable's type, so **give each node the type of the PLC variable that writes or reads it**. The
+template accepts no other type on purpose: a conversion (REAL into a float64 node, DINT into an int64 node) would be
+a place where values change on the way. The user ruled that out.
+
+| IEC 61131-3 (ctrlX PLC) | Node type (`vtype`) | REST `type` | Range / note |
+|---|---|---|---|
+| BOOL | `bool8` | `bool8` | true / false (0 and 1 are refused) |
+| SINT | `int8` | `int8` | -128..127 |
+| USINT, BYTE | `uint8` | `uint8` | 0..255 |
+| INT | `int16` | `int16` | -32768..32767 |
+| UINT, WORD | `uint16` | `uint16` | 0..65535 |
+| DINT | `int32` | `int32` | -2^31..2^31-1 |
+| UDINT, DWORD | `uint32` | `uint32` | 0..2^32-1 |
+| LINT | `int64` | `int64` | -2^63..2^63-1 |
+| ULINT, LWORD | `uint64` | `uint64` | 0..2^64-1 |
+| REAL | `float32` | `float32` (reads say `float`) | finite; the node holds a float32 |
+| LREAL | `float64` | `float64` (reads say `double`) | finite |
+| STRING, WSTRING | `string` | `string` | UTF-8; `max_length` |
+| ARRAY [..] OF \<type\> | `array-of-<type>` | `ar<type>`, e.g. `arint16`; float32: `arfloat32` = `arfloat` (reads say `arfloat`) | `max_items`; `minimum`/`maximum`/`max_length` per element |
+| TIME, DATE, DT, TOD, STRUCT | not in the template | | a STRUCT as separate nodes or a JSON node (`json=True`); time values as int64 (ms or ns, say which in `unit`) |
+
+* The mapping is the one of `reference/example-apps/datalayer.ab` (CIP tags → Data Layer). **Not verified with a
+  ctrlX PLC yet** (no PLC app on the X3). Verified on the X3 (template 0.4.0, 2026-11-08): the float32 array node
+  `values/limits` takes REST writes as `arfloat32` and `arfloat` and refuses `arfloat64` / `ardouble`
+  (`DL_TYPE_MISMATCH`); through `DataLayerClient` float32 into a float64 node and int32 into float64 are refused too.
+  A scalar float32 node was not on the device yet (REST spec: `float32`, reads `float`).
+* **float32**: the registry stores the float32 that a REAL holds. A value set from Python or the web UI is stored
+  as the nearest float32 once (0.1 → 0.10000000149011612); a value from the Data Layer is already one and stays
+  exact. Registry, web API and Data Layer always show the same value. The template page shows float32 values with
+  the fewest digits that give the same float32 (0.1), like PLC tools do.
+* **Arrays** are tuples in Python (`registry.get()`), JSON arrays in the web API and REST.
+* **int64 / uint64 in the browser**: JavaScript numbers lose digits above 2^53 - the web UI can show such values
+  rounded; the Data Layer value is exact.
+* REST writes need the type name: `tools/ctrlx.py dl-write <snap>/values/limits '[1.5, 2]' --type arfloat32`.
 * Node names in Data Layer UI: Settings → Data Layer → `<name>/`.
 
 ## PLC commands: Execute / Busy / Done / Error (template 0.3.0, the kit's standard, user's choice 2026-11-07)
@@ -129,19 +168,45 @@ When the nodes follow a list that changes at runtime (`fleet/amr/<id>/x` for eve
 ONE `ProviderNode` at `<path>/**` (plus `<path>` for the folder) instead of a node per item and value: its
 callbacks get the full address; `on_browse` returns the children, `on_metadata` a Folder or a Variable with its
 type, an unknown address `INVALID_ADDRESS`. Register it only while needed and unregister to remove the whole
-subtree (gotchas #88). Keep the address logic in a pure-Python class (`amr_inputs.py`) for unit tests; accept any
-number type on writes (a PLC writes REAL or INT); merge many single writes into one state update when the
-writes pause, not per write.
+subtree (gotchas #88). Keep the address logic in a pure-Python class (`amr_inputs.py`) for unit tests; give every
+value the type of the PLC variable that writes it and accept only that type ("Node types for PLC variables" -
+amr-fleet 0.4.0 still accepts any number type, from before that rule); merge many single writes into one state
+update when the writes pause, not per write.
 
-## Client (reading other nodes) - verified 2026-10-21, see `apps/ctrlx-core-connector` (until 0.1.x `ctrlx-core-monitor`)
+## Client (reading/writing other nodes): `src/app/datalayer_client.py` (template 0.4.0)
 
-* Same `System` as the provider: `client = system.factory().create_client("ipc://")`; close it
-  before `system.stop()`. Wrap it in a small adapter (read / create / remove that raise an
-  exception with the result name) so the app logic is testable with a fake.
-* `result, data = client.read_sync(addr)` → `with data:` → getter by type:
-  `getattr(data, "get_" + data.get_type().name.lower())()` for simple types.
-* Object nodes (`VariantType.FLATBUFFERS`): `client.read_json_sync(system.json_converter(), addr, 0)`
-  → JSON string (unwrap `{"type", "value"}` if present).
+core-connector's `ClientAdapter` (verified 2026-10-21 .. 11-01 on the COREvirtual, X3 and X7, gotchas #79/#87),
+moved into the template 2026-11-08 without its app-specific calls (creating remotes). **Use it; don't write
+another client wrapper** (user's request: a feature several apps need lives in the template).
+
+```python
+class Worker:
+    def attach(self, client):            # called from the Data Layer thread
+        self._dl = client                # a DataLayerClient while connected, None when not
+worker = Worker()
+datalayer = DataLayerService(settings, version, commands, on_client=worker.attach)   # main.py
+# in the worker, with self._dl not None:
+self._dl.read("system/info/hostname")                    # value (scalars, lists, flatbuffers objects as dict)
+self._dl.read_typed("plc/app/Application/sym/PLC_PRG/x") # ("float32", 1.5)
+self._dl.write("plc/app/.../setpoint", "float32", 2.5)   # exactly the node's type, else TYPE_MISMATCH
+self._dl.write_json(addr, {"type": "int32", "value": 5}) # or a flatbuffers object as dict
+self._dl.browse(addr), self._dl.metadata(addr), self._dl.remove(addr)
+self._dl.read_many([...]), browse_many([...]), metadata_many([...])   # one bulk request: [(result, ...)]
+```
+
+* Errors: `DataLayerError` with `.result` = the normalized result name (`INVALID_ADDRESS`, `TYPE_MISMATCH`,
+  `PERMISSION_DENIED`; `DL_` prefixes and garbled enum names fixed, gotchas #78). `write()` checks the value
+  against the type's range first (`ValueError`).
+* Without `on_client` the service opens no client (no cost for apps that only provide nodes).
+* One lock for all calls; every call waits for the answer (the sync API has no per-request timeout:
+  `TimeoutSetting` has IDLE, PING, Reconnect only). Call it from worker threads or web handlers, **never from a
+  provider callback** (`on_read`/`on_write` run in a Data Layer thread and must return fast).
+* Values that change often: subscriptions (`subscription_async`, sample `datalayer.client.sub`) are cheaper than
+  polling - not in `DataLayerClient` yet (no kit app needed one); add them there when the first app does.
+* Tests: `tests/fakes/ctrlxdatalayer/client.py` routes read / write / browse to the fake provider's nodes
+  (`tests/test_datalayer_glue.py` `ClientGlueTest`); a worker's own tests can use a small fake with the same methods.
+* Under the hood: `client.read_sync(addr)` → `with data:` → getter by type; object nodes (`FLATBUFFERS`):
+  `client.read_json_sync(system.json_converter(), addr, -1)` → JSON text (`{"type", "value"}` for simple types).
 * Creating object nodes: build the flatbuffer with the generated classes of `ctrlx-fbs`
   (e.g. `comm.datalayer.remote.ConfigItem`) → `Variant.set_flatbuffers(builder.Output())` →
   `client.create_sync(parent, variant)`. Types: read `types/...` via REST to see the schema.
@@ -162,8 +227,8 @@ writes pause, not per write.
 * A remote can get stuck at `SEC_INVALID_SESSION` (e.g. after the other device's clock was set); it does not
   recover by itself - delete and recreate it (gotchas #77). Python result names have no `DL_` prefix (#78).
 * Browsing/reading/writing other nodes with a client (JSON forms, metadata as JSON, bulk requests - one bulk
-  call per folder is ~25x faster through a remote than node by node): gotchas #79, example
-  `apps/ctrlx-core-connector` (`src/app/datalayer_service.py` `ClientAdapter`, `src/app/browser.py`).
+  call per folder is ~25x faster through a remote than node by node): gotchas #79, the template's
+  `DataLayerClient` (from `apps/ctrlx-core-connector`, whose `src/app/browser.py` shows the bulk calls in use).
 * Useful nodes on any device: `system/info/{hostname,ctrlxOsVersion,architecture,uptime}`,
   `scheduler/admin/state` (`{"state": "OPERATING" | "SETUP" | "SERVICE"}`),
   `framework/metrics/system/{cpu-utilisation-percent,memused-percent,memused-mb,memtotal-mb}`,

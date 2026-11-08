@@ -138,7 +138,9 @@ def main():
     print("Running checks ...")
     rc = subprocess.call([os.path.join(HERE, "check.sh"), dest])
     print("\nNext: edit defaults/settings.json, src/app/settings_rules.py, src/app/datalayer_nodes.py, www/;\n"
-          "then ./run-local.sh, ../../tools/check.sh ., ./build-snap-amd64.sh")
+          "then ./run-local.sh, ../../tools/check.sh ., ./build-snap-amd64.sh\n"
+          "Test users for the roles on each test device: tools/ctrlx.py --device <device> test-users\n"
+          "(missing: ask the user, then test-users create)")
     return rc
 
 

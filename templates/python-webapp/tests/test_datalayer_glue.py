@@ -79,6 +79,28 @@ class GlueTest(unittest.TestCase):
         ro_wrong_type.set_float64(1.0)  # read-only wins over the type mismatch
         self.assertEqual(self.provider.write(self.root + "/status/state", ro_wrong_type)[0], Result.PERMISSION_DENIED)
 
+    def test_exact_types_only(self):
+        """A write must come with exactly the node's type - like the X3 answered for REST writes (2026-11-07)."""
+        from ctrlxdatalayer.variant import Result, Variant
+        setpoint, limits = self.root + "/values/setpoint", self.root + "/values/limits"
+        for setter, value in (("set_float32", 1.5), ("set_int32", 1), ("set_int64", 1), ("set_uint8", 1)):
+            v = Variant()
+            getattr(v, setter)(value)
+            self.assertEqual(self.provider.write(setpoint, v)[0], Result.TYPE_MISMATCH, setter)
+        ok = Variant()
+        ok.set_array_float32([0.1, -2.0])
+        result, echoed = self.provider.write(limits, ok)
+        self.assertEqual(result, Result.OK)
+        self.assertEqual(self.svc.registry.get("values/limits"), (0.10000000149011612, -2.0))
+        self.assertEqual(echoed.get_type().name, "ARRAY_FLOAT32")
+        result, variant = self.provider.read(limits)
+        self.assertEqual((result, variant.get_array_float32()), (Result.OK, [0.10000000149011612, -2.0]))
+        as64 = Variant()
+        as64.set_array_float64([0.1])
+        self.assertEqual(self.provider.write(limits, as64)[0], Result.TYPE_MISMATCH)
+        result, meta = self.provider.metadata(limits)
+        self.assertEqual(meta.meta["type_path"], "types/datalayer/array-of-float32")
+
     def test_heartbeat_and_reconnect(self):
         hb1 = self.svc.registry.get("status/heartbeat")
         time.sleep(0.35)
@@ -89,6 +111,76 @@ class GlueTest(unittest.TestCase):
             time.sleep(0.02)
         self.assertFalse(self.svc.status()["connected"])
         self.assertEqual(self.provider.nodes, {})  # unregistered on disconnect
+
+
+@unittest.skipIf(REAL, "real ctrlxdatalayer installed - this test targets the fake")
+class ClientGlueTest(unittest.TestCase):
+    """DataLayerService(on_client=...) hands out a DataLayerClient while connected; reads and writes through the
+    (fake) broker reach the provider glue with exactly the given type."""
+
+    def setUp(self):
+        from app import config
+        from app.datalayer_service import DataLayerService
+        from ctrlxdatalayer import provider as fake_provider
+
+        fake_provider.ALL_PROVIDERS.clear()
+        self.config, self._orig = config, config.datalayer_connection_string
+        config.datalayer_connection_string = lambda: "ipc://"
+        with open(DEFAULTS_FILE, encoding="utf-8") as f:
+            settings = json.load(f)
+        settings["general"]["heartbeatIntervalMs"] = 100
+        self.clients = []
+        self.svc = DataLayerService(settings, "9.9.9", on_client=self.clients.append)
+        self.svc.start()
+        deadline = time.time() + 3
+        while time.time() < deadline and not self.clients:
+            time.sleep(0.02)
+        self.assertTrue(self.clients and self.clients[-1] is not None)
+        self.client, self.provider = self.clients[-1], fake_provider.ALL_PROVIDERS[-1]
+        self.root = config.DATALAYER_ROOT
+
+    def tearDown(self):
+        self.svc.stop()
+        self.config.datalayer_connection_string = self._orig
+
+    def test_read_write_browse(self):
+        from app.datalayer_client import DataLayerError
+        c, root = self.client, self.root
+        self.assertEqual(c.read(root + "/status/version"), "9.9.9")
+        self.assertEqual(c.read_typed(root + "/values/limits"), ("array-of-float32", [0.0, 100.0]))
+        c.write(root + "/values/limits", "array-of-float32", [0.1, 2])
+        self.assertEqual(self.svc.registry.get("values/limits"), (0.10000000149011612, 2.0))
+        with self.assertRaises(DataLayerError) as ctx:
+            c.write(root + "/values/setpoint", "float32", 1.0)          # the node is float64: no conversion
+        self.assertEqual(ctx.exception.result, "TYPE_MISMATCH")
+        with self.assertRaises(DataLayerError) as ctx:
+            c.write(root + "/status/state", "string", "x")
+        self.assertEqual(ctx.exception.result, "PERMISSION_DENIED")
+        with self.assertRaises(ValueError):
+            c.write(root + "/values/setpoint", "int8", 300)              # checked before it is sent
+        with self.assertRaises(DataLayerError) as ctx:
+            c.read(root + "/nope")
+        self.assertEqual(ctx.exception.result, "INVALID_ADDRESS")
+        self.assertEqual(c.browse(root + "/values"), ["enabled", "label", "limits", "setpoint"])
+
+    def test_gone_on_disconnect(self):
+        self.provider.connected = False
+        deadline = time.time() + 2
+        while time.time() < deadline and self.clients[-1] is not None:
+            time.sleep(0.02)
+        self.assertIsNone(self.clients[-1])
+
+
+class ClientHelpersTest(unittest.TestCase):
+    def test_names(self):
+        from app.datalayer_client import DataLayerError, normalize_result, type_name
+        self.assertEqual(normalize_result("DL_INVALID_ADDRESS"), "INVALID_ADDRESS")          # gotchas #78
+        self.assertEqual(normalize_result("sec_noSEC_NO_TOKEN_token"), "SEC_NO_TOKEN")
+        self.assertEqual(DataLayerError("DL_TYPE_MISMATCH").result, "TYPE_MISMATCH")
+        for variant_name, name in (("FLOAT32", "float32"), ("ARRAY_INT16", "array-of-int16"),
+                                   ("ARRAY_OF_TIMESTAMP", "array-of-timestamp"), ("UNKNON", "unknown"),
+                                   ("FLATBUFFERS", "flatbuffers")):
+            self.assertEqual(type_name(variant_name), name)
 
 
 class DownTimeLogTest(unittest.TestCase):

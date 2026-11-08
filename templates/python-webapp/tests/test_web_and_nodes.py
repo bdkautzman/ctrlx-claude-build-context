@@ -10,8 +10,8 @@ import time
 import unittest
 
 from app import auth, config
-from app.datalayer_nodes import (CommandError, Commands, NodeRegistry, NodeSpec, NodeWriteError, PlcCommand,
-                                  build_node_specs, need)
+from app.datalayer_nodes import (INT_RANGES, SUPPORTED_TYPES, CommandError, Commands, NodeRegistry, NodeSpec,
+                                  NodeWriteError, PlcCommand, build_node_specs, need)
 from app.datalayer_service import DataLayerService
 from app.settings_rules import RULES
 from app.settings_store import SettingsStore
@@ -94,6 +94,53 @@ class NodeRegistryTest(unittest.TestCase):
             with self.assertRaises(NodeWriteError) as ctx:
                 self.reg.write(name, value)
             self.assertEqual(ctx.exception.reason, reason, (name, value))
+
+    def test_integer_types_have_their_ranges(self):
+        """Every IEC integer type is its own node type, with exactly its range - nothing is clipped or converted."""
+        for vtype, (low, high) in INT_RANGES.items():
+            reg = NodeRegistry("root", [NodeSpec("n", vtype, 0, writable=True)])
+            self.assertEqual(reg.write("n", low), low)
+            self.assertEqual(reg.write("n", high), high)
+            for bad, reason in ((low - 1, "range"), (high + 1, "range"), (1.5, "type"), (True, "type"), ("1", "type")):
+                with self.assertRaises(NodeWriteError) as ctx:
+                    reg.write("n", bad)
+                self.assertEqual(ctx.exception.reason, reason, (vtype, bad))
+            self.assertEqual(reg.get("n"), high)                     # rejected writes change nothing
+
+    def test_float32_holds_what_a_plc_real_holds(self):
+        reg = NodeRegistry("root", [NodeSpec("r", "float32", 0.1, writable=True)])
+        self.assertEqual(reg.get("r"), 0.10000000149011612)          # the float32 nearest to 0.1, as a REAL
+        self.assertEqual(reg.write("r", 0.10000000149011612), 0.10000000149011612)   # a float32 value stays exact
+        self.assertEqual(reg.write("r", 3.4028234663852886e38), 3.4028234663852886e38)
+        for bad, reason in ((1e39, "range"), (float("inf"), "invalid"), (float("nan"), "invalid"), (False, "type")):
+            with self.assertRaises(NodeWriteError) as ctx:
+                reg.write("r", bad)
+            self.assertEqual(ctx.exception.reason, reason, bad)
+
+    def test_arrays(self):
+        reg = NodeRegistry("root", [
+            NodeSpec("a/i", "array-of-int16", [1, 2], writable=True, max_items=3, minimum=-10, maximum=10),
+            NodeSpec("a/s", "array-of-string", ["x"], writable=True, max_length=3),
+            NodeSpec("a/r", "array-of-float32", [], writable=True),
+        ])
+        self.assertEqual(reg.get("a/i"), (1, 2))                       # arrays are tuples
+        self.assertEqual(reg.write("a/i", [-10, 0, 10]), (-10, 0, 10))
+        self.assertEqual(reg.write("a/s", ["abc", ""]), ("abc", ""))
+        self.assertEqual(reg.write("a/r", [0.5, 0.1]), (0.5, 0.10000000149011612))
+        for name, bad, reason in (("a/i", [1, 2, 3, 4], "range"), ("a/i", [11], "range"), ("a/i", [1.5], "type"),
+                                  ("a/i", [40000], "range"), ("a/i", 1, "type"), ("a/s", ["abcd"], "range"),
+                                  ("a/s", [1], "type"), ("a/r", [float("nan")], "invalid")):
+            with self.assertRaises(NodeWriteError) as ctx:
+                reg.write(name, bad)
+            self.assertEqual(ctx.exception.reason, reason, (name, bad))
+        self.assertEqual(json.loads(json.dumps(reg.snapshot()))["a/i"]["value"], [-10, 0, 10])
+
+    def test_every_type_can_be_declared(self):
+        initial = {"bool8": False, "string": "", "float32": 0.0, "float64": 0.0}
+        specs = [NodeSpec(t, t, [] if t.startswith("array-of-") else initial.get(t, 0)) for t in SUPPORTED_TYPES]
+        self.assertEqual(len(NodeRegistry("root", specs).specs()), 24)
+        with self.assertRaises(ValueError):
+            NodeRegistry("root", [NodeSpec("x", "timestamp", 0)])
 
     def test_on_write_can_reject(self):
         def reject_odd(value):
@@ -347,6 +394,15 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual(status, 400)
         status, _ = self.req("PUT", config.API_PREFIX + "/values/nope", {"value": 1})
         self.assertEqual(status, 404)
+        status, body = self.req("PUT", config.API_PREFIX + "/values/values/limits", {"value": [1.5, 0.1]},
+                                scopes=(config.SCOPE_OPERATE,))
+        self.assertEqual(status, 200)
+        status, body = self.req("GET", config.API_PREFIX + "/values", scopes=(config.SCOPE_VIEW,))
+        self.assertEqual(body["values/limits"]["type"], "array-of-float32")
+        self.assertEqual(body["values/limits"]["value"], [1.5, 0.10000000149011612])
+        status, _ = self.req("PUT", config.API_PREFIX + "/values/values/limits", {"value": [1.0] * 9},
+                             scopes=(config.SCOPE_OPERATE,))
+        self.assertEqual(status, 400)                                   # max_items=8
 
     def test_appdata_endpoints(self):
         status, _ = self.req("POST", config.API_PREFIX + "/appdata/save", {"phase": "save", "id": "t"})

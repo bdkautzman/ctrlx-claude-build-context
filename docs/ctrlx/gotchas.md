@@ -44,14 +44,14 @@ An entry can be under more than one topic. Kit parts still unverified on a devic
   write changed the value · #65 command node that rejects a value · #77 remote after a clock change · #78 result
   names differ per API · #79 client: JSON, metadata, bulk · #80 KVD restarts on `nodes.json` changes · #81 WebDAV
   ignores `If-Match` · #83 `array-of-<type>` · #86 ctrlX OS 3.6 without `system/info` · #87 empty KVD value · #88
-  wildcard provider node · #90 write cost
+  wildcard provider node · #90 write cost · #111 PLC types: exact node type needed
 - **Sandbox, interfaces, network, USB**: #61 what the `network` plug allows · #62 neighbor table · #64 scan from the
   COREvirtual · #67 installer connects `system-observe`, `removable-media` · #74 cgroup v2 vs v1, no PSI · #76 USB
   stick · #104 network limits in the sandbox
 - **CPU, memory, performance**: #58 CORE vs COREvirtual speed · #59 RSS stays up after a load · #60 measuring page
   speed · #66 network scan cost · #68 reading /proc · #69 `array` rings allocate at once · #71 memory growth from
   short-lived processes · #72 what a slow leak looks like · #73 apps get 2 of 4 cores · #90 Data Layer write cost ·
-  #92 Python ints in big sets · #105 large images (malloc, resize)
+  #92 Python ints in big sets · #105 large images (malloc, resize) · #112 the template's 35 MB, part by part
 - **GigE Vision cameras (Aravis)**: #93 through COREvirtual port forwarding · #100 no frame on a software trigger ·
   #101 packet loss, pacing · #103 X3 vs X7 · #104 sandbox network limits · #106 stream port cleared · #109 closing a
   lost camera blocks
@@ -756,4 +756,26 @@ App `ctrlx-barcode-reader` (GigE Vision camera, Aravis + OpenCV + zxing-cpp), 20
     (`GET/PUT /identity-manager/api/v2/settings/session`: `maxSessionsPerUser`, `sessionTimeout`, `tokenValidity`;
     open ones: `GET /sessions`, `DELETE /sessions/{id}`). The same user's browser login is then refused too. Fix:
     both tools end their session with `DELETE /identity-manager/api/v2/auth/token` (`Device.logout()`). Scripts that
-    log in themselves must log out as well. Old sessions end only with their timeout.
+    log in themselves must log out as well. Old sessions end only with their timeout. The X3's values (2026-11-08):
+    `maxSessionsPerUser` 100, `tokenValidity` 28800 s, `sessionTimeout` 0 - a session without logout lives 8 h, so
+    100 tool calls within 8 h lock the user out for up to 8 h. Logins worked again the next day.
+111. **A PLC-typed write to a template node: `DL_TYPE_MISMATCH`** (X3, ctrlX OS 4.6, template 0.3.0, 2026-11-07, REST
+    writes with `tools/ctrlx.py dl-write`). The Data Layer hands the writer's type to the provider unchanged: float32,
+    int16, int32, int64, uint8, uint32 and bool8 written to the float64 node `values/setpoint` were all refused, only
+    float64 was taken; the bool8 node `values/enabled` refused int16 1 and uint8 1. A ctrlX PLC writes with its
+    variable's type (REAL = float32), so a node must have that type - template 0.4.0 has every scalar type and
+    `array-of-<type>` (table: `datalayer-python.md` "Node types for PLC variables"). REST names differ between
+    reads and writes: a float64 node reads as `"type": "double"` (2026-11-08), the writes above used `float64`.
+112. **Where a kit app's RAM goes: ~34.6 MB RSS / 23.5 MB PSS for the template alone** (X3, ctrlX OS 4.6, template
+    0.4.0 idle, 2026-11-08; the app's start-up step by step in one process inside the snap, own Data Layer root and
+    socket; `/proc/<pid>/smaps`). File pages 18.9 MB: python3.12 binary 5.6, libcrypto 3.0, libstdc++ 1.6, libc 1.5
+    (core24, shared with every Python snap: PSS a third of that) and **libcomm_datalayer.so 6.6 - each snap maps its
+    own copy, so it is not shared between kit apps**. Anonymous 15.8 MB: interpreter 2.9, standard-library imports
+    7.9 (logging 1.2, http.client 1.2 incl. email, json 1.1, dataclasses 1.0 incl. inspect, ssl 1.1, http.server 0.8,
+    socketserver 0.6, mimetypes 0.5, typing 0.4), ctrlxdatalayer + 54 comm/flatbuffers modules 3.4, provider running
+    0.5 (+4 threads), the app's own modules, settings and five web requests ~1.0. Levers tried: no `ssl`
+    (`sys.modules["ssl"] = None` before http.server) -1.0 MB RSS only (libcomm_datalayer loads libcrypto anyway);
+    `PYTHONOPTIMIZE=2` +3.6 MB and 4.4 s instead of 0.9 s to start (no .opt-2.pyc in the snap: everything is compiled
+    at start); `MALLOC_ARENA_MAX=2` no change; the `DataLayerClient` +0.16 MB. Not tried: a dict instead of
+    mimetypes (~0.5 MB), a plain class instead of dataclasses (<= 1 MB, if nothing else imports inspect). So ~31 MB
+    is the price of Python + the Data Layer library; an app has ~40 MB RSS for its own work under the 75 MB target.

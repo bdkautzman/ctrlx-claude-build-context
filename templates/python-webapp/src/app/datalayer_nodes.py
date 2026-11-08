@@ -6,7 +6,13 @@ the web API reads/writes them too. Keeping this free of ctrlxdatalayer makes it
 unit-testable on any PC.
 
 Address convention:  <DATALAYER_ROOT>/<group>/<name>, lowercase, '-' between words.
-Types: bool8, int64, uint64, float64, string  (map to types/datalayer/<type>).
+Types (= types/datalayer/<type>): bool8, int8, uint8, int16, uint16, int32, uint32, int64, uint64, float32,
+float64, string, and array-of-<each of them>. Writes must come with exactly the node's type - nothing is
+converted (DL_TYPE_MISMATCH otherwise). So give a node the type of the PLC variable that writes or reads it:
+REAL = float32, DINT = int32, ... (table: docs/ctrlx/datalayer-python.md "Node types for PLC variables").
+float32 nodes hold float32 values: a value set from Python or the web API is stored as the float32 a PLC REAL
+reads (0.1 -> 0.100000001490116), so the registry, the web API and the Data Layer always show the same value.
+Array values are tuples.
 JSON nodes: a string node with json=True holds a JSON document (lists, summaries, a whole record from
 a PLC): set_internal() takes the Python object and stores it as compact JSON, get_json() returns it
 parsed, external writes must be valid JSON and on_write gets the parsed object.
@@ -23,12 +29,21 @@ import dataclasses
 import json
 import logging
 import math
+import struct
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-SUPPORTED_TYPES = ("bool8", "int64", "uint64", "float64", "string")
+INT_RANGES = {
+    "int8": (-2 ** 7, 2 ** 7 - 1), "uint8": (0, 2 ** 8 - 1),
+    "int16": (-2 ** 15, 2 ** 15 - 1), "uint16": (0, 2 ** 16 - 1),
+    "int32": (-2 ** 31, 2 ** 31 - 1), "uint32": (0, 2 ** 32 - 1),
+    "int64": (-2 ** 63, 2 ** 63 - 1), "uint64": (0, 2 ** 64 - 1),
+}
+SCALAR_TYPES = ("bool8",) + tuple(INT_RANGES) + ("float32", "float64", "string")
+ARRAY_OF = "array-of-"
+SUPPORTED_TYPES = SCALAR_TYPES + tuple(ARRAY_OF + t for t in SCALAR_TYPES)
 
 log = logging.getLogger("commands")
 
@@ -36,14 +51,15 @@ log = logging.getLogger("commands")
 @dataclass
 class NodeSpec:
     name: str                      # address relative to DATALAYER_ROOT, e.g. "values/setpoint"
-    vtype: str                     # one of SUPPORTED_TYPES
+    vtype: str                     # one of SUPPORTED_TYPES (the PLC variable's type: REAL = float32, ...)
     initial: Any
     writable: bool = False
     description: str = ""
     unit: str = ""
     minimum: Optional[float] = None
     maximum: Optional[float] = None
-    max_length: Optional[int] = None
+    max_length: Optional[int] = None   # strings (in arrays: of each element)
+    max_items: Optional[int] = None    # arrays: most elements a write may have (minimum/maximum: of each element)
     # called with the validated value BEFORE it is stored; raise NodeWriteError to reject it
     # (json=True: with the parsed object)
     on_write: Optional[Callable[[Any], None]] = field(default=None, repr=False)
@@ -62,31 +78,59 @@ class NodeWriteError(Exception):
         self.reason = reason
 
 
+def element_type(vtype):
+    """'float32' for 'array-of-float32', None for a scalar type."""
+    return vtype[len(ARRAY_OF):] if vtype.startswith(ARRAY_OF) else None
+
+
+def to_float32(value):
+    """The float32 nearest to value, as a Python float: what a PLC REAL / a float32 Data Layer node holds."""
+    try:
+        return struct.unpack("<f", struct.pack("<f", value))[0]
+    except OverflowError:
+        raise NodeWriteError("range", "out of the float32 range")
+
+
 def coerce(vtype, value):
-    """Convert a JSON/Python value to the node type or raise NodeWriteError('type')."""
+    """Check a JSON/Python value against the node type (range of the type included) and return it as stored:
+    ints as int, floats as float (float32: the nearest float32), arrays as tuples. Raises NodeWriteError."""
+    elem = element_type(vtype)
+    if elem is None:
+        return _coerce_scalar(vtype, value)
+    if not isinstance(value, (list, tuple)):
+        raise NodeWriteError("type", "expected an array")
+    out = []
+    for i, item in enumerate(value):
+        try:
+            out.append(_coerce_scalar(elem, item))
+        except NodeWriteError as exc:
+            raise NodeWriteError(exc.reason, "element {}: {}".format(i, exc))
+    return tuple(out)
+
+
+def _coerce_scalar(vtype, value):
     if vtype == "bool8":
         if isinstance(value, bool):
             return value
         raise NodeWriteError("type", "expected boolean")
-    if vtype in ("int64", "uint64"):
+    if vtype in INT_RANGES:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise NodeWriteError("type", "expected integer")
         if isinstance(value, float):
             if not value.is_integer():
                 raise NodeWriteError("type", "expected integer")
             value = int(value)
-        if vtype == "uint64" and not 0 <= value <= 2 ** 64 - 1:
-            raise NodeWriteError("range", "uint64 out of range")
-        if vtype == "int64" and not -(2 ** 63) <= value <= 2 ** 63 - 1:
-            raise NodeWriteError("range", "int64 out of range")
+        low, high = INT_RANGES[vtype]
+        if not low <= value <= high:
+            raise NodeWriteError("range", "{} out of range ({}..{})".format(vtype, low, high))
         return value
-    if vtype == "float64":
+    if vtype in ("float32", "float64"):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise NodeWriteError("type", "expected number")
         value = float(value)
         if not math.isfinite(value):
             raise NodeWriteError("invalid", "value must be finite")
-        return value
+        return to_float32(value) if vtype == "float32" else value
     if vtype == "string":
         if isinstance(value, str):
             return value
@@ -324,12 +368,18 @@ class NodeRegistry:
         if not spec.writable:
             raise NodeWriteError("readonly", name + " is read-only")
         value = coerce(spec.vtype, value)
-        if spec.minimum is not None and value < spec.minimum:
-            raise NodeWriteError("range", "{} must be >= {}".format(name, spec.minimum))
-        if spec.maximum is not None and value > spec.maximum:
-            raise NodeWriteError("range", "{} must be <= {}".format(name, spec.maximum))
-        if spec.max_length is not None and isinstance(value, str) and len(value) > spec.max_length:
-            raise NodeWriteError("range", "{} longer than {} characters".format(name, spec.max_length))
+        is_array = element_type(spec.vtype) is not None
+        if is_array and spec.max_items is not None and len(value) > spec.max_items:
+            raise NodeWriteError("range", "{}: more than {} elements".format(name, spec.max_items))
+        for item in (value if is_array else (value,)):
+            if isinstance(item, str):
+                if spec.max_length is not None and len(item) > spec.max_length:
+                    raise NodeWriteError("range", "{} longer than {} characters".format(name, spec.max_length))
+            elif not isinstance(item, bool):
+                if spec.minimum is not None and item < spec.minimum:
+                    raise NodeWriteError("range", "{} must be >= {}".format(name, spec.minimum))
+                if spec.maximum is not None and item > spec.maximum:
+                    raise NodeWriteError("range", "{} must be <= {}".format(name, spec.maximum))
         if spec.json:
             try:
                 parsed = json.loads(value)
@@ -392,6 +442,9 @@ def build_node_specs(settings, version, commands=None):
                  description="Example writable value (runtime only, not persisted)"),
         NodeSpec("values/enabled", "bool8", example.get("enabled", True), writable=True,
                  description="Example writable boolean (runtime only, not persisted)"),
+        NodeSpec("values/limits", "array-of-float32", [0.0, 100.0], writable=True, max_items=8,
+                 minimum=-1.0e6, maximum=1.0e6,
+                 description="Example array, as a PLC ARRAY OF REAL writes it (runtime only, not persisted)"),
         # example command: execute / busy / done / error / error-text + parameter target (PlcCommand)
         *set_setpoint_cmd.specs(),
     ]
