@@ -26,7 +26,8 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 ## Definition of done (every change)
 1. `tools/check.sh apps/<app>` → `RESULT: OK` (unit tests + 0 errors). Fix warnings or explain them.
 2. New behaviour has a unit test (`tests/`, runs without ctrlX; fake Data Layer in `tests/fakes/`).
-3. If you learned something non-obvious (build error, device behaviour): append it to `docs/ctrlx/gotchas.md`.
+3. If you learned something non-obvious (build error, device behaviour): append it to `docs/ctrlx/gotchas.md`
+   (next number, and a `#N hint` in the topic index at its top).
 4. Snap builds (`./build-snap-amd64.sh`, incremental) when snapcraft is available; say so if you could not build.
    Builds you hand over are full builds (`--clean`).
 5. UI changed: `python3 tools/ui_check.py apps/<app>` → `UI CHECK: OK`, and **look at the screenshots** it lists;
@@ -100,7 +101,7 @@ tools/ctrlx.py [--device NAME] dl-read <snap>/status/heartbeat | appdata <snap>/
 tools/ctrlx.py [--device NAME] api GET /<snap>/api/v1/status [--data JSON] [--out file]   # the app's own API on the device
 tools/ctrlx.py [--device NAME] ssh 'sudo snap logs -n 50 <snap>'
 tools/ctrlx.py [--device NAME] dl-read ctrlx-system-analyzer/apps/summary   # CPU/RAM of every app (build-deploy-test.md §5)
-python3 -m unittest discover -s tools/tests    # self-test of the checker
+python3 -m unittest discover -s tools/tests    # self-tests of the tools and of the gotchas index
 ```
 
 ## Where to look
@@ -111,7 +112,7 @@ python3 -m unittest discover -s tools/tests    # self-test of the checker
 | web routes, auth | `docs/ctrlx/web-ui-and-reverse-proxy.md` |
 | Data Layer | `docs/ctrlx/datalayer-python.md` |
 | settings / app data | `docs/ctrlx/app-data-settings.md` |
-| build, deploy, debug | `docs/ctrlx/build-deploy-test.md`, then `docs/ctrlx/gotchas.md` |
+| build, deploy, debug | `docs/ctrlx/build-deploy-test.md`, then `docs/ctrlx/gotchas.md`: grep the error text or use its topic index - not the whole file |
 | CPU / memory of an app on a device | `docs/ctrlx/build-deploy-test.md` §5 (System Analyzer) |
 | roles, shared UI parts (`kit.js`), uploads/downloads, widget | `docs/ctrlx/web-ui-and-reverse-proxy.md` |
 | hardware of a device: CPU, RAM, flash, ports, USB, SD | `reference/ctrlx-core-hardware/README.md` |

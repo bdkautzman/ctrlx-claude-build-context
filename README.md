@@ -12,7 +12,7 @@ and a settings JSON in ctrlX app data.
 | `.claude/skills/` | `/new-ctrlx-app`, `/ctrlx-check`, `/add-datalayer-node`, `/add-app-setting`, `/build-and-deploy`, `/ctrlx-release`, `/package-app`, `/record-gotcha` |
 | `.claude/agents/ctrlx-reviewer.md` | independent review subagent before hand-over |
 | `.claude/settings.json` | permissions (checks, tests, builds, UI checks, read-only device commands and installs allowed - also with `--device NAME`; Data Layer writes ask; reference read-only) + a hook that re-checks an app after edits to its snapcraft/manifest/validation files |
-| `docs/ctrlx/` | curated rules (start at `docs/ctrlx/README.md`), `decisions.md` (what was decided and why), `gotchas.md` (grows over time), verbatim SDK 4.6.0 docs in `upstream-sdk-4.6.0/` |
+| `docs/ctrlx/` | curated rules (start at `docs/ctrlx/README.md`), `decisions.md` (what was decided and why), `gotchas.md` (grows over time; read through its topic index), verbatim SDK 4.6.0 docs in `upstream-sdk-4.6.0/` |
 | `templates/python-webapp/` | known-good template app (web UI with three roles, settings drawer, help/tutorial and home screen widget + Data Layer provider + app-data settings, 45 unit tests, fake Data Layer, UI scenario for `tools/ui_check.py`) |
 | `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/call app APIs/logs/ssh on a test device from `devices.toml`), `ui_check.py` + `setup-ui-test.sh` (web UI in headless Chromium with screenshots, locally or on a device), `pdf_check.py` (generated PDFs → PNG), `foss_from_prime.py` |
 | `reference/` | read-only: Python Data Layer API source 3.6.0, SDK 4.6.0 Python samples, ctrlX REST OpenAPI specs, example apps with notes |

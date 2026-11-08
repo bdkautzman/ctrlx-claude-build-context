@@ -6,7 +6,8 @@ argument-hint: "[apps/<name>] [amd64|arm64]"
 
 # Build and deploy
 
-Read `docs/ctrlx/build-deploy-test.md` (and `docs/ctrlx/gotchas.md` when anything fails).
+Read `docs/ctrlx/build-deploy-test.md`. When anything fails: grep `docs/ctrlx/gotchas.md` for the error text, or read
+its topic index and then only the entries it names (the whole file is ~17k tokens).
 
 1. `tools/check.sh <app> --pre-build` → must be OK (also checks the apt repo for `ctrlx-datalayer` and snapcraft).
    If ENV-* errors: explain the one-time setup steps to the user; don't try to install system packages without asking.

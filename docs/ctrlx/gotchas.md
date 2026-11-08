@@ -3,6 +3,59 @@
 Format: **symptom** → cause → fix. Add the date and the source (build log, device, forum link).
 Codes in brackets are `tools/ctrlx_check.py` findings that catch the problem.
 
+**Don't read this whole file** (~17k tokens, and whatever is read stays in the session's context). Instead:
+* An error text, result code or checker code at hand: `grep -n '<text>' docs/ctrlx/gotchas.md`.
+* Otherwise pick the topic in the index below and read only the entries whose hint fits, e.g. entry 42:
+  `sed -n '/^42\. /,/^43\. /p' docs/ctrlx/gotchas.md`.
+* A new entry gets the next number at the end of the file and a `#N hint` in its topic here (skill
+  `record-gotcha`); `python3 -m unittest discover -s tools/tests` checks that the index lists every entry.
+
+## Index by topic
+An entry can be under more than one topic. Kit parts still unverified on a device: "Unverified assumptions" below.
+
+- **Names, manifest, source files** (most have a checker code): #1 CRLF line endings · #2 executable bit lost ·
+  #4 manifest file name / `id` · #5 menu entries need `items` · #6 identifiers copied from samples · #8 log files in
+  app data · #9 API without a permission check · #10 fossinfo format · #12 socket path too long · #13 `{$SNAP_DATA}`
+  in the binding · #20 socket name vs validation · #29 executable bits after a Windows copy · #34 Settings page
+  category and tile · #97 Bosch icon names
+- **Build and packaging**: #3 core24 + `platforms` · #11 ctrlx-actions outdated · #14 quote `version` · #15 sub-package
+  missing in the snap · #16 GLIBC error (Raspberry Pi) · #17 apt can't find ctrlx-datalayer · #19 SDK sample bugs ·
+  #30 build VM facts (destructive mode) · #31 new_app copied build folders · #32 snap size (ctrlx-datalayer .deb) ·
+  #33 slow checks after a build · #36 arm64 cross-build · #47 builds take ~20 min · #48 `.app` format · #49 one `.app`
+  for two architectures · #63 new top-level folder not in the snap · #70 JavaScript library without Node.js · #94 Ubuntu
+  packages with Python modules · #95 auto mode blocks downloaded wheels · #96 OpenCV size · #98 numpy 2.4 on the
+  COREvirtual · #99 arm64 snap with amd64 packages
+- **Device, install, `tools/ctrlx.py`**: #21 build VM proxy, device time-outs · #22 install needs SERVICE · #23 HTTP 502
+  right after an install · #26 Logbook text search answers 204 · #27 package version field · #37 real CORE vs
+  COREvirtual · #38 every URL shows the ctrlX UI (no proxy route) · #45 the COREvirtual from the LAN · #46 install
+  polling disconnects · #65 snap runtime facts (time zone, `_gateway`) · #75 clock days off · #84 package ids
+  `snap_<name>` · #85 uninstall keeps app data · #110 "Too many sessions"
+- **Web UI, reverse proxy, roles, widget**: #9 permission check · #35 "Set" wrote the old value back · #38 no proxy
+  route · #53 widget authentication · #55 read-only users and settings · #57 widget created at install · #91 big
+  uploads, drain a rejected body · #102 HTTP 502 for many parallel requests
+- **UI tests (Playwright)**: #51 no browser in the build VM · #52 headless Chromium setup · #54 second page in one tab ·
+  #56 time-out during a build · #60 page speed in the VM
+- **Settings, app data, Solutions**: #7 hard-coded solutions path · #18 app data mounted after the start · #24 load
+  refused by Motion · #25 no abort after a refused query · #42 credentials in settings · #82 "Permission denied" at
+  the first start · #85 app data kept after uninstall · #89 `PUT /settings` replaces all · #107 copy right after a
+  save · #108 load results
+- **Data Layer**: #28 CLIENT_NOT_CONNECTED at the first start · #39 sharing = remote connection · #40 remote never comes
+  up · #41 remote to the device itself · #43 read-only before type mismatch · #44 ctrlX OS 3.6 node layout · #50 rejected
+  write changed the value · #65 command node that rejects a value · #77 remote after a clock change · #78 result
+  names differ per API · #79 client: JSON, metadata, bulk · #80 KVD restarts on `nodes.json` changes · #81 WebDAV
+  ignores `If-Match` · #83 `array-of-<type>` · #86 ctrlX OS 3.6 without `system/info` · #87 empty KVD value · #88
+  wildcard provider node · #90 write cost
+- **Sandbox, interfaces, network, USB**: #61 what the `network` plug allows · #62 neighbor table · #64 scan from the
+  COREvirtual · #67 installer connects `system-observe`, `removable-media` · #74 cgroup v2 vs v1, no PSI · #76 USB
+  stick · #104 network limits in the sandbox
+- **CPU, memory, performance**: #58 CORE vs COREvirtual speed · #59 RSS stays up after a load · #60 measuring page
+  speed · #66 network scan cost · #68 reading /proc · #69 `array` rings allocate at once · #71 memory growth from
+  short-lived processes · #72 what a slow leak looks like · #73 apps get 2 of 4 cores · #90 Data Layer write cost ·
+  #92 Python ints in big sets · #105 large images (malloc, resize)
+- **GigE Vision cameras (Aravis)**: #93 through COREvirtual port forwarding · #100 no frame on a software trigger ·
+  #101 packet loss, pacing · #103 X3 vs X7 · #104 sandbox network limits · #106 stream port cleared · #109 closing a
+  lost camera blocks
+
 ## Found while building this kit (2026-10-15, from docs/samples/example repos)
 
 1. **Daemon doesn't start, log shows `/usr/bin/env: 'python3\r': No such file or directory`**

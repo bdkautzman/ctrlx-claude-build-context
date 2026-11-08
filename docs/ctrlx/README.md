@@ -17,7 +17,7 @@ disagree, the upstream file wins, and the disagreement belongs in `gotchas.md`.
 | `build-deploy-test.md` | build, which test device, install, read logs, debug |
 | `../../reference/ctrlx-core-hardware/README.md` | need the hardware of a device: CPU, RAM, flash, ports, USB, SD |
 | `release-and-validation.md` | prepare a release or the Bosch validation artifacts |
-| `gotchas.md` | **before** debugging anything: known problems and fixes |
+| `gotchas.md` | **before** debugging anything: known problems and fixes - grep the error text, or read the topic index at its top and then only the entries it names |
 | `decisions.md` | want to change an architectural choice: what was decided and why |
 | `sources.md` | need provenance (repos, commits, URLs) |
 
