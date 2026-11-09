@@ -65,10 +65,15 @@ Goal from the user: $ARGUMENTS
    A custom tool that turns out to be needed only during the work (it was not on the list from step 1):
    **stop and ask** too, before writing it - with the same options and a recommendation.
 6. Finish: unit tests for the new logic, `tools/check.sh apps/<name>` clean, `./run-local.sh` smoke test
-   (curl the API with APP_DEV_NO_AUTH=1), build if snapcraft is available. Report what was verified and what wasn't, and
-   put the unverified parts and every problem found into `KNOWN-ISSUES.md`.
+   (curl the API with APP_DEV_NO_AUTH=1), then the UI (7) and the user's UI check (8); build if snapcraft is available
+   only after that. Report what was verified and what wasn't, and put the unverified parts and every problem found into
+   `KNOWN-ISSUES.md`.
 7. UI: adapt `tests/ui_scenario.py` to the new page (click the real buttons, name the screenshots, the tutorial),
    keep the `data-ui-ready` marker working (`Kit.ready()` in `app.js`), run `python3 tools/ui_check.py apps/<name> --narrow`
    and with `--role reader` and `--role operator`, and look at the screenshots. If `tools/setup-ui-test.sh --check`
    fails, tell the user the UI was not seen. Installed on a device: the same with `--device <device>` (as admin) and
    `--device <device> --role reader|operator|writer` (as the test users).
+8. **The user checks the UI before the first snap build** (CLAUDE.md "Definition of done" 5, `build-deploy-test.md` §1):
+   `APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh` in the background, the URL and what the page shows to the user; they leave
+   notes on the page (Alt+click) or say what to change, `/ui-feedback` works through them, repeat until they say the UI
+   is OK. Then build and deploy (skill `build-and-deploy`).

@@ -9,6 +9,10 @@ argument-hint: "[apps/<name>] [amd64|arm64]"
 Read `docs/ctrlx/build-deploy-test.md`. When anything fails: grep `docs/ctrlx/gotchas.md` for the error text, or read
 its topic index and then only the entries it names (the whole file is ~17k tokens).
 
+0. **The user's UI check comes first** (CLAUDE.md "Definition of done" 5, `build-deploy-test.md` §1): when the app's UI
+   is new or changed and the user has not said it is OK on the `run-local.sh` page, stop here - start the dev server
+   (`APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh`), give them the URL, work through their notes (`/ui-feedback`) until
+   they say the UI is OK. A build needed earlier for a non-UI test on a device: ask the user.
 1. `tools/check.sh <app> --pre-build` → must be OK (also checks the apt repo for `ctrlx-datalayer` and snapcraft).
    If ENV-* errors: explain the one-time setup steps to the user; don't try to install system packages without asking.
 2. Bump the version if this build will be handed over (snap/snapcraft.yaml + src/pyproject.toml + CHANGELOG).

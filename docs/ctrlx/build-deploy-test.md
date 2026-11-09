@@ -65,6 +65,21 @@ forwards only when the VM starts: a forward added while it runs needs a full pow
 VM is not enough). Apps made before the template had it need `src/app/dev_feedback.py`, the hooks in `web_server.py`
 and `config.py`, and the `run-local.sh` lines copied from the template.
 
+**The user checks the UI before the snap is built** (user's request 2026-11-09). When an app's UI is new or changed:
+1. Claude: unit tests, `check.sh`, `ui_check.py` (+ `--narrow`, `--role ...`) and a look at the screenshots, so the
+   user doesn't get a broken page.
+2. Claude starts `APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh` in the background and tells the user the URL
+   (`http://localhost:<forwarded port>/<snap>/` from their PC) and what is new on the page.
+3. The user looks, leaves notes with the overlay (or says it in words); Claude runs `/ui-feedback`, which fixes the
+   notes and re-runs `ui_check.py`; the user reloads. Repeat until the user says the UI is OK.
+4. Only then §2: the snap build. A build needed earlier for something that isn't the UI (a Data Layer or interface
+   test on a device): ask the user first.
+
+Why: a UI change shows on the dev page after a reload, while each snap round trip (build, install in SERVICE state,
+open through the reverse proxy) takes minutes - a full build ~20 min in the VM. Locally the page runs as admin only
+(auth off): the views of the other roles come from `ui_check.py --role`, and the real ctrlX look (sidebar, reverse
+proxy, widget on the home screen) from the device after the build.
+
 ## 2. Check and build
 
 ```bash

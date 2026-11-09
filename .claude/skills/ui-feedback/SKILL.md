@@ -48,6 +48,8 @@ side `src/app/dev_feedback.py`). The user Alt+clicks an element, types a note, a
    5), then `tools/check.sh <app>`.
 6. **Report** one line per note (id: what changed, or the question / why not), and tell the user to reload the page:
    static files are served fresh; a change under `src/` needs `./run-local.sh` restarted. Don't commit unless asked.
+   Ask whether the UI is OK now or they have more notes: repeat until they say it is OK - the snap build waits for that
+   (CLAUDE.md "Definition of done" 5).
 
 The dev server: `cd <app> && ./run-local.sh` (from outside the VM through a port forward:
 `APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh`); `APP_DEV_FEEDBACK=0 ./run-local.sh` turns the overlay off.

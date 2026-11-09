@@ -105,6 +105,8 @@ History: git log, the CHANGELOGs, `docs/ctrlx/gotchas.md`. Decisions and their r
 ```
 claude
 > /new-ctrlx-app an app that reads 4 analog values from a Modbus TCP device and shows them in a trend
+  (Claude starts the dev page; check the UI in your browser, Alt+click elements to leave notes)
+> /ui-feedback                      # until the UI is OK - the snap build waits for that
 > /build-and-deploy apps/ctrlx-acme-modbus amd64
 > use the ctrlx-reviewer agent on apps/ctrlx-acme-modbus
 ```

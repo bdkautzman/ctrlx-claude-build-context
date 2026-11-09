@@ -29,9 +29,14 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 3. If you learned something non-obvious (build error, device behaviour): append it to `docs/ctrlx/gotchas.md`
    (next number, and a `#N hint` in the topic index at its top).
 4. Snap builds (`./build-snap-amd64.sh`, incremental) when snapcraft is available; say so if you could not build.
-   Builds you hand over are full builds (`--clean`).
+   Builds you hand over are full builds (`--clean`). A new or changed UI: build only after the user's UI check (5).
 5. UI changed: `python3 tools/ui_check.py apps/<app>` → `UI CHECK: OK`, and **look at the screenshots** it lists;
    keep `tests/ui_scenario.py` in step with the UI. Not set up (`tools/setup-ui-test.sh --check` fails): say so.
+   **Then the user checks the UI, before any snap build** (user's request 2026-11-09): start
+   `APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh` in the background, give them the URL and what to look at; they leave
+   notes on the page (Alt+click) or say what to change, you work through them (`/ui-feedback`), re-run `ui_check.py`,
+   and repeat until they say the UI is OK. Only then build. A build needed before that for something else (a Data
+   Layer or interface test on a device): ask. `docs/ctrlx/build-deploy-test.md` §1.
 6. **Known issues**: every app keeps a working document `apps/<app>/KNOWN-ISSUES.md` (from the template; user's
    request 2026-11-03) - each problem, workaround, caveat and limitation with date, setup, evidence/measurements,
    what was tried and what is open, plus what is not tested on a device yet and the diagnostic commands used.
