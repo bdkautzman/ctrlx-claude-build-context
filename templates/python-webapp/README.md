@@ -40,6 +40,8 @@ ctrlX OS 4.6 app (snap, `core24`) written in Python:
 ```bash
 python3 -m unittest discover -s tests -t .     # tests, any PC
 ./run-local.sh                                  # http://127.0.0.1:8080/ctrlx-acme-template/
+#   there: Alt+click an element -> note in .dev/feedback.json; skill /ui-feedback fixes the notes (dev only)
+APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh        # the same, reachable through the VM's port forwarding
 python3 ../../tools/ui_check.py . --role operator   # the page in headless Chromium as an operator (reader, writer)
 ../../tools/check.sh .                          # ctrlX compliance checks
 ./build-snap-amd64.sh                           # snap for amd64: CORE X5/X7, COREvirtual (incremental)

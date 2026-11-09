@@ -20,7 +20,9 @@ Browser ──HTTPS──► ctrlX reverse proxy (port 443) ──HTTP over Unix
 * Python stdlib `http.server` + `socketserver.UnixStreamServer` with `ThreadingMixIn`
   (no framework → no extra FOSS, small snap). `get_request()` must return a fake
   `("local", 0)` client address (BaseHTTPRequestHandler expects a tuple).
-* Outside the snap the same server runs on `127.0.0.1:8080` (`./run-local.sh`).
+* Outside the snap the same server runs on `127.0.0.1:8080` (`./run-local.sh`). There, and only there, it can add the
+  dev-only UI feedback overlay to its pages (`/<name>/__dev/feedback[.js]`, `src/app/dev_feedback.py`;
+  `build-deploy-test.md` §1 "UI feedback from the page").
 
 ## Authentication & authorization
 

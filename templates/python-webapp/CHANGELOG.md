@@ -3,6 +3,15 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## Unreleased
+
+- **UI feedback overlay, dev only** (2026-11-09, user's request): `./run-local.sh` sets `APP_DEV_FEEDBACK` to the kit's
+  `tools/ui-feedback/overlay.js`; the dev server (`src/app/dev_feedback.py`) then adds it to its HTML pages and keeps
+  the notes in `.dev/feedback.json` (`/<snap>/__dev/feedback[.js]`). Alt+click an element, type a note; skill
+  `/ui-feedback` works through the notes. Only with `APP_DEV_NO_AUTH=1` outside the snap; `ui_check.py` removes the
+  variable. `APP_DEV_FEEDBACK=0 ./run-local.sh` turns it off. Tests: `tests/test_dev_feedback.py`.
+  No snap built with it (nothing in the snap changes behaviour).
+
 ## 0.4.0
 
 - **Node types for PLC variables** (user's choice 2026-11-08): every scalar type of the Data Layer (bool8, int8 ..

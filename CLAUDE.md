@@ -19,7 +19,7 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 ## Layout
 - `apps/<snap-name>/` – the apps (create with `python3 tools/new_app.py ...`, never by hand-copying)
 - `templates/python-webapp/` – reference implementation; keep it working, don't put app code in it
-- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `ui_check.py` (web UI in headless Chromium, screenshots; setup once: `setup-ui-test.sh`), `pdf_check.py` (PDF pages → PNG), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
+- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `ui_check.py` (web UI in headless Chromium, screenshots; setup once: `setup-ui-test.sh`), `ui-feedback/overlay.js` (dev-only notes on the `run-local.sh` page, skill `/ui-feedback`), `pdf_check.py` (PDF pages → PNG), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
 - `docs/ctrlx/` – curated rules; start at `docs/ctrlx/README.md`; `upstream-sdk-4.6.0/` = verbatim SDK docs
 - `reference/` – read-only: Data Layer API source, SDK samples, REST specs, example apps, CORE hardware facts (see `reference/README.md`)
 
@@ -96,6 +96,8 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 python3 tools/new_app.py --name <app> --title "<Title>"   # prefix, author, url from kit.toml (else --author --url)
 tools/check.sh apps/<app> [--release] [--pre-build] [--snap file.snap]
 cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  (no ctrlX needed)
+#   on that page: Alt+click an element -> note in <app>/.dev/feedback.json; skill /ui-feedback works through the notes
+#   (dev only; outside the VM: APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh; docs/ctrlx/build-deploy-test.md §1)
 python3 tools/ui_check.py apps/<app> [--narrow] [--role reader|operator|writer] [--device [NAME]]   # headless Chromium + screenshots (~1-2 min)
 python3 tools/pdf_check.py <file.pdf> [--text]  # a generated PDF: PDFium opens it, pages -> PNG to look at
 cd apps/<app> && ./build-snap-amd64.sh         # / ./build-snap-arm64.sh; incremental, --clean for hand-over builds

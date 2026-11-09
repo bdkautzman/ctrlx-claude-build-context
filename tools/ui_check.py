@@ -100,6 +100,7 @@ class LocalApp:
         pythonpath = os.pathsep.join(filter(None, [os.path.join(self.tmp, "src"), os.environ.get("PYTHONPATH")]))
         env = dict(os.environ, APP_DEV_HTTP_PORT=str(self.port), PYTHONPATH=pythonpath)
         env.pop("CTRLX_HOST", None)
+        env.pop("APP_DEV_FEEDBACK", None)   # run-local.sh's UI feedback overlay stays out of the screenshots
         self.token = None
         if role == "admin":
             env["APP_DEV_NO_AUTH"] = "1"

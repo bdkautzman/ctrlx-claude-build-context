@@ -52,6 +52,19 @@ and invalid settings) and fails on JavaScript/console errors and HTTP errors. Sc
 `<app>/.ui-check/` (git-ignored) - **look at them**: layout problems don't fail the run. About 1 min per
 run in the emulated build VM (browser start ~12 s), so it is not part of every `check.sh`.
 
+**UI feedback from the page** (dev only, template since 2026-11-09): `./run-local.sh` adds the kit's overlay
+`tools/ui-feedback/overlay.js` to the page. **Alt+click** an element (or "Feedback" bottom left → "Pick an element"),
+type a note, Ctrl+Enter: the note goes with the element's selector, structure path, text, size, window size and
+light/dark into `<app>/.dev/feedback.json` (git-ignored); numbered pins mark the open notes. Then ask Claude Code for
+`/ui-feedback` (skill): it fixes each open note, marks it `done` / `question` / `wontfix` with a `resolution`, and runs
+`ui_check.py` - reload the page to see the result. On only when `run-local.sh` sets `APP_DEV_FEEDBACK` and auth is off
+(`APP_DEV_NO_AUTH=1`): never in the snap, never in `ui_check.py` screenshots; `APP_DEV_FEEDBACK=0 ./run-local.sh` turns
+it off. From a browser outside the VM (port forwarding of the App Build Environment):
+`APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh`, then `http://localhost:<forwarded port>/<name>/`. QEMU reads its port
+forwards only when the VM starts: a forward added while it runs needs a full power-off and start (a reboot inside the
+VM is not enough). Apps made before the template had it need `src/app/dev_feedback.py`, the hooks in `web_server.py`
+and `config.py`, and the `run-local.sh` lines copied from the template.
+
 ## 2. Check and build
 
 ```bash

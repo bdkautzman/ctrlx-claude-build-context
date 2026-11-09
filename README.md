@@ -13,8 +13,8 @@ and a settings JSON in ctrlX app data.
 | `.claude/agents/ctrlx-reviewer.md` | independent review subagent before hand-over |
 | `.claude/settings.json` | permissions (checks, tests, builds, UI checks, read-only device commands and installs allowed - also with `--device NAME`; Data Layer writes ask; reference read-only) + a hook that re-checks an app after edits to its snapcraft/manifest/validation files |
 | `docs/ctrlx/` | curated rules (start at `docs/ctrlx/README.md`), `decisions.md` (what was decided and why), `gotchas.md` (grows over time; read through its topic index), verbatim SDK 4.6.0 docs in `upstream-sdk-4.6.0/` |
-| `templates/python-webapp/` | known-good template app (web UI with three roles, settings drawer, help/tutorial and home screen widget + Data Layer provider with every PLC type + Data Layer client + app-data settings, 60 unit tests, fake Data Layer, UI scenario for `tools/ui_check.py`) |
-| `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/call app APIs/logs/ssh on a test device from `devices.toml`), `ui_check.py` + `setup-ui-test.sh` (web UI in headless Chromium with screenshots, locally or on a device), `pdf_check.py` (generated PDFs → PNG), `foss_from_prime.py` |
+| `templates/python-webapp/` | known-good template app (web UI with three roles, settings drawer, help/tutorial and home screen widget + Data Layer provider with every PLC type + Data Layer client + app-data settings, dev-only UI feedback overlay on the `run-local.sh` page, 67 unit tests, fake Data Layer, UI scenario for `tools/ui_check.py`) |
+| `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/call app APIs/logs/ssh on a test device from `devices.toml`), `ui_check.py` + `setup-ui-test.sh` (web UI in headless Chromium with screenshots, locally or on a device), `ui-feedback/overlay.js` (dev-only: Alt+click an element on the `run-local.sh` page, leave a note; skill `/ui-feedback` fixes the notes), `pdf_check.py` (generated PDFs → PNG), `foss_from_prime.py` |
 | `reference/` | read-only: Python Data Layer API source 3.6.0, SDK 4.6.0 Python samples, ctrlX REST OpenAPI specs, example apps with notes |
 | `apps/` | your apps go here |
 
@@ -51,6 +51,10 @@ Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (ar
   app data save/load with configurations, restart and reboot (`docs/ctrlx/gotchas.md` #21–#38)
 * one `.app` with both architectures installs on both devices (#49)
 * UI checks in headless Chromium (`tools/ui_check.py`), locally and on the COREvirtual (#52)
+* UI feedback notes on the `run-local.sh` page (2026-11-09, template only so far): overlay tested in headless Chromium
+  (Alt+click, pick mode, parent, pins, delete, a table the app re-renders); the user left two notes from their own
+  browser through the VM's port forward and `/ui-feedback` handled them (2026-11-08 evening CST; test changes, reverted); not yet in the apps
+  (`docs/ctrlx/build-deploy-test.md` §1)
 * apps built with the kit, their versions and what they verified: `apps/README.md`
 * template `templates/python-webapp` 0.4.0 (2026-11-08): node types for every PLC variable type (each node takes only
   its own type, no conversions), `DataLayerClient` (from core-connector) - both verified on the X3; test users per role

@@ -20,6 +20,7 @@ Routes (role = the lowest role that may call it, auth.py: view < operate < confi
   POST /<snap>/api/v1/appdata/save   configure  Solutions save command
   POST /<snap>/api/v1/appdata/load   configure  Solutions load command
 All /api paths are "restricted" in the manifest -> the proxy validates the token.
+Dev only (run-local.sh, never in the snap): /<snap>/__dev/feedback[.js] for the UI feedback overlay, dev_feedback.py.
 
 Helpers for your own routes (Handler): _query() (query parameters), _send_bytes() (binary data and file
 downloads with a file name), _receive_file() (an upload streamed into the app data, never held in memory),
@@ -36,7 +37,7 @@ import threading
 import time
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from app import appdata_commands, auth, config
+from app import appdata_commands, auth, config, dev_feedback
 from app.datalayer_nodes import NodeWriteError
 from app.settings_store import SettingsError
 
@@ -160,6 +161,9 @@ class WebServer:
                      config.URL_PREFIX)
             if config.DEV_NO_AUTH:
                 log.warning("APP_DEV_NO_AUTH=1: all requests are treated as admin (dev only)")
+            if dev_feedback.enabled():
+                log.info("UI feedback overlay on: Alt+click an element of the page -> %s (skill /ui-feedback)",
+                         config.DEV_FEEDBACK_FILE)
         self._thread = threading.Thread(target=self._server.serve_forever, name="web", daemon=True)
         self._thread.start()
 
@@ -273,6 +277,8 @@ def _make_handler(store, datalayer):
                     self.send_response(301)
                     self.send_header("Location", config.URL_PREFIX + "/")
                     self.end_headers()
+                elif path.startswith(config.URL_PREFIX + dev_feedback.ROUTE) and dev_feedback.enabled():
+                    self._dev_feedback(method, path[len(config.URL_PREFIX + dev_feedback.ROUTE):])
                 elif path.startswith(config.URL_PREFIX + "/") and method == "GET":
                     self._static(path[len(config.URL_PREFIX) + 1:])
                 else:
@@ -298,6 +304,8 @@ def _make_handler(store, datalayer):
                 return
             with open(full, "rb") as f:
                 data = f.read()
+            if ext == ".html" and dev_feedback.enabled():
+                data = dev_feedback.inject(data)
             ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
             if ctype.startswith("text/") or ext in (".js", ".json", ".svg"):
                 ctype += "; charset=utf-8"
@@ -308,6 +316,29 @@ def _make_handler(store, datalayer):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(data)
+
+        # -- dev only: UI feedback overlay (dev_feedback.py) ----------------
+        def _dev_feedback(self, method, rest):
+            if rest == "feedback.js" and method == "GET":
+                try:
+                    with open(config.DEV_FEEDBACK_JS, "rb") as f:
+                        data = f.read()
+                except OSError as exc:
+                    return self._problem(404, "Overlay script not found", str(exc))
+                return self._send_bytes(200, data, "text/javascript; charset=utf-8")
+            if rest == "feedback" and method == "GET":
+                return self._send_json(200, dev_feedback.load())
+            if rest == "feedback" and method == "POST":
+                return self._send_json(201, dev_feedback.add(self._read_json()))
+            if rest.startswith("feedback/") and method == "DELETE":
+                try:
+                    item_id = int(rest[len("feedback/"):])
+                except ValueError:
+                    return self._problem(404, "Not found")
+                if not dev_feedback.remove(item_id):
+                    return self._problem(404, "No such note")
+                return self._send_json(204, None)
+            self._problem(404, "Not found")
 
         # -- API ----------------------------------------------------------
         def _api(self, method, route):
