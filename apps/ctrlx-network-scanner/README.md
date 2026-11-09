@@ -101,6 +101,8 @@ history keeps the counts as rated when the scan finished ("Forbidden" column).
 
 ```bash
 ./run-local.sh                                   # http://127.0.0.1:8080/ctrlx-network-scanner/
+#   there: Alt+click an element -> note in .dev/feedback.json; skill /ui-feedback fixes the notes (dev only)
+APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh         # the same, reachable through the VM's port forwarding
 ../../tools/check.sh .                           # unit tests (scans only touch 127.0.0.x) + checks
 python3 ../../tools/ui_check.py . --narrow       # headless browser: scan, results, lists, downloads
 python3 ../../tools/ui_check.py . --role reader

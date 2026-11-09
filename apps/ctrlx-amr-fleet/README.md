@@ -305,6 +305,8 @@ file's coordinates): the limit is 100 million cells.
 ```bash
 python3 -m unittest discover -s tests -t .     # tests, any PC (fake Data Layer)
 ./run-local.sh                                  # http://127.0.0.1:8080/ctrlx-amr-fleet/ - switch on the simulation in Settings
+#   there: Alt+click an element -> note in .dev/feedback.json; skill /ui-feedback fixes the notes (dev only)
+APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh        # the same, reachable through the VM's port forwarding
 ../../tools/check.sh .
 ./build-snap-amd64.sh && ../../tools/ctrlx.py install ./*_amd64.snap --service
 ```

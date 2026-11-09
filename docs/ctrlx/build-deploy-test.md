@@ -62,8 +62,9 @@ light/dark into `<app>/.dev/feedback.json` (git-ignored); numbered pins mark the
 it off. From a browser outside the VM (port forwarding of the App Build Environment):
 `APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh`, then `http://localhost:<forwarded port>/<name>/`. QEMU reads its port
 forwards only when the VM starts: a forward added while it runs needs a full power-off and start (a reboot inside the
-VM is not enough). Apps made before the template had it need `src/app/dev_feedback.py`, the hooks in `web_server.py`
-and `config.py`, and the `run-local.sh` lines copied from the template.
+VM is not enough). The five apps got it on 2026-11-09; an app made from an older template needs
+`src/app/dev_feedback.py`, the hooks in `web_server.py` and `config.py`, `tests/test_dev_feedback.py` and the
+`run-local.sh` lines copied from the template.
 
 **The user checks the UI before the snap is built** (user's request 2026-11-09). When an app's UI is new or changed:
 1. Claude: unit tests, `check.sh`, `ui_check.py` (+ `--narrow`, `--role ...`) and a look at the screenshots, so the

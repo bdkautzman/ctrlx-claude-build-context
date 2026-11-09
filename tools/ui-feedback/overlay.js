@@ -158,6 +158,8 @@
 
   // Shortest "a > b > c" path (id, classes, :nth-of-type where needed) that finds exactly `el` in its own
   // document or shadow root.
+  const STATE_CLASS = /^(active|selected|current|open|opened|closed|show|shown|hidden|visible|disabled|enabled|checked|focus|focused|hover|expanded|collapsed|loading|busy|dirty|(is|has)-.+)$/;
+
   function segment(el) {
     const scope = el.getRootNode();
     const parts = [];
@@ -166,8 +168,9 @@
         parts.unshift("#" + CSS.escape(cur.id));
         break;
       }
-      let part = CSS.escape(cur.localName) +
-        Array.from(cur.classList).slice(0, 3).map((c) => "." + CSS.escape(c)).join("");
+      // state classes ("active", "open", "is-busy") move between elements: a selector with them finds another one later
+      let part = CSS.escape(cur.localName) + Array.from(cur.classList).filter((c) => !STATE_CLASS.test(c))
+        .slice(0, 3).map((c) => "." + CSS.escape(c)).join("");
       const parent = cur.parentElement;
       if (parent) {
         const siblings = Array.from(parent.children);

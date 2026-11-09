@@ -198,6 +198,8 @@ Then `./run-local.sh` (it evaluates `./dev-env.sh`), `../../tools/check.sh .` (t
 itself) and `eval "$(./dev-env.sh)"; python3 ../../tools/ui_check.py . --narrow`. Started with the defaults, the
 local app opens the camera at 192.168.1.99 (control works from the VM, images don't - NAT); the UI check
 switches to the simulated camera.
+On that page, Alt+click an element and type a note: it goes to `.dev/feedback.json`, and the skill `/ui-feedback`
+fixes the notes (dev only; from outside the VM: `APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh`).
 
 ## Licenses (FOSS)
 

@@ -11,8 +11,18 @@
 #
 # Open http://127.0.0.1:8080/<snap-name>/  (auth disabled locally via APP_DEV_NO_AUTH=1)
 # App data is emulated in ./.dev/solutions/activeConfiguration/<snap-name>/settings.json
+#
+# UI feedback overlay (dev only, the kit's tools/ui-feedback/overlay.js): Alt+click an element of the page, type a
+# note -> ./.dev/feedback.json; the skill /ui-feedback works through the notes. APP_DEV_FEEDBACK=0 ./run-local.sh: off.
+# Reaching the page from outside the VM (port forwarding): APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 export APP_DEV_NO_AUTH=1
+overlay="$(cd ../.. && pwd)/tools/ui-feedback/overlay.js"
+if [ "${APP_DEV_FEEDBACK:-}" != "0" ] && [ -f "$overlay" ]; then
+  export APP_DEV_FEEDBACK="$overlay"
+else
+  unset APP_DEV_FEEDBACK
+fi
 export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"   # the package is in src/
 exec python3 -m app.main

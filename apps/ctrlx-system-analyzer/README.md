@@ -132,6 +132,8 @@ and shows all times as the device's - also the date folders and `time` column on
 ## Develop
 
     ./run-local.sh                      # http://127.0.0.1:8080/ctrlx-system-analyzer/ - analyzes this machine
+    #   there: Alt+click an element -> note in .dev/feedback.json; skill /ui-feedback fixes the notes (dev only)
+    APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh   # the same, reachable through the VM's port forwarding
     APP_DEV_MEDIA_ROOT=/tmp/media ./run-local.sh   # folders in /tmp/media count as media
     ../../tools/check.sh .
     python3 ../../tools/ui_check.py . --narrow

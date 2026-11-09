@@ -72,6 +72,11 @@ DEV_HTTP_PORT = int(os.environ.get("APP_DEV_HTTP_PORT", "8080"))
 # Outside the snap there is no reverse proxy validating tokens. Set APP_DEV_NO_AUTH=1 to let
 # the local dev server treat every request as admin. NEVER has any effect inside the snap.
 DEV_NO_AUTH = (not IN_SNAP) and os.environ.get("APP_DEV_NO_AUTH") == "1"
+# Dev-only UI feedback overlay (app/dev_feedback.py, skill /ui-feedback): run-local.sh sets APP_DEV_FEEDBACK to the
+# kit's tools/ui-feedback/overlay.js. Only together with DEV_NO_AUTH, so never in the snap; ui_check.py removes it.
+_FEEDBACK_JS = os.environ.get("APP_DEV_FEEDBACK", "")
+DEV_FEEDBACK_JS = _FEEDBACK_JS if DEV_NO_AUTH and _FEEDBACK_JS not in ("", "0") else ""
+DEV_FEEDBACK_FILE = os.path.join(SNAP_DATA, "feedback.json")     # <project>/.dev/feedback.json
 
 # Data Layer connection. In the snap: "ipc://" (no credentials needed).
 # Locally: only if CTRLX_HOST is set, e.g. CTRLX_HOST=10.0.2.2 CTRLX_SSL_PORT=8443 for a

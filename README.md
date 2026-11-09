@@ -51,10 +51,11 @@ Verified on ctrlX OS 4.6 - a ctrlX COREvirtual (amd64) and a real ctrlX CORE (ar
   app data save/load with configurations, restart and reboot (`docs/ctrlx/gotchas.md` #21–#38)
 * one `.app` with both architectures installs on both devices (#49)
 * UI checks in headless Chromium (`tools/ui_check.py`), locally and on the COREvirtual (#52)
-* UI feedback notes on the `run-local.sh` page (2026-11-09, template only so far): overlay tested in headless Chromium
-  (Alt+click, pick mode, parent, pins, delete, a table the app re-renders); the user left two notes from their own
-  browser through the VM's port forward and `/ui-feedback` handled them (2026-11-08 evening CST; test changes, reverted); not yet in the apps
-  (`docs/ctrlx/build-deploy-test.md` §1)
+* UI feedback notes on the `run-local.sh` page (2026-11-09, template and the five apps): overlay tested in headless
+  Chromium (Alt+click, pick mode, parent, pins, delete, a table the app re-renders; on each app's page: a note on the
+  title and on a topbar button, the app doesn't react); the user left two notes on the template from their own browser
+  through the VM's port forward and `/ui-feedback` handled them (2026-11-08 evening CST; test changes, reverted);
+  the user checks a new or changed UI there before a snap is built (`docs/ctrlx/build-deploy-test.md` §1)
 * apps built with the kit, their versions and what they verified: `apps/README.md`
 * template `templates/python-webapp` 0.4.0 (2026-11-08): node types for every PLC variable type (each node takes only
   its own type, no conversions), `DataLayerClient` (from core-connector) - both verified on the X3; test users per role

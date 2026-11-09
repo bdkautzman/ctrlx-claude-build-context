@@ -15,8 +15,18 @@
 # OpenCV, numpy, zxing-cpp and Aravis are not on the build VM: README.md "Local development" puts them
 # into .dev/pylib and .dev/aravis (git-ignored); PyGObject is the VM's python3-gi. Without them the web UI
 # runs, reads end with "Aravis is not available".
+#
+# UI feedback overlay (dev only, the kit's tools/ui-feedback/overlay.js): Alt+click an element of the page, type a
+# note -> ./.dev/feedback.json; the skill /ui-feedback works through the notes. APP_DEV_FEEDBACK=0 ./run-local.sh: off.
+# Reaching the page from outside the VM (port forwarding): APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 eval "$(./dev-env.sh)"
 export APP_DEV_NO_AUTH=1
+overlay="$(cd ../.. && pwd)/tools/ui-feedback/overlay.js"
+if [ "${APP_DEV_FEEDBACK:-}" != "0" ] && [ -f "$overlay" ]; then
+  export APP_DEV_FEEDBACK="$overlay"
+else
+  unset APP_DEV_FEEDBACK
+fi
 exec python3 -m app.main
