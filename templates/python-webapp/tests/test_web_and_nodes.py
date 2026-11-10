@@ -366,6 +366,17 @@ class WebApiTest(unittest.TestCase):
             self.assertEqual((status, body["role"], body["canOperate"], body["canConfigure"]),
                              (200, role, operate, configure))
 
+    def test_status_has_the_page_colors_for_every_role(self):
+        status, _ = self.req("PUT", config.API_PREFIX + "/settings", {"style": {"accent": "#aa3300"}})
+        self.assertEqual(status, 200)
+        try:
+            for scope in (config.SCOPE_VIEW, config.SCOPE_OPERATE, config.SCOPE_CONFIGURE):
+                status, body = self.req("GET", config.API_PREFIX + "/status", scopes=(scope,))
+                self.assertEqual((status, body["style"]["accent"], body["style"]["panelDark"]), (200, "#aa3300", "#1c2128"))
+                self.assertEqual((body["about"]["license"], body["about"]["author"]), (config.APP_LICENSE, config.APP_AUTHOR))
+        finally:
+            self.req("POST", config.API_PREFIX + "/settings/reset")
+
     def test_settings_roundtrip(self):
         status, body = self.req("PUT", config.API_PREFIX + "/settings", {"example": {"label": "via api"}})
         self.assertEqual(status, 200)

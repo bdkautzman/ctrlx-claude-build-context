@@ -125,6 +125,25 @@ steps through the page's controls and rings each one, "Show me" actions, ← →
 ctrlx-core-connector), `Kit.ready`, `Kit.poll` (skips while the tab is hidden), icons (`Kit.icon`, `<use href="#i-...">`).
 The list of functions is at the top of `kit.js`.
 
+Since 2026-11-09 (user's request):
+* **Info tooltips**: a settings rule's `help` is an "i" icon next to the field label (hover / keyboard focus / tap),
+  not text under the field. Anywhere else: `<span class="info" tabindex="0" data-tip="...">` after a title.
+* **Styling**: settings section `style` (Accent, Panels, Text + Panels / Text for dark mode, rule `format: "color"` =
+  color picker + hex field). `GET /status` answers `style` for every role and `Kit.refreshStatus` applies it
+  (`Kit.applyStyle`). `kit.css` derives all other colors from these with `color-mix()`: app styles use the variables
+  (`--card`, `--text`, `--muted`, `--line`, `--hover`, `--field`, `--accent`, `--ok/--warn/--err`), never fixed
+  colors, or they break in dark mode.
+* **True/false = a switch** (`Kit.switchInput`, user's choice): settings form and value editors; label above it like
+  every other field. Don't build checkboxes or true/false drop-downs for a single on/off.
+* **Pages = tabs under the top bar** (`Kit.setupTabs`, user's choice): `<nav class="tabs" id="tabs">` with
+  `<a href="#id">`, one `<div class="page" data-page="id">` per page; the hash names the page; `data-role` on a tab
+  limits it to a role; tutorial steps with `page: "id"` switch to it. A one-page app removes the nav and the wrappers.
+* **About** (help menu, 2026-11-10): `#btn-about` opens a `<dialog>` with name, version, author, license and the AI
+  note - from `GET /status` "about" (`config.APP_AUTHOR` / `APP_URL` / `APP_LICENSE` / `APP_AI_NOTE`).
+* **Light / dark**: `#btn-theme` in the top bar (every role), the choice per browser (localStorage), first visit from
+  the OS; `<html data-theme="light|dark">`. Canvas drawings and charts read the colors with
+  `getComputedStyle(document.documentElement).getPropertyValue("--text")` and redraw when `data-theme` changes.
+
 * An app keeps its own code in `app.js` / `style.css` and leaves `kit.js` / `kit.css` as they came from the
   template, so a newer version can be copied over. Something every app needs → change it in the template.
 * `index.html` holds the markup kit.js works with (top bar buttons, help menu, drawer); its comments name the ids.

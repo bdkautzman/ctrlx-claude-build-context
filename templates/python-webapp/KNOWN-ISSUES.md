@@ -30,6 +30,12 @@ measurements, error texts), what was tried and what is still open, so a later an
 ## Not tested yet
 
 * Everything only checked locally (unit tests, `run-local.sh`, `tools/ui_check.py` without `--device`).
+* 0.5.0 (UI changes of 2026-11-09/10) runs on the COREvirtual only (2026-11-10, CHANGELOG 0.5.0): not on a real CORE
+  (X3 / X7 not reachable that day), no arm64 build yet. Saving Styling colors was tested locally only.
+* Info tooltips, Styling colors, light/dark mode, switches and tabs (2026-11-09): headless Chromium only (`tools/ui_check.py`), not
+  through the ctrlX reverse proxy, not on a touch panel (tap on the "i" icon) and not in Firefox/Safari.
+  `color-mix()` needs Chrome 111 / Firefox 113 / Safari 16.2 or newer - older browsers show the page without colors
+  for the derived parts (the AMR Fleet app has used it since 0.2.1).
 
 ## Diagnostics
 

@@ -25,20 +25,33 @@
       <!-- data-role="configure": only users who may change settings see it (kit.js) -->
       <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" data-role="configure" hidden
               title="Settings" aria-label="Settings" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-sliders"/></svg><span class="btn-label">Settings</span></button>
+      <!-- light / dark for this browser, every role (kit.js sets the icon, title and aria-pressed) -->
+      <button type="button" id="btn-theme" class="btn btn-small btn-theme" title="Switch to dark mode"
+              aria-label="Dark mode" aria-pressed="false"><svg class="ic"><use href="#i-moon"/></svg></button>
       <div class="menu-wrap">
         <button type="button" id="btn-help" class="btn btn-small btn-help" title="Help" aria-label="Help"
                 aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu"><svg class="ic"><use href="#i-help"/></svg></button>
         <div id="help-menu" class="menu" role="menu" aria-label="Help" hidden>
           <a role="menuitem" id="help-page" href="https://example.com" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-external"/></svg>App page</a>
           <button type="button" role="menuitem" id="btn-tutorial"><svg class="ic"><use href="#i-play"/></svg>Tutorial</button>
+          <!-- About: name, version, author, license, AI note from GET /status (kit.js builds the dialog) -->
+          <button type="button" role="menuitem" id="btn-about"><svg class="ic"><use href="#i-info"/></svg>About</button>
         </div>
       </div>
     </div>
   </header>
 
+  <!-- pages: tabs under the top bar (kit.js Kit.setupTabs). The hash names the page (#overview, #values); a tab with
+       data-role="operate|configure" is only for that role. A one-page app: remove this nav and the .page wrappers. -->
+  <nav class="tabs" id="tabs" aria-label="Pages">
+    <a href="#overview">Overview</a>
+    <a href="#values">Data Layer</a>
+  </nav>
+
   <div id="banner" class="banner" hidden></div>
 
-  <main class="grid">
+  <main>
+  <div class="page grid" data-page="overview">
     <section class="card" id="status-card" aria-labelledby="status-h">
       <h2 id="status-h">Status</h2>
       <dl class="kv" id="status-list">
@@ -49,7 +62,9 @@
       </dl>
       <p id="st-error" class="error" hidden></p>
     </section>
+  </div>
 
+  <div class="page grid" data-page="values" hidden>
     <section class="card" id="values-card" aria-labelledby="values-h">
       <h2 id="values-h">Data Layer values</h2>
       <table class="values">
@@ -57,6 +72,7 @@
         <tbody id="values-body"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
       </table>
     </section>
+  </div>
   </main>
 
   <!-- settings: slide in from the right; only for the configure role (kit.js Kit.setupSettings) -->

@@ -17,6 +17,7 @@ Supported rule keys:
             is normalized against the template (types, missing keys) and checked with the rules
   maxItems/minItems: maximum/minimum array length
   itemPattern: arrays of strings - regular expression every element must match
+  format:   "color" -> the web UI shows a color picker + hex field (with pattern HEX_COLOR: the COLOR rule below)
   unique:   field name that must be unique within an array of objects (also used to match
             elements when restoring secrets)
   Example with items, unique, secret, pattern, maxItems: apps/ctrlx-core-connector/src/app/settings_rules.py
@@ -30,6 +31,9 @@ validate_settings(settings) -> [error messages] and pass it to SettingsStore(...
 it runs on every validation, messages start with the dotted path. Example:
 apps/ctrlx-network-scanner/src/app/settings_rules.py.
 """
+
+HEX_COLOR = r"#[0-9a-fA-F]{6}"
+COLOR = {"pattern": HEX_COLOR, "format": "color"}
 
 RULES = {
     # Format version of settings.json. Increase it (and migrate in settings_store) when you make
@@ -45,12 +49,25 @@ RULES = {
         "max": 60000,
         "help": "Update interval of the Data Layer heartbeat node.",
     },
-    "example.enabled": {"label": "Example enabled"},
-    "example.label": {"label": "Label", "minLength": 0, "maxLength": 80},
+    "example.enabled": {"label": "Example enabled",
+                        "help": "Start value of the Data Layer node values/enabled; while it is false, the example "
+                                "command commands/set-setpoint ends with an error."},
+    "example.label": {"label": "Label", "minLength": 0, "maxLength": 80,
+                      "help": "Text of the read-only Data Layer node values/label."},
     "example.setpoint": {
         "label": "Initial setpoint",
         "min": -1.0e6,
         "max": 1.0e6,
         "help": "Start value of the Data Layer node values/setpoint after the app starts.",
     },
+    # Page colors for every user of the app (GET /status "style" -> kit.js Kit.applyStyle). Page background, lines
+    # and secondary text are derived from them (kit.css). Light or dark: each browser's choice (top bar button).
+    "style": {"label": "Styling"},
+    "style.accent": dict(COLOR, label="Accent", help="Buttons, the brand mark, focus rings - in light and dark mode."),
+    "style.panel": dict(COLOR, label="Panels", help="Top bar, cards, settings. Page background, lines and secondary "
+                                                     "text are derived from Panels and Text."),
+    "style.text": dict(COLOR, label="Text"),
+    "style.panelDark": dict(COLOR, label="Panels (dark mode)",
+                            help="Panels while the page is in dark mode (the moon/sun button in the top bar)."),
+    "style.textDark": dict(COLOR, label="Text (dark mode)"),
 }

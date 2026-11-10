@@ -59,18 +59,24 @@
   }
   function startEdit(name, v, cell, btn) {
     editing = name;
-    const input = v.type === "bool8"
-      ? el("select", {}, el("option", { value: "true", text: "true" }), el("option", { value: "false", text: "false" }))
-      : el("input", { type: v.type === "string" || isArray(v.type) ? "text" : "number", step: "any" });
-    input.value = show(v.type, v.value);
-    cell.replaceChildren(input);
+    let input, sw = null;
+    if (v.type === "bool8") {                       // true/false: the kit's switch (Space toggles, Enter sets)
+      sw = Kit.switchInput(v.value === true, { labels: ["false", "true"] });
+      input = sw.button;
+      input.setAttribute("aria-label", v.address);
+      cell.replaceChildren(sw.node);
+    } else {
+      input = el("input", { type: v.type === "string" || isArray(v.type) ? "text" : "number", step: "any" });
+      input.value = show(v.type, v.value);
+      cell.replaceChildren(input);
+    }
     input.focus();
     btn.textContent = "Set";
     const done = async (commit) => {
       if (commit) {
         let value = input.value;
         try {
-          if (v.type === "bool8") value = value === "true";
+          if (v.type === "bool8") value = sw.value;
           else if (isArray(v.type)) value = JSON.parse(value);          // e.g. [1.5, 2]
           else if (v.type !== "string") value = Number(value);
           await api("PUT", "/values/" + encodeURIComponent(name), { value });
@@ -80,23 +86,29 @@
       refreshValues();
     };
     btn.onclick = () => done(true);
-    input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") done(true); if (ev.key === "Escape") done(false); });
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); done(true); }   // on the switch: set, don't toggle
+      if (ev.key === "Escape") done(false);
+    });
   }
 
-  // ---- settings drawer, help ---------------------------------------------------
+  // ---- pages, settings drawer, help ---------------------------------------------
+  Kit.setupTabs({ onShow: (page) => { if (page === "values") refreshValues(); } });   // fresh values when the tab opens
   const settings = Kit.setupSettings({ onSaved: () => { refreshStatus(); refreshValues(); } });
   Kit.setupHelp([
     { title: "Welcome",
       text: "This tour shows the controls of the Template App. Step through it with the arrows (or the ← → keys); " +
         "the control of each step blinks. Everything stays usable while the tour is open." },
-    { title: "Status", target: () => $("status-card"),
+    { title: "Pages", target: () => $("tabs"),
+      text: "The app's pages. Each one has its own address (…/#values), so a page can be bookmarked or linked." },
+    { title: "Status", target: () => $("status-card"), page: "overview",
       text: "Uptime of the app, where its settings come from, whether they are stored in the ctrlX app data, " +
         "and how many Data Layer nodes it provides." },
-    { title: "Data Layer values", target: () => $("values-card"),
+    { title: "Data Layer values", target: () => $("values-card"), page: "values",
       text: () => "The nodes this app provides in the ctrlX Data Layer (" + Kit.PREFIX.slice(1) + "/…). " +
         (can("operate") ? "Writable ones have an Edit button: the value holds until the app restarts."
           : "Users with the operate permission can change the writable ones here.") },
-    { title: "A command", target: () => [...document.querySelectorAll("#values-body tr")]
+    { title: "A command", page: "values", target: () => [...document.querySelectorAll("#values-body tr")]
         .filter((tr) => tr.textContent.includes("/commands/set-setpoint/")),
       text: "commands/set-setpoint shows how a PLC starts something in the app (Execute / Busy / Done / Error): write " +
         "target, then execute true; busy is true while it works, then done (or error with error-text). Writing " +
@@ -110,10 +122,14 @@
         : "View only: you see the app's data, but can't change anything. Ask an administrator for more." },
     { title: "Data Layer", target: () => $("conn"),
       text: "The connection of this app to the ctrlX Data Layer." },
+    { title: "Light or dark", target: () => $("btn-theme"),
+      text: "Switches the page between light and dark mode. Each browser keeps its own choice. The colors of both " +
+        "modes are set in Settings → Styling (by users who may change settings)." },
     { title: "Home screen widget",
       text: "The app also brings a widget for the ctrlX home screen: add “Template App” from the widget list " +
         "of the home screen's edit mode." },
-    { title: "Help", target: () => $("btn-help"), text: "Start this tour again, or open the app's page." },
+    { title: "Help", target: () => $("btn-help"),
+      text: "Start this tour again, open the app's page, or see About: version, author, license." },
   ]);
 
   (async function init() {

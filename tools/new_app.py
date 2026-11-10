@@ -8,11 +8,17 @@
 Creates apps/<name>/ with every identifier replaced (snap name, manifest id, proxy URL,
 scopes, Data Layer root, app-data directory, widget tag, file names), then runs the checks.
 
-Defaults come from <kit>/kit.toml (git-ignored; template kit.example.toml): `author`, `url` and the optional
-`company`. A --name without the "ctrlx-" prefix becomes ctrlx-<company>-<name> (ctrlx-<name> without a company).
+Defaults come from <kit>/kit.toml (git-ignored; template kit.example.toml): `author`, `url`, the optional
+`company` and `license`. A --name without the "ctrlx-" prefix becomes ctrlx-<company>-<name> (ctrlx-<name> without
+a company).
+
+License: MIT unless --license (or kit.toml license) names another SPDX id (user's request 2026-11-10). It goes into
+LICENSE (MIT: the full text with this year and the author), snap/snapcraft.yaml `license:` and src/app/config.py
+APP_LICENSE (the About dialog); for another license LICENSE gets a placeholder - put that license's text in.
 """
 
 import argparse
+import datetime
 import os
 import re
 import shutil
@@ -35,17 +41,43 @@ T_AUTHOR = "ACME Automation"
 T_URL = "https://example.com"
 TEXT_EXT = {".py", ".json", ".yaml", ".yml", ".toml", ".md", ".sh", ".html", ".js", ".css", ".svg", ".txt", ""}
 KIT_TOML = os.path.join(KIT, "kit.toml")
+DEFAULT_LICENSE = "MIT"
+SPDX_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+-]*")
 
 
 def load_kit_defaults(path=KIT_TOML):
-    """author / url / company from kit.toml ({} without the file)."""
+    """author / url / company / license from kit.toml ({} without the file)."""
     if not os.path.exists(path):
         return {}
     if tomllib is None:
         sys.exit("reading {} needs Python 3.11+ (tomllib)".format(path))
     with open(path, "rb") as f:
         data = tomllib.load(f)
-    return {k: str(data[k]).strip() for k in ("author", "url", "company") if k in data}
+    return {k: str(data[k]).strip() for k in ("author", "url", "company", "license") if k in data}
+
+
+def apply_license(dest, license_id, author, year):
+    """LICENSE, snap/snapcraft.yaml `license:` and config.APP_LICENSE of a new app (they must agree:
+    tests/test_about.py). MIT: the template's MIT text with this year and the author; another SPDX id: a placeholder."""
+    path = os.path.join(dest, "LICENSE")
+    if license_id == "MIT":
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        text = re.sub(r"(?m)^Copyright \(c\) \d{4} .*$", "Copyright (c) {} {}".format(year, author), text, count=1)
+    else:
+        text = ("{lic}\n\nCopyright (c) {year} {author}\n\nTODO: replace this paragraph with the full text of the {lic} "
+                "license (https://spdx.org/licenses/{lic}.html).\n").format(lic=license_id, year=year, author=author)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    for rel, pattern, rep in (("snap/snapcraft.yaml", r"(?m)^license: *\S+", "license: " + license_id),
+                              ("src/app/config.py", r'(?m)^APP_LICENSE = "[^"]*"', 'APP_LICENSE = "{}"'.format(license_id))):
+        p = os.path.join(dest, rel)
+        with open(p, encoding="utf-8", newline="") as f:
+            text, n = re.subn(pattern, rep, f.read(), count=1)
+        if n != 1:
+            raise SystemExit("{}: no license line to set".format(rel))
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
 
 
 def snap_name(name, company=""):
@@ -64,6 +96,7 @@ def main():
     ap.add_argument("--title", required=True, help="display title, 3..40 chars")
     ap.add_argument("--author", help="company / author for the snap description (default: kit.toml author)")
     ap.add_argument("--url", help="company / product URL: snap description, help menu link (default: kit.toml url)")
+    ap.add_argument("--license", help="SPDX license id (default: kit.toml license, else MIT)")
     ap.add_argument("--dest", default=os.path.join(KIT, "apps"))
     args = ap.parse_args()
 
@@ -73,6 +106,9 @@ def main():
     if not author or not url:
         sys.exit("--author and --url are needed (or set author / url in kit.toml, template kit.example.toml)")
     company = defaults.get("company", "")
+    license_id = (args.license or defaults.get("license") or DEFAULT_LICENSE).strip()
+    if not SPDX_ID.fullmatch(license_id):
+        sys.exit("--license must be an SPDX id like MIT or Apache-2.0")
     name, title = snap_name(args.name, company), args.title.strip()
     if not re.fullmatch(r"ctrlx-[a-z0-9]+(-[a-z0-9]+)*", name):
         sys.exit("name must look like ctrlx-<app> or ctrlx-<company>-<app> (lowercase letters, digits, single dashes)")
@@ -129,6 +165,10 @@ def main():
             text = f.read()
         with open(p, "w", encoding="utf-8", newline="") as f:
             f.write(re.sub(pattern, rep, text, count=1))
+
+    apply_license(dest, license_id, author, datetime.date.today().year)
+    if license_id != "MIT":
+        print("Note: put the full text of the {} license into {}".format(license_id, os.path.join(dest, "LICENSE")))
 
     with open(os.path.join(dest, "CHANGELOG.md"), "w", encoding="utf-8") as f:
         f.write("# Changelog\n\nVersions follow semantic versioning and must match `version:` in "

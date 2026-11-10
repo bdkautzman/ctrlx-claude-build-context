@@ -437,6 +437,10 @@
   }
 
   // ---- open notes: list, pins --------------------------------------------------------------------------------
+  // a note belongs to the page it was made on (path only: ?query and #hash may differ); pins only there
+  const pathPart = (p) => String(p || "").split(/[?#]/)[0].replace(/\/index\.html$/, "/");
+  const onThisPage = (it) => !it.page || pathPart(it.page) === pathPart(location.pathname);
+
   async function reload() {
     try {
       const res = await fetch(API, { cache: "no-store" });
@@ -464,12 +468,15 @@
       const sel = li.querySelector(".sel");
       sel.textContent = it.selector;
       sel.title = it.selector;
-      if (!locate(it)) {
+      if (!onThisPage(it)) {
+        sel.classList.add("gone");
+        sel.textContent = "on " + pathPart(it.page) + " · " + it.selector;
+      } else if (!locate(it)) {
         sel.classList.add("gone");
         sel.textContent = "not on the page now · " + it.selector;
       }
       li.querySelector(".body").addEventListener("click", () => {
-        const el = locate(it);
+        const el = onThisPage(it) && locate(it);
         if (!el) return;
         el.scrollIntoView({ block: "center" });
         showHighlight(el);
@@ -494,7 +501,7 @@
   function renderPins() {
     pins.textContent = "";
     if (!showPins) return;
-    for (const it of items) {
+    for (const it of items.filter(onThisPage)) {
       const pin = document.createElement("div");
       pin.className = "pin";
       pin.textContent = it.id;

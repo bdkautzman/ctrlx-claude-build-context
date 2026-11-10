@@ -3,14 +3,51 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
-## Unreleased
+## 0.5.0
 
+- **Help texts as info tooltips** (2026-11-09, user's request, the pattern of ctrlx-core-connector): a settings rule's
+  `help` is an "i" icon next to the field's label (`kit.js`), the text shows on hover or keyboard focus (a tap on a
+  touch panel) and is the input's `aria-describedby`; no text under the fields any more. `<span class="info"
+  tabindex="0" data-tip="...">` (`kit.css`) works anywhere on a page too. Help added to Label and Example enabled.
+- **Styling** (2026-11-09, user's choices, from ctrlx-amr-fleet): settings section `style` with Accent, Panels, Text
+  and Panels / Text for dark mode; rule `format: "color"` (`COLOR` in `settings_rules.py`) gives a color picker + hex
+  field. The colors apply for every role: `GET /status` answers `style`, `Kit.refreshStatus` sets them
+  (`Kit.applyStyle`); while they are edited in the drawer the page previews them, Revert / closing drops the preview.
+  `kit.css` derives background, lines, secondary text and hover from Panels + Text with `color-mix()` (no fixed colors
+  left). Old settings without `style` get the defaults.
+- **Light / dark mode** (2026-11-09, user's choice): moon/sun button `#btn-theme` in the top bar for every role; each
+  browser keeps its choice (localStorage `<snap>.theme`), the first visit follows the OS/browser setting;
+  `<html data-theme>`, `color-scheme` for native controls, status colors for dark backgrounds. The last applied colors
+  are kept in the browser too (`<snap>.style`), so a page load starts with them. The home screen widget keeps its own
+  colors (the ctrlX home screen hosts it). Existing apps keep their copies of kit.js / kit.css.
+- **True/false = a switch** (2026-11-09, user's choice from four options): `Kit.switchInput` (button
+  `role="switch"`, state text On / Off) for every boolean setting - label above like the other fields, so it lines
+  up (the checkbox sat askew) - and for editing a bool8 value in the Data Layer table (Space toggles, Enter sets).
+- **Pages as tabs under the top bar** (2026-11-09, user's choice from three options): `Kit.setupTabs`, markup
+  `<nav class="tabs" id="tabs">` + `<div class="page" data-page="...">`; the hash names the page (bookmarks,
+  back/forward, a reload keeps it), tabs with `data-role` only for that role, tutorial steps take `page: "..."` and
+  switch to it. The template has two pages: Overview (status) and Data Layer (the values table).
+- **Save closes the settings drawer** (2026-11-09, user's note); with errors it stays open and shows them.
+- **About** in the help menu (2026-11-10, user's request): a dialog with the app's name, version, author (linked to
+  its URL), license and a note that AI was used to create it. From `GET /status` "about" = `config.APP_AUTHOR`,
+  `APP_URL`, `APP_LICENSE`, `APP_AI_NOTE`; `tests/test_about.py` checks they match `snap/snapcraft.yaml` and `LICENSE`.
+- **MIT license** (2026-11-10, user's request): `LICENSE` and `license: MIT` in `snap/snapcraft.yaml` (snapcraft no
+  longer warns about the missing license). `tools/new_app.py` writes it for new apps with the year and author;
+  `--license` / kit.toml `license` for another SPDX id.
 - **UI feedback overlay, dev only** (2026-11-09, user's request): `./run-local.sh` sets `APP_DEV_FEEDBACK` to the kit's
   `tools/ui-feedback/overlay.js`; the dev server (`src/app/dev_feedback.py`) then adds it to its HTML pages and keeps
   the notes in `.dev/feedback.json` (`/<snap>/__dev/feedback[.js]`). Alt+click an element, type a note; skill
   `/ui-feedback` works through the notes. Only with `APP_DEV_NO_AUTH=1` outside the snap; `ui_check.py` removes the
   variable. `APP_DEV_FEEDBACK=0 ./run-local.sh` turns it off. Tests: `tests/test_dev_feedback.py`.
   No snap built with it (nothing in the snap changes behaviour).
+- Verified 2026-11-10 on the ctrlX COREvirtual (amd64, ctrlX OS 4.6; incremental build 9.1 MB, fresh install with
+  `--service`): Data Layer 14 nodes, state running, heartbeat counting, `status/version` 0.5.0; `GET /status` through the
+  reverse proxy answers `about` (MIT, AI note) and `style`; the app data of an older template version (no `style`)
+  loads with the default colors; no error in the log (the Data Layer start in SERVICE state is retried, INFO).
+  `ui_check.py --device virtual` as admin and as the new test users kit-view / kit-operate / kit-configure: tabs, About
+  (version 0.5.0), light/dark with reload, roles (View only: no Edit, no settings/active), settings drawer with switch,
+  tooltips and Styling in dark mode, home screen widget. **Not tested**: a real CORE (X3 / X7 not reachable that day),
+  the arm64 build, a touch panel, Firefox / Safari, saving Styling colors on a device (the device check changes nothing).
 
 ## 0.4.0
 

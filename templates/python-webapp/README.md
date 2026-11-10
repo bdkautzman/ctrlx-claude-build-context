@@ -4,7 +4,9 @@ ctrlX OS 4.6 app (snap, `core24`) written in Python:
 
 * **Web UI** served on a Unix socket behind the ctrlX reverse proxy, opened from the ctrlX
   sidebar / overview (new tab). No Settings-page tile: the ctrlX Settings page can't open a new tab
-  (docs/ctrlx/package-manifest.md). Settings in a drawer, help menu with a tutorial.
+  (docs/ctrlx/package-manifest.md). Settings in a drawer (help texts as info tooltips, page colors under Styling),
+  help menu with a tutorial and an About dialog (version, author, license, AI note), light/dark mode per browser
+  (top bar button), pages as tabs (Overview, Data Layer), switches for true/false.
 * **Three roles** (ctrlX scopes, Settings → Users & Permissions): *View* (`ctrlx-acme-template.web.all.r`: status
   and values), *Operate* (`.web.operate.x`: also write the runtime values), *Configure* (`.web.all.rw`: also settings).
 * **Home screen widget** "Template App" (state and values, "Open" button) - add it from the home screen's widget list.
@@ -21,6 +23,7 @@ ctrlX OS 4.6 app (snap, `core24`) written in Python:
 | `wrapper/run.sh` | start script of the daemon (`bin/run.sh` in the snap) |
 | `configs/package-assets/<snap>.package-manifest.json` | ctrlX integration: proxy, menus, scopes, app-data commands |
 | `configs/package-assets/<snap>.fossinfo.json` | open source components shipped in the snap |
+| `LICENSE` | MIT (new apps: `tools/new_app.py` writes the year and author; `--license` for another) |
 | `KNOWN-ISSUES.md` | working document: problems, workarounds, caveats, what is not tested on a device, diagnostics (keep current) |
 | `defaults/settings.json` | default settings = structure + types of `settings.json` |
 | `src/app/settings_rules.py` | value rules for settings (enum/min/max/labels) |

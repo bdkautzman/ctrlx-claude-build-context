@@ -8,5 +8,12 @@
     "enabled": true,
     "label": "Hello ctrlX",
     "setpoint": 0.0
+  },
+  "style": {
+    "accent": "#007bc0",
+    "panel": "#ffffff",
+    "text": "#1f2328",
+    "panelDark": "#1c2128",
+    "textDark": "#e6e8eb"
   }
 }

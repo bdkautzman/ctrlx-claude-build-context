@@ -203,6 +203,8 @@ fixes the notes (dev only; from outside the VM: `APP_DEV_HTTP_HOST=0.0.0.0 ./run
 
 ## Licenses (FOSS)
 
+The app itself: MIT (`LICENSE`).
+
 All components and their license texts: `configs/package-assets/ctrlx-barcode-reader.fossinfo.json` (shown by
 ctrlX OS with the app). LGPL-2.1+ and GPL-3.0 (with GCC Runtime Library Exception) components are linked
 dynamically and can be replaced; their sources are available through the **written offer**

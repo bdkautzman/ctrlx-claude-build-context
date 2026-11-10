@@ -138,3 +138,7 @@ and shows all times as the device's - also the date folders and `time` column on
     ../../tools/check.sh .
     python3 ../../tools/ui_check.py . --narrow
     ./build-snap-amd64.sh               # / ./build-snap-arm64.sh
+
+## License
+
+MIT (`LICENSE`). Open source components shipped in the snap: `configs/package-assets/ctrlx-system-analyzer.fossinfo.json`.

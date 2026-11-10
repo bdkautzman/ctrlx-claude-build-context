@@ -10,7 +10,8 @@ The proxy forwards the FULL path, so every route starts with config.URL_PREFIX.
 Routes (role = the lowest role that may call it, auth.py: view < operate < configure)
   GET  /<snap>/                      index.html (static, unrestricted, no data!)
   GET  /<snap>/<file>                static assets from www/ (kit.js/kit.css: shared UI parts, widgets.js)
-  GET  /<snap>/api/v1/status         view       (incl. the caller's role)
+  GET  /<snap>/api/v1/status         view       (incl. the caller's role, the page colors - settings "style" - and
+                                                  "about": author, url, license, AI note for the About dialog)
   GET  /<snap>/api/v1/values         view       (Data Layer nodes of this app the caller may see)
   PUT  /<snap>/api/v1/values/<name>  NodeSpec.write_role (default operate)  body {"value": ...}
   GET  /<snap>/api/v1/settings       configure
@@ -364,6 +365,9 @@ def _make_handler(store, datalayer):
                     "role": auth.role_of(scopes),           # view | operate | configure
                     "canOperate": auth.allows(scopes, auth.OPERATE),
                     "canConfigure": auth.allows(scopes, auth.CONFIGURE),
+                    "style": store.get().get("style"),      # page colors for every role (kit.js Kit.applyStyle)
+                    "about": {"author": config.APP_AUTHOR, "url": config.APP_URL,       # help menu -> About
+                              "license": config.APP_LICENSE, "ai": config.APP_AI_NOTE},
                 })
 
             # settings: only for users who may change them (view/operate users don't see them at all; when the

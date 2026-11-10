@@ -1,21 +1,43 @@
 /* Shared styles of the kit's apps (templates/python-webapp/www/kit.css): ctrlX-like colors, top bar, cards, buttons,
-   forms, settings drawer, help menu, tutorial. Load it before style.css (the app's own styles); keep app styles
-   out of this file, so a newer kit.css from the template can replace it. No external fonts/CDNs. */
+   forms, settings drawer, help menu, tutorial, info tooltips, light/dark theme. Load it before style.css (the app's
+   own styles); keep app styles out of this file, so a newer kit.css from the template can replace it. No external
+   fonts/CDNs.
+   Colors: the base colors below are the defaults of the settings "style" (kit.js Kit.applyStyle sets the configured
+   ones on <html>); everything else is derived from them with color-mix(), so any palette works. <html data-theme=
+   "light"|"dark"> (kit.js, the top bar button) picks the light or the dark pair. App styles use the variables only. */
 :root {
-  --bg: #f4f5f7;
-  --card: #ffffff;
-  --text: #1f2328;
-  --muted: #6a737d;
-  --line: #e1e4e8;
-  --line-strong: #c9ced4;
-  --hover: #f3f5f8;
   --accent: #007bc0;
-  --accent-ink: #ffffff;
+  --accent-ink: #ffffff;              /* text on the accent: kit.js picks dark or white for the configured accent */
+  --panel-light: #ffffff;
+  --text-light: #1f2328;
+  --panel-dark: #1c2128;
+  --text-dark: #e6e8eb;
+  --card: var(--panel-light);
+  --text: var(--text-light);
+  --bg: color-mix(in srgb, var(--card) 94%, var(--text));
+  --muted: color-mix(in srgb, var(--text) 62%, var(--card));
+  --line: color-mix(in srgb, var(--text) 13%, var(--card));
+  --line-strong: color-mix(in srgb, var(--text) 26%, var(--card));
+  --hover: color-mix(in srgb, var(--text) 5%, var(--card));
+  --field: var(--card);
   --ok: #00884a;
   --warn: #c76b00;
   --err: #c8102e;
+  --shadow: rgb(0 0 0 / .16);
   --radius: 6px;
   --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --card: var(--panel-dark);
+  --text: var(--text-dark);
+  --bg: color-mix(in srgb, var(--card) 72%, black);      /* darker than the panels, as the light page is */
+  --field: color-mix(in srgb, var(--card) 80%, black);
+  --ok: #3fb950;
+  --warn: #d29922;
+  --err: #f85149;
+  --shadow: rgb(0 0 0 / .5);
+  color-scheme: dark;                 /* native controls (select lists, color picker, scrollbars) follow */
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text);
@@ -38,13 +60,22 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
 
 .pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
-.pill-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, white); }
-.pill-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, white); }
+.pill-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--card)); }
+.pill-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--card)); }
 .pill-unknown, .pill-role { color: var(--muted); }
 .pill-role { background: var(--hover); }
 
 .banner { margin: 12px 20px 0; padding: 10px 14px; border-radius: var(--radius);
-  background: #fff4f4; border: 1px solid #f3c2c9; color: var(--err); }
+  background: color-mix(in srgb, var(--err) 6%, var(--card)); border: 1px solid color-mix(in srgb, var(--err) 35%, var(--card));
+  color: var(--err); }
+
+/* ---- pages: tabs under the top bar (kit.js Kit.setupTabs; user's choice 2026-11-09). Narrow: the row scrolls. ---- */
+.tabs { display: flex; gap: 4px; padding: 0 16px; background: var(--card); border-bottom: 1px solid var(--line);
+  overflow-x: auto; scrollbar-width: thin; }
+.tabs a { display: inline-flex; align-items: center; gap: 6px; padding: 11px 14px 9px; border-bottom: 2px solid transparent;
+  color: var(--muted); text-decoration: none; white-space: nowrap; }
+.tabs a:hover { color: var(--text); background: var(--hover); }
+.tabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
 /* ---- layout ------------------------------------------------------------------------------------- */
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 16px 20px 32px; }
@@ -56,7 +87,7 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
 .kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
 /* ---- buttons, forms ----------------------------------------------------------------------------- */
-.btn { padding: 6px 14px; border-radius: 4px; border: 1px solid var(--line-strong); background: #fff; font: inherit;
+.btn { padding: 6px 14px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--card); font: inherit;
   color: var(--text); cursor: pointer; text-decoration: none; }
 .btn:hover { background: var(--hover); }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -74,21 +105,65 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
 fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px 12px; margin: 0; grid-column: 1 / -1; }
 fieldset > .fields { margin-top: 4px; }
 legend { font-weight: 600; padding: 0 6px; }
+.field { position: relative; }       /* the info tooltip of a field spans the field (stays inside the drawer) */
 .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-.field .help { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.field-label { display: flex; align-items: center; min-height: 18px; margin-bottom: 4px; }
+.field-label label { margin-bottom: 0; }
+.field .help { font-size: 12px; color: var(--muted); margin-top: 3px; }   /* help text an app puts under a field */
 .field.invalid input, .field.invalid select { border-color: var(--err); }
 input[type=text], input[type=number], input[type=password], select {
-  width: 100%; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 4px; font: inherit; background: #fff; }
-input:focus, select:focus, button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 50%, white); outline-offset: 1px; }
-input:disabled, select:disabled { background: #f6f8fa; color: var(--muted); }
+  width: 100%; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 4px; font: inherit;
+  background: var(--field); color: var(--text); }
+input:focus, select:focus, button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 50%, var(--card)); outline-offset: 1px; }
+input:disabled, select:disabled { background: var(--hover); color: var(--muted); }
 .checkbox { display: flex; align-items: center; gap: 8px; padding-top: 18px; }
+
+/* true/false: a switch (kit.js Kit.switchInput; user's choice 2026-11-09, the kit's standard for every true/false
+   choice). In a form field it sits in a row as high as a text input, so it lines up with the other fields. */
+.ctl-row { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+.switch { position: relative; width: 40px; height: 22px; padding: 0; flex: none; border-radius: 11px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: var(--line-strong); transition: background .15s, border-color .15s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .3); transition: transform .15s; }
+.switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(18px); }
+.switch:disabled { opacity: .5; cursor: default; }
+.switch-state { font-size: 13px; color: var(--muted); min-width: 24px; }
+@media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
+
+/* color fields (settings rule format "color"): picker + hex text, kept in step by kit.js */
+.color-input { display: flex; align-items: center; gap: 6px; }
+.color-picker { flex: none; width: 34px; height: 30px; padding: 1px; border: 1px solid var(--line-strong);
+  border-radius: 4px; background: var(--field); cursor: pointer; }
+.color-input .color-hex { width: 92px; font-family: var(--mono); font-size: 13px; }
+
+/* ---- info tooltips: <span class="info" tabindex="0" data-tip="..." aria-label="..."> next to a title or label
+   (kit.js puts one next to every settings field with a "help" rule). Shows on hover and keyboard focus (also a tap
+   on a touch panel). Icon: a filled circle with an "i" cut out (mask on ::before, so it doesn't clip ::after). In a
+   .field the tip spans the field; elsewhere it is centered above the icon (.info-end: ends at the icon). ---- */
+:root { --info-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M8 0a8 8 0 1 0 0 16A8 8 0 1 0 8 0zM8 3a1.35 1.35 0 1 0 0 2.7A1.35 1.35 0 1 0 8 3zM6.1 6.7h3v4.75h.9v1.45H6.05v-1.45h.95V8.1h-.9z'/%3E%3C/svg%3E"); }
+.info { display: inline-block; position: relative; flex: none; width: 13px; height: 13px; margin-left: 5px;
+  border-radius: 50%; color: var(--muted); cursor: help; vertical-align: -2px; }
+.info::before { content: ""; display: block; width: 100%; height: 100%; background: currentColor;
+  -webkit-mask: var(--info-icon) center / contain no-repeat; mask: var(--info-icon) center / contain no-repeat; }
+.info:hover, .info:focus { color: var(--text); outline: none; }
+.info:focus-visible { box-shadow: 0 0 0 2px var(--card), 0 0 0 3px var(--muted); }
+.info::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
+  width: max-content; max-width: 260px; padding: 6px 8px; border-radius: 4px; background: var(--text); color: var(--card);
+  box-shadow: 0 4px 12px var(--shadow); font: 400 12px/1.4 system-ui, sans-serif; text-align: left; white-space: normal;
+  opacity: 0; visibility: hidden; transition: opacity .12s; z-index: 10; pointer-events: none; }
+.info:hover::after, .info:focus::after { opacity: 1; visibility: visible; }
+.info-end::after { left: auto; right: -6px; transform: none; }
+.field .info { position: static; }   /* the tip below the label row, as wide as the field */
+.field .info::after { left: 0; right: 0; top: 22px; bottom: auto; transform: none; width: auto; max-width: none; }
+@media (prefers-reduced-motion: reduce) { .info::after { transition: none; } }
 .actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 .error { color: var(--err); }
 .error-list { color: var(--err); margin: 12px 0 0; padding-left: 18px; }
 
 /* ---- settings drawer: slides in from the right -------------------------------------------------- */
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); z-index: 20; overflow-y: auto;
-  background: var(--card); border-left: 1px solid var(--line); box-shadow: -4px 0 16px rgba(0, 0, 0, .12);
+  background: var(--card); border-left: 1px solid var(--line); box-shadow: -4px 0 16px var(--shadow);
   padding: 12px 20px 24px; transform: translateX(100%); visibility: hidden;
   transition: transform .22s ease, visibility 0s linear .22s; }
 .drawer.open { transform: none; visibility: visible; transition: transform .22s ease; }
@@ -100,24 +175,36 @@ input:disabled, select:disabled { background: #f6f8fa; color: var(--muted); }
 
 /* ---- help menu -------------------------------------------------------------------------------- */
 .menu-wrap { position: relative; display: flex; }
-.topbar-right .btn-help { width: 30px; justify-content: center; padding: 0; }
-.btn-help .ic { width: 16px; height: 16px; }
+.topbar-right .btn-help, .topbar-right .btn-theme { width: 30px; justify-content: center; padding: 0; }
+.btn-help .ic, .btn-theme .ic { width: 16px; height: 16px; }
 .btn-help[aria-expanded="true"] { background: var(--hover); }
 .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 200px; padding: 4px;
   display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line);
-  border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0, 0, 0, .16); }
+  border-radius: var(--radius); box-shadow: 0 6px 20px var(--shadow); }
 .menu [role="menuitem"] { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 4px;
   background: none; color: var(--text); font: inherit; font-size: 14px; text-align: left; text-decoration: none;
   cursor: pointer; white-space: nowrap; }
 .menu [role="menuitem"]:hover, .menu [role="menuitem"]:focus-visible { background: var(--hover); outline: none; }
 .menu .ic { width: 16px; height: 16px; color: var(--muted); flex: none; }
 
+/* ---- dialogs: <dialog class="dialog"> (kit.js About); Esc and a click beside it close it ---- */
+.dialog { width: min(440px, calc(100% - 32px)); padding: 0; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--card); color: var(--text); box-shadow: 0 12px 32px var(--shadow); }
+.dialog::backdrop { background: rgb(0 0 0 / .3); }
+.dialog-body { padding: 12px 12px 18px 18px; }
+.dialog-head { align-items: center; margin-bottom: 10px; }
+.dialog-head h2 { margin: 0; }
+.dialog a { color: var(--accent); }
+.about-ai { display: flex; gap: 8px; align-items: flex-start; margin: 16px 6px 0 0; padding: 8px 10px; font-size: 13px;
+  border-left: 3px solid var(--accent); border-radius: 4px; background: var(--hover); }
+.about-ai .ic { width: 16px; height: 16px; margin-top: 1px; color: var(--accent); }
+
 /* ---- tutorial: card at the bottom of the window (top only when it would hide the control completely),
    ring over the control and under the card (z-index 24 < 25; above the drawer, 20) ---- */
 .tour { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 25;
   width: min(520px, calc(100% - 24px)); padding: 10px 12px 12px 16px; background: var(--card);
   border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+  box-shadow: 0 8px 24px var(--shadow); }
 .tour.at-top { bottom: auto; top: 60px; }
 .tour-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-right: -4px; }
 .tour h3 { margin: 0 0 4px; font-size: 15px; }
@@ -141,6 +228,7 @@ input:disabled, select:disabled { background: #f6f8fa; color: var(--muted); }
 /* ---- narrow screens (phone, small HMI) ----------------------------------------------------------- */
 @media (max-width: 760px) {
   .topbar { padding: 8px 12px; }
+  .tabs { padding: 0 8px; }
   .grid { padding: 12px; gap: 12px; grid-template-columns: 1fr; }
   .btn-label { display: none; }
   .tour { bottom: 8px; width: calc(100% - 16px); }

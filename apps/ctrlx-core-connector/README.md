@@ -167,3 +167,7 @@ from its local settings (an empty list deletes them).
 | `src/app/web_server.py` | routes |
 | `www/` | `index.html`/`app.js` tiles + settings drawer, `browse.html`/`browse.js` browser, `widgets.js` home screen widget, `common.js` token/API helpers, help menu + tutorial (each page passes its steps) |
 | `tests/` | unit tests; `ui_scenario.py` for `tools/ui_check.py` |
+
+## License
+
+MIT (`LICENSE`). Open source components shipped in the snap: `configs/package-assets/ctrlx-core-connector.fossinfo.json`.

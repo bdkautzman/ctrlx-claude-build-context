@@ -13,6 +13,13 @@ import os
 SNAP_NAME = "ctrlx-acme-template"
 APP_TITLE = "Template App"
 
+# About dialog (help menu -> About, GET /status "about"). tools/new_app.py writes the new app's author, URL and license
+# (kit.toml or its options) here, into snap/snapcraft.yaml and LICENSE; tests/test_about.py checks they agree.
+APP_AUTHOR = "ACME Automation"
+APP_URL = "https://example.com"
+APP_LICENSE = "MIT"                       # SPDX identifier; the license text is in LICENSE
+APP_AI_NOTE = "This app was created with the help of AI (Claude Code by Anthropic)."
+
 # URL prefix the reverse proxy forwards to us (package-manifest services.proxyMapping[].url)
 URL_PREFIX = "/" + SNAP_NAME
 API_PREFIX = URL_PREFIX + "/api/v1"

@@ -37,6 +37,15 @@ def run(ui):
     configure = ui.role in ("admin", "writer")
     operate = configure or ui.role == "operator"
 
+    # pages: tabs under the top bar; Overview first, the hash names the page
+    assert page.locator("#status-card").is_visible() and page.locator("#values-card").is_hidden(), "Overview first"
+    assert page.get_attribute("#tabs a[href='#overview']", "aria-current") == "page"
+    page.click("#tabs a[href='#values']")
+    page.locator("#values-card").wait_for()
+    assert page.locator("#status-card").is_hidden() and page.url.endswith("#values"), "Data Layer tab"
+    ui.wait_ready()
+    ui.shot("values")
+
     # roles: the settings button only for configure, the role pill only for the others, Edit only for operate
     assert page.locator("#btn-settings").is_visible() == configure, "settings button vs role " + ui.role
     assert page.locator("#role").is_visible() == (not configure), "role pill vs role " + ui.role
@@ -50,6 +59,8 @@ def run(ui):
         page.evaluate("Kit.api('GET', '/settings').catch(() => null)")
 
     widget(ui)
+    theme(ui, configure)
+    about(ui)
     if not ui.local:
         return  # on a device: no changes
 
@@ -70,36 +81,75 @@ def run(ui):
         def row(name):
             return page.locator("#values-body tr", has_text="/commands/set-setpoint/" + name)
 
-        def set_value(name, value, select=False):
+        def set_value(name, value, switch=False):
             row(name).get_by_role("button", name="Edit").click()
-            field = row(name).locator("select" if select else "input")
-            field.select_option(value) if select else field.fill(value)
+            if switch:   # true/false: the kit's switch
+                field = row(name).get_by_role("switch")
+                if field.get_attribute("aria-checked") != value:
+                    field.click()
+                assert field.get_attribute("aria-checked") == value
+            else:
+                row(name).locator("input").fill(value)
             row(name).get_by_role("button", name="Set").click()
             row(name).locator("td.val", has_text=value).wait_for()
 
         set_value("target", "33")
-        set_value("execute", "true", select=True)
+        set_value("execute", "true", switch=True)
         row("done").locator("td.val", has_text="true").wait_for()           # after ~1 s
         setpoint.locator("td.val", has_text="33").wait_for()
         ui.shot("command-done")
-        set_value("execute", "false", select=True)
+        set_value("execute", "false", switch=True)
         row("done").locator("td.val", has_text="false").wait_for()
 
     if configure:  # settings drawer: a valid change is saved, an invalid one is rejected with a field error
         page.click("#btn-settings")
         page.locator("#drawer.open #f-example-label").wait_for()
+        enabled = page.locator("#f-example-enabled")               # true/false: a switch; its label toggles it too
+        assert enabled.get_attribute("role") == "switch" and enabled.get_attribute("aria-checked") == "true"
+        enabled.click()
+        assert enabled.get_attribute("aria-checked") == "false"
+        page.click("label[for=f-example-enabled]")
+        assert enabled.get_attribute("aria-checked") == "true"
         page.fill("#f-example-label", "UI check")
         page.click("#btn-save")
-        page.locator("#save-state", has_text="Saved").wait_for()
+        page.locator("#drawer.open").wait_for(state="detached")              # saved -> the drawer closes
+        page.click("#btn-settings")
+        page.locator("#drawer.open #f-example-label").wait_for()
+        assert page.input_value("#f-example-label") == "UI check"
         ui.allow_http(400)
         page.fill("#f-general-heartbeatIntervalMs", "5")
         page.click("#btn-save")
-        page.locator("#settings-errors li").first.wait_for()
+        page.locator("#settings-errors li").first.wait_for()                 # not saved: it stays open
+        assert page.locator("#drawer.open").count() == 1
         ui.shot("settings-error")
         page.click("#btn-revert")
         page.click("#btn-close-settings")
         page.locator("#drawer.open").wait_for(state="detached")
         page.locator("#values-body td.val", has_text="UI check").wait_for()   # values/label follows the setting
+
+        # help texts as info tooltips; colors: shown while edited, Revert drops them, saved they hold for the page
+        accent = lambda: page.evaluate("getComputedStyle(document.querySelector('.brand-mark')).backgroundColor")  # noqa: E731
+        default_accent = accent()
+        page.click("#btn-settings")
+        page.locator("#drawer.open #f-style-accent").wait_for()
+        assert page.locator("#drawer .field .help").count() == 0, "help texts belong into the info tooltips"
+        tip = page.locator("#h-f-example-setpoint")
+        assert "values/setpoint" in tip.get_attribute("data-tip"), "tooltip of Initial setpoint"
+        assert page.get_attribute("#f-example-setpoint", "aria-describedby") == "h-f-example-setpoint"
+        tip.hover()
+        page.wait_for_function("() => getComputedStyle(document.querySelector('#h-f-example-setpoint'), '::after')"
+                               ".opacity === '1'")
+        ui.shot("settings-tooltip")
+        page.fill("#f-style-accent", "#aa3300")
+        page.wait_for_function("() => getComputedStyle(document.querySelector('.brand-mark')).backgroundColor"
+                               " === 'rgb(170, 51, 0)'")
+        assert page.input_value(".color-input:has(#f-style-accent) .color-picker") == "#aa3300"
+        page.click("#btn-revert")
+        assert accent() == default_accent, "Revert drops the color preview"
+        page.fill("#f-style-accent", "#aa3300")
+        page.click("#btn-save")
+        page.locator("#drawer.open").wait_for(state="detached")
+        assert accent() == "rgb(170, 51, 0)", "saved accent color"
 
     # tutorial: help menu -> Tutorial, step through to the end (steps depend on the role)
     page.click("#btn-help")
@@ -111,6 +161,48 @@ def run(ui):
             break
         page.click("#tour-next")
     assert page.locator("#tour").is_hidden(), "the tutorial did not end"
+
+
+def theme(ui, configure):
+    """Light / dark: the top bar button for every role; the browser keeps the choice (also on a device: nothing
+    changes there)."""
+    page = ui.page
+    bg = lambda: page.evaluate("getComputedStyle(document.querySelector('.card')).backgroundColor")  # noqa: E731
+    light = bg()
+    page.click("#btn-theme")
+    page.locator("html[data-theme=dark]").wait_for(state="attached")
+    assert page.get_attribute("#btn-theme", "aria-pressed") == "true"
+    assert bg() != light, "dark panels"
+    ui.shot("dark")
+    if configure:
+        page.click("#btn-settings")
+        page.locator("#drawer.open #f-style-accent").wait_for()
+        page.wait_for_timeout(300)          # the drawer slides in
+        ui.shot("settings-dark")
+        page.click("#btn-close-settings")
+        page.locator("#drawer.open").wait_for(state="detached")
+    page.reload()
+    ui.wait_ready()
+    assert page.get_attribute("html", "data-theme") == "dark", "the browser keeps the theme"
+    assert page.locator("#values-card").is_visible(), "the page from the hash (#values) after a reload"
+    page.click("#btn-theme")
+    page.locator("html[data-theme=light]").wait_for(state="attached")
+    assert bg() == light
+
+
+def about(ui):
+    """Help menu -> About: name, version, author, license, AI note (GET /status "about"); Esc closes it."""
+    page = ui.page
+    page.click("#btn-help")
+    page.click("#btn-about")
+    dialog = page.locator("#about-dialog[open]")
+    dialog.wait_for()
+    text = dialog.inner_text()
+    for part in (page.inner_text("#app-title"), "Version", "Author", "License", "AI"):
+        assert part in text, "About dialog without " + part
+    ui.shot("about", dialog)
+    page.keyboard.press("Escape")
+    dialog.wait_for(state="detached")
 
 
 def widget(ui):

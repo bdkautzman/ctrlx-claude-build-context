@@ -8,7 +8,7 @@ Upstream spec: `upstream-sdk-4.6.0/persistdata.md`. Implementation: `src/app/set
 | What | Where |
 |---|---|
 | defaults (structure + types) | `defaults/settings.json` → `$SNAP/defaults/settings.json` |
-| value rules (enum/min/max/labels/help/hidden) | `src/app/settings_rules.py` (`RULES`, dotted paths) |
+| value rules (enum/min/max/labels/help - an info tooltip in the form/hidden/format "color") | `src/app/settings_rules.py` (`RULES`, dotted paths; rule keys in its docstring) |
 | active settings | `$SNAP_COMMON/solutions/activeConfiguration/<name>/settings.json` |
 | archived configurations | managed by the Solutions app - never touch |
 

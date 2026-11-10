@@ -82,6 +82,9 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
   the PLC variable behind it (REAL = float32, DINT = int32, ...; `docs/ctrlx/datalayer-python.md`) and accepts only
   that type: no conversions (user's choice 2026-11-08). Other nodes (PLC variables, `system/info`) through the
   template's `DataLayerClient` (`DataLayerService(..., on_client=...)`) - no own client wrapper.
+- **License** (user's request 2026-11-10): every app has a `LICENSE` - MIT unless the user names another; the same
+  SPDX id in `snap/snapcraft.yaml` `license:` and `src/app/config.py` `APP_LICENSE` (About dialog; `tests/test_about.py`).
+  Never the ctrlX `licenses` of the manifest (that is the ctrlX license check, see "Pinned baseline").
 - **Secrets**: no credentials in snap code (`ipc://` needs none). Device credentials only in the git-ignored
   `devices.toml` (template `devices.example.toml`) or env vars for tools - never in committed files.
 - **Versions**: bump `version` (snap/snapcraft.yaml + src/pyproject.toml) and CHANGELOG for every build you hand over.
@@ -98,7 +101,7 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 
 ## Commands
 ```bash
-python3 tools/new_app.py --name <app> --title "<Title>"   # prefix, author, url from kit.toml (else --author --url)
+python3 tools/new_app.py --name <app> --title "<Title>"   # prefix, author, url, license (MIT) from kit.toml (else --author --url --license)
 tools/check.sh apps/<app> [--release] [--pre-build] [--snap file.snap]
 cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  (no ctrlX needed)
 #   on that page: Alt+click an element -> note in <app>/.dev/feedback.json; skill /ui-feedback works through the notes

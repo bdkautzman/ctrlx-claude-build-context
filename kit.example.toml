@@ -10,6 +10,11 @@
 # With a company set, `new_app.py --name conveyor` creates ctrlx-<company>-conveyor.
 company = ""
 
-# Written into snap/snapcraft.yaml (description) and used as the "App page" link of the help menu.
+# Written into snap/snapcraft.yaml (description), LICENSE (copyright) and the About dialog; url is also the "App page"
+# link of the help menu.
 author = "ACME Automation"
 url = "https://acme.example"
+
+# License of new apps (SPDX id): LICENSE, snap/snapcraft.yaml license:, the About dialog. MIT unless set here or given
+# with new_app.py --license (another license: put its text into the app's LICENSE).
+license = "MIT"

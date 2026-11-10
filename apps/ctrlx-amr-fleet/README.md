@@ -334,3 +334,7 @@ python3 ../../tools/ui_check.py . --device          # the app on the default dev
 | `www/app.js` | canvas map view: tiles, interpolation, pan/zoom/pinch, lock, minimap, list + details, styling, settings |
 | `www/widgets.js`, `www/widget.svg` | ctrlX home screen widget + its catalog image |
 | `tests/ui_scenario.py` | UI scenario for `tools/ui_check.py` |
+
+## License
+
+MIT (`LICENSE`). Open source components shipped in the snap: `configs/package-assets/ctrlx-amr-fleet.fossinfo.json`.

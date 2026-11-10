@@ -17,6 +17,8 @@ Goal from the user: $ARGUMENTS
      *configure* (change its setup); everything else is *view*. Propose the split; ask where it is not obvious
      (CLAUDE.md "Roles")
    - home screen widget: what it shows (the template's `www/widgets.js` `ROWS`), or none
+   - license: MIT unless the user asks for another (then `new_app.py --license <SPDX id>` and put that license's text
+     into the app's `LICENSE`); don't ask when the user says nothing about it
    - **RAM and snap size**: estimate them (libraries, buffers, images; device limits: `reference/ctrlx-core-hardware/README.md`). Likely above 75 MB RAM (App Guide 6.2,
      CLAUDE.md "RAM") or 100 MB snap: tell the user with the estimate and ask - accept for this app, or reduce
      (smaller buffers/images, fewer libraries)

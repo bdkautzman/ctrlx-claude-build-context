@@ -39,6 +39,10 @@ side `src/app/dev_feedback.py`). The user Alt+clicks an element, types a note, a
    the app's `style.css`; in the *template* change it there and say that existing apps keep their copies. A control that
    moves keeps its role (`data-role`, CLAUDE.md "Roles"). Relative URLs, no CDNs. Settings form: skill `add-app-setting`.
    A note that turns out to be a bug (not a design wish) also goes into the app's `KNOWN-ISSUES.md`.
+   A note that asks for options ("show me a few ways to ..."): build a throwaway comparison page
+   `www/_options-<topic>.html` with the real `kit.css` / `kit.js` (so colors, dark mode and tooltips are the real ones),
+   every option clickable, with pros/cons and a recommendation; mark the note `question` with the page's URL. Once the
+   user picks, build the choice into the app/template and **delete the page** - everything in `www/` goes into the snap.
 4. **Mark each handled note** in the JSON (keep its fields, never delete notes - the user deletes them in the overlay):
    `"status": "done"` (or `"wontfix"` / `"question"` with the reason or the open question),
    `"resolution": "<one line: what changed, in which file>"`, `"resolvedAt": "<date -Iseconds>"`. The overlay reads the

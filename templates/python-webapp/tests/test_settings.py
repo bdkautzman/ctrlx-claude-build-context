@@ -54,6 +54,15 @@ class ValidateTest(unittest.TestCase):
         self.assertTrue(any(e.startswith("general.logLevel") for e in errors))
         self.assertTrue(any(e.startswith("general.heartbeatIntervalMs") for e in errors))
 
+    def test_style_colors(self):
+        defaults = load_defaults()
+        normalized, errors = validate({"general": {"logLevel": "INFO"}}, defaults, RULES)   # saved before "style"
+        self.assertEqual((errors, normalized["style"]), ([], defaults["style"]))
+        _, errors = validate({"style": {"accent": "#12345", "panel": "red", "textDark": "#A0b1C2"}}, defaults, RULES)
+        self.assertEqual(sorted(e.split(":")[0] for e in errors), ["style.accent", "style.panel"])
+        colors = [path for path, rule in RULES.items() if rule.get("format") == "color"]
+        self.assertEqual(sorted(colors), sorted("style." + key for key in defaults["style"]))
+
     def test_int_accepted_for_float(self):
         defaults = load_defaults()
         normalized, errors = validate({"example": {"setpoint": 3}}, defaults, RULES)

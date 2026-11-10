@@ -122,3 +122,7 @@ committed with the user's OK the same day:
 * in the kit: `tools/pdf_check.py` (+ pypdfium2 in the UI test venv), `ctrlx.py api`, checker rule `PART-STAGE-DIR`
 
 Verification status: see CHANGELOG.md.
+
+## License
+
+MIT (`LICENSE`). Open source components shipped in the snap: `configs/package-assets/ctrlx-network-scanner.fossinfo.json`.
