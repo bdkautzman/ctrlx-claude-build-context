@@ -12,7 +12,7 @@
 
 name: ctrlx-amr-fleet
 title: AMR Fleet View
-version: 0.6.0
+version: 1.0.0
 license: MIT          # SPDX id - the same as APP_LICENSE in src/app/config.py and the LICENSE file (tests/test_about.py)
 summary: Live map of AMR positions from a JSON Data Layer node (pan, zoom, follow)
 description: |

@@ -15,7 +15,7 @@ validation artifacts below are mandatory (`upstream-sdk-4.6.0/appdevguide.md` §
 - [ ] smoke test on a real arm64 CORE and on a real amd64 CORE, or the COREvirtual if there is none (`build-deploy-test.md` §3-4)
 - [ ] no debug ports / debug code enabled, no default credentials, no hardcoded paths into other snaps
 - [ ] RAM < 75 MB in steady state (Settings → System → resources, or `ps` via SSH), snap < 100 MB
-- [ ] tag the commit `v<version>`
+- [ ] tag the commit `<snap>/v<version>` (one repository holds several apps, e.g. `ctrlx-amr-fleet/v1.0.0`)
 
 ## Validation artifacts (partner apps)
 

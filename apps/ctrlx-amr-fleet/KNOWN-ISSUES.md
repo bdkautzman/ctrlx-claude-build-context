@@ -24,10 +24,11 @@ Last recorded state of the devices. The state today was not checked.
 | Device | App | Settings | Recorded |
 |---|---|---|---|
 | COREvirtual | 0.6.0 (amd64, installed 2026-11-11) | unchanged by the update: `Large_Warehouse_Map.txt`, `fleet.input` = `amr-fields`, simulation with 4 AMRs. Test users kit-view / kit-operate / kit-configure have the app's three scopes | 2026-11-11 |
-| Real CORE | 0.6.0 (arm64, installed fresh 2026-11-12 - the X3 had none of the apps any more; 0.5.0 was on the COREvirtual only: the user's choice) | `HMI_Map.txt`, simulation off. `Warehouse_Map.txt` in the app data | 2026-11-01, still 0.4.0 on 2026-11-02 |
+| Real CORE X3 (arm64) | 1.0.0 (from `ctrlx-amr-fleet_1.0.0.app`, over 0.6.0 2026-11-12; 0.6.0 installed fresh earlier that day - the X3 had none of the apps any more; 0.5.0 was on the COREvirtual only: the user's choice) | unchanged by the update (`settings.json` byte-identical): `HMI_Map.txt`, `fleet.input` = `fleet-json`, simulation off. `Warehouse_Map.txt` in the app data. `fleet/amrs` = `{"amrs": []}` (runtime, from the role test) | 2026-11-12 |
+| Real CORE X7 (amd64) | 1.0.0 (from the same `.app`, first install 2026-11-12) | defaults: `HMI_Map.txt`, `fleet-json`, simulation off. Test users created 2026-11-12 (user's request) with the app's three scopes. `fleet/amrs` = `{"amrs": []}` (runtime) | 2026-11-12 |
 
 Versions on devices: 0.1.0, 0.2.0, 0.2.1 on the COREvirtual; 0.2.2, 0.2.3/0.2.4, 0.3.0, 0.4.0 on both; 0.5.0 on the
-COREvirtual, 0.6.0 on the COREvirtual. **0.2.5 and 0.3.1 went to no device as such** (recorded as "built, not installed" and "built; devices
+COREvirtual, 0.6.0 on the COREvirtual and the X3, 1.0.0 (`.app`) on the X3 and the X7. **0.2.5 and 0.3.1 went to no device as such** (recorded as "built, not installed" and "built; devices
 still run 0.3.0"): their changes reached the devices with the next installed version.
 
 ## Overview
@@ -257,6 +258,15 @@ has no value editor, so only API users see the flag. Open: let `canWrite` follow
   off, no AMRs): Data Layer and log clean, 36.7 MB; roles through the API as on the COREvirtual (settings, AMR list, maps
   403 for view and operate; `fleet/amrs` `canWrite` for operate and configure); `ui_check --device x3` as admin and the
   three test users OK. The 208 x 356 m map and the load tests were not repeated on the X3.
+* **1.0.0 (`.app`, both architectures in one file) on the X7 (amd64) and the X3 (arm64)**: done 2026-11-12. The same
+  `ctrlx-amr-fleet_1.0.0.app` (17.8 MB, unsigned) installed with `tools/ctrlx.py install --service` on both (X7 87 s, X3
+  117 s; previous states SETUP / OPERATING restored); each installed its own snap (`uname -m` x86_64 / aarch64, `snap info`
+  1.0.0). Service active, no errors in the log, heartbeat counting, `/status` version 1.0.0. Roles through the API with
+  admin and kit-view / kit-operate / kit-configure on both: settings, settings/meta, maps, AMR list 403 for view and
+  operate, 200 for configure; `PUT /values/fleet/amrs` 403 for view, 200 for operate and configure (a write of the
+  empty string answers 400 "not valid JSON" - expected). `ui_check --device x7` and `--device x3` as admin and the three
+  test users: all OK, screenshots looked at. RSS with `HMI_Map.txt` and no AMRs: X7 38.6 MB (`/proc` over SSH - no
+  System Analyzer there), X3 36.8 MB (System Analyzer). Not on the COREvirtual; no map upload, simulation or load test.
 * **The home screen widget on a real home screen**: `ui_check --device` (COREvirtual 0.6.0, X3 0.6.0) shows the widget's
   test page only.
 * **Read-only user on a device**: done with 0.6.0 on the COREvirtual and the X3 (kit-view: no Settings, settings/maps/AMR-list

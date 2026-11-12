@@ -2,6 +2,15 @@
 
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 
+## 1.0.0
+
+- **First release** (user's request 2026-11-12): the app as of 0.6.0, no code changes - version 1.0.0.
+- Handed over as **one file for both architectures**: `ctrlx-amr-fleet_1.0.0.app` (`tools/make-app.sh`) with the
+  amd64 and the arm64 snap, each a full clean build; the device installs the snap of its own architecture.
+  Unsigned: installs on devices that allow apps from unknown sources.
+- Tested 2026-11-12 with that one file on the real X7 (amd64) and X3 (arm64): install, Data Layer, API roles,
+  `ui_check --device` as admin and the three test users (`KNOWN-ISSUES.md`).
+
 ## 0.6.0
 
 - **Kit UI** (template 0.5.0, user's request 2026-11-10): the page runs on the kit's `www/kit.js` / `kit.css`

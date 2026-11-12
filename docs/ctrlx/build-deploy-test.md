@@ -174,7 +174,7 @@ The COREvirtual's license is the 4-hour engineering license; it shuts down after
    devices.toml `[<device>.test_users]`. `tools/ctrlx.py --device NAME test-users [--snap <name>]` shows them;
    missing ones: **ask the user**, then `test-users create` (they stay on the device for later apps; `test-users
    delete` removes them). `test-users grant <name>` gives each its role's scope of an installed app. On the X3 they
-   exist since 2026-11-08.
+   exist since 2026-11-08, on the X7 since 2026-11-12.
 4. Settings → Data Layer: `<name>/…` nodes readable; writable ones accept/reject correctly.
 5. Manage app data: `<name>/settings.json` exists; save a configuration, change a setting,
    load the configuration → the old value is back (load phases in the log). Over REST: `app-data-settings.md`.
