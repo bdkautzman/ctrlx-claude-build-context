@@ -13,6 +13,13 @@ import os
 SNAP_NAME = "ctrlx-network-scanner"
 APP_TITLE = "Network Scanner"
 
+# About dialog (help menu -> About, GET /status "about"); the same author / URL / license as
+# snap/snapcraft.yaml and LICENSE (tests/test_about.py).
+APP_AUTHOR = "bdkautzman"
+APP_URL = "https://github.com/bdkautzman"
+APP_LICENSE = "MIT"                       # SPDX identifier; the license text is in LICENSE
+APP_AI_NOTE = "This app was created with the help of AI."
+
 # URL prefix the reverse proxy forwards to us (package-manifest services.proxyMapping[].url)
 URL_PREFIX = "/" + SNAP_NAME
 API_PREFIX = URL_PREFIX + "/api/v1"
@@ -21,8 +28,9 @@ API_PREFIX = URL_PREFIX + "/api/v1"
 DATALAYER_ROOT = SNAP_NAME
 
 # Scopes declared in the package manifest (scopes-declaration)
-SCOPE_READ = SNAP_NAME + ".web.all.r"
-SCOPE_WRITE = SNAP_NAME + ".web.all.rw"
+SCOPE_VIEW = SNAP_NAME + ".web.all.r"          # roles view < operate < configure (auth.py)
+SCOPE_OPERATE = SNAP_NAME + ".web.operate.x"
+SCOPE_CONFIGURE = SNAP_NAME + ".web.all.rw"
 SCOPE_ADMIN = "rexroth-device.all.rwx"  # built-in ctrlX admin scope: always full access
 
 # ---------------------------------------------------------------------------

@@ -11,12 +11,17 @@
         {
           "identifier": "ctrlx-barcode-reader.web.all.r",
           "name": "View Barcode Reader",
-          "description": "View results, images, history, camera state and settings of the Barcode Reader"
+          "description": "View: results, images, history and camera state of the Barcode Reader"
+        },
+        {
+          "identifier": "ctrlx-barcode-reader.web.operate.x",
+          "name": "Operate Barcode Reader",
+          "description": "View and operate: also read codes, continuous mode, live picture and camera reconnect (no settings)"
         },
         {
           "identifier": "ctrlx-barcode-reader.web.all.rw",
-          "name": "Manage Barcode Reader",
-          "description": "Trigger reads, live picture and continuous reading, change the decode region and settings of the Barcode Reader"
+          "name": "Configure Barcode Reader",
+          "description": "View, operate and configure: also change the settings, decode region and camera of the Barcode Reader"
         }
       ]
     }
@@ -43,6 +48,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-barcode-reader.web.all.r",
+          "ctrlx-barcode-reader.web.operate.x",
           "ctrlx-barcode-reader.web.all.rw"
         ],
         "items": []
@@ -58,6 +64,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-barcode-reader.web.all.r",
+          "ctrlx-barcode-reader.web.operate.x",
           "ctrlx-barcode-reader.web.all.rw"
         ],
         "items": []

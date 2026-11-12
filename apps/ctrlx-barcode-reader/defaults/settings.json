@@ -19,9 +19,27 @@
     "buffers": 2
   },
   "decode": {
-    "formats": ["Code128", "Code39", "Code93", "Codabar", "ITF", "EAN13", "EAN8", "UPCA", "UPCE",
-                "DataBar", "DataBarExpanded", "DataBarLimited",
-                "QRCode", "MicroQRCode", "RMQRCode", "DataMatrix", "PDF417", "Aztec", "MaxiCode"],
+    "formats": [
+      "Code128",
+      "Code39",
+      "Code93",
+      "Codabar",
+      "ITF",
+      "EAN13",
+      "EAN8",
+      "UPCA",
+      "UPCE",
+      "DataBar",
+      "DataBarExpanded",
+      "DataBarLimited",
+      "QRCode",
+      "MicroQRCode",
+      "RMQRCode",
+      "DataMatrix",
+      "PDF417",
+      "Aztec",
+      "MaxiCode"
+    ],
     "tryRotate": true,
     "tryInvert": false,
     "tryDownscale": true,
@@ -59,5 +77,12 @@
     "width": 1224,
     "height": 1024,
     "codes": 3
+  },
+  "style": {
+    "accent": "#007bc0",
+    "panel": "#ffffff",
+    "text": "#1f2328",
+    "panelDark": "#1c2128",
+    "textDark": "#e6e8eb"
   }
 }

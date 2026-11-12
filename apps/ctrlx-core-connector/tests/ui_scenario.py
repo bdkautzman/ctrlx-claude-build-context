@@ -1,7 +1,8 @@
 """UI scenario for tools/ui_check.py - Core Connector in headless Chromium.
 
     python3 ../../tools/ui_check.py .                  # app started locally (Data Layer off)
-    python3 ../../tools/ui_check.py . --role reader    # without the settings / add / remove controls
+    python3 ../../tools/ui_check.py . --role reader    # view: without the settings / add / remove controls
+    python3 ../../tools/ui_check.py . --role operator  # operate: value writes in the browser, no cores / KVD / settings
     python3 ../../tools/ui_check.py . --device         # the installed app on the default device (read-only steps)
 
 Locally the Data Layer is off: tiles show "offline" and the browser page its "not connected" state (HTTP 503
@@ -40,11 +41,19 @@ def run(ui):
     assert first.locator(".btn", has_text="Remove").is_hidden(), "this device can't be removed"
     assert first.locator(".core-link").get_attribute("target") == "_blank"
 
-    if ui.role == "reader":
+    configure = ui.role in ("admin", "writer")   # cores, KVD nodes and settings (user's split 2026-11-10)
+    if not configure:
         assert page.locator("#btn-settings").is_hidden() and page.locator("#btn-add").is_hidden()
+        assert page.locator("#role").is_visible(), "role pill"
     else:
         settings_drawer(ui)
         add_dialog(ui)
+    about(ui)
+    page.click("#btn-theme")                               # light / dark (per browser)
+    page.locator("html[data-theme=dark]").wait_for(state="attached")
+    ui.shot("dark")
+    page.click("#btn-theme")
+    page.locator("html[data-theme=light]").wait_for(state="attached")
 
     widget(ui)
     if ui.local:
@@ -66,6 +75,7 @@ def settings_drawer(ui):
     page = ui.page
     page.click("#btn-settings")
     page.wait_for_selector("#drawer.open #f-general-pollIntervalMs")
+    assert page.locator("#drawer .field .help").count() == 0, "help texts belong into the info tooltips"
     assert page.input_value("#f-browser-refreshMs") == "1000" or not ui.local, "the browser's read interval"
     page.wait_for_timeout(400)                             # slide-in animation
     ui.shot("settings")
@@ -80,6 +90,8 @@ def add_dialog(ui):
     assert page.locator("#a-sslPort").count() == 0, "the port goes into the host field"
     assert page.get_attribute("#a-name", "placeholder") == "Line-8-Core"
     assert page.get_attribute("#a-host", "placeholder") == "192.168.1.1"
+    sw = page.locator("#a-skipCertificateCheck")           # true/false: the kit's switch
+    assert sw.get_attribute("role") == "switch" and sw.get_attribute("aria-checked") == "true"
     page.fill("#a-name", "Line-2")
     page.fill("#a-host", "192.0.2.11:8443")
     page.focus("#add-dialog .info[aria-label='HTTPS port']")   # its tooltip in the screenshot
@@ -157,7 +169,7 @@ def tutorial(ui):
     titles = step_through(ui, shot_at="Status of a core",
                           ring_at={"Web UI": page.locator(".tile-local .core-link")})
     assert titles[0] == "Welcome" and titles[-1] == "Data Layer browser", titles
-    assert ("Add core" in titles) == ("Settings" in titles) == (ui.role != "reader"), titles
+    assert ("Add core" in titles) == ("Settings" in titles) == (ui.role in ("admin", "writer")), titles
     page.click("#tour-try")                                # "Show me": continues in the browser
     page.wait_for_url("**/browse.html?core=_local")        # ?tour=1 is taken off the address
     tour = page.locator("#tour")
@@ -247,3 +259,18 @@ def check_ring_over(ui, target):
     e = 2   # the ring keeps 2 px from the window's edges (a control touching them: the tree)
     assert r["x"] <= t["x"] + e and r["y"] <= t["y"] + e and r["x"] + r["width"] >= t["x"] + t["width"] - e \
         and r["y"] + r["height"] >= t["y"] + t["height"] - e, (r, t)
+
+
+def about(ui):
+    """Help menu -> About: name, version, author, license, AI note; Esc closes it."""
+    page = ui.page
+    page.click("#btn-help")
+    page.click("#btn-about")
+    dialog = page.locator("#about-dialog[open]")
+    dialog.wait_for()
+    text = dialog.inner_text()
+    for part in ("Core Connector", "Version", "Author", "MIT", "AI"):
+        assert part in text, "About dialog without " + part
+    ui.shot("about", dialog)
+    page.keyboard.press("Escape")
+    dialog.wait_for(state="detached")

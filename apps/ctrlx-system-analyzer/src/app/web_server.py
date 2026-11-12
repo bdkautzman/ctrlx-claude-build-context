@@ -290,16 +290,16 @@ def _make_handler(store, datalayer, services):
         # -- API ----------------------------------------------------------
         def _api(self, method, route):
             if route == "/appdata/save" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_save(self._read_body(), store)
                 return self._send_json(status, body)
             if route == "/appdata/load" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_load(self._read_body(), store)
                 return self._send_json(status, body)
 
             if route == "/status" and method == "GET":
-                scopes = auth.require(self.headers, write=False)
+                scopes = auth.require(self.headers, auth.VIEW)
                 return self._send_json(200, {
                     "app": config.SNAP_NAME,
                     "title": config.APP_TITLE,
@@ -312,22 +312,29 @@ def _make_handler(store, datalayer, services):
                     "collector": collector.status(),
                     "history": services.history.usage(),
                     "recording": recorder.status(),
-                    "canWrite": auth.can_write(scopes),
+                    "leakMetric": store.get()["leak"]["metric"],   # the page's default (settings are configure-only)
+                    "user": auth.user_name(self.headers),
+                    "role": auth.role_of(scopes),           # view | operate | configure
+                    "canOperate": auth.allows(scopes, auth.OPERATE),
+                    "canConfigure": auth.allows(scopes, auth.CONFIGURE),
+                    "style": store.get().get("style"),      # page colors for every role (kit.js Kit.applyStyle)
+                    "about": {"author": config.APP_AUTHOR, "url": config.APP_URL,       # help menu -> About
+                              "license": config.APP_LICENSE, "ai": config.APP_AI_NOTE},
                 })
 
             query = self._query()
             if route == "/overview" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 return self._send_json(200, _overview(collector.snapshot()) or {"apps": [], "system": None})
             if route == "/group" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 snap = collector.snapshot()
                 group = snap and snap["groups"].get(query.get("key", [""])[0])
                 if not group:
                     return self._problem(404, "Unknown app", "no process of this app is running now")
                 return self._send_json(200, dict(group, time=snap["time"]))
             if route == "/series" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 ids = [i for i in query.get("ids", [""])[0].split(",") if i][:MAX_IDS]
                 if not ids:
                     return self._problem(400, "Bad request", "ids is empty")
@@ -336,27 +343,27 @@ def _make_handler(store, datalayer, services):
                 data["series"] = {sid: {"min": c[0], "avg": c[1], "max": c[2]} for sid, c in data["series"].items()}
                 return self._send_json(200, data)
             if route == "/analysis" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 t0, t1 = _range(query)
                 return self._send_json(200, queries.analysis(
                     t0, t1, query.get("level", ["apps"])[0], query.get("metric", [None])[0] or None,
                     query.get("app", [None])[0] or None))
             if route == "/events" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 t0, t1 = _range(query)
                 return self._send_json(200, {"events": queries.events(t0, t1)})
             if route == "/events" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.OPERATE)
                 body = self._read_json()
                 if not isinstance(body, dict) or not isinstance(body.get("text"), str):
                     return self._problem(400, "Body must be {\"text\": ...}")
                 return self._send_json(200, queries.add_marker(body["text"]))
             if route == "/media" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 media, error = medium.list_media(recorder.root, recorder.require_mount)
                 return self._send_json(200, {"media": media, "error": error, "recording": recorder.status()})
             if route == "/export" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 t0, t1 = _range(query)
                 level = query.get("level", ["apps"])[0]
                 fmt = query.get("format", ["csv"])[0]
@@ -365,10 +372,10 @@ def _make_handler(store, datalayer, services):
                 return self._send_bytes(200, data, ctype, "system-analyzer_{}_{}.{}".format(level, stamp, fmt))
 
             if route == "/settings" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, store.get_redacted())
             if route == "/settings" and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 try:
                     store.update(self._read_json())
                 except SettingsError as exc:
@@ -376,20 +383,30 @@ def _make_handler(store, datalayer, services):
                 log.info("Settings changed via web UI")
                 return self._send_json(200, store.get_redacted())
             if route == "/settings/meta" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, {"defaults": store.defaults(), "rules": store.rules(),
                                                  "types": store.types()})
             if route == "/settings/reset" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 store.reset_to_defaults(persist=True)
                 return self._send_json(200, store.get_redacted())
 
             if route == "/values" and method == "GET":
-                auth.require(self.headers, write=False)
-                return self._send_json(200, datalayer.registry.snapshot())
+                scopes = auth.require(self.headers, auth.VIEW)
+                values = {}
+                for name, entry in datalayer.registry.snapshot().items():
+                    if auth.allows(scopes, entry.pop("viewRole")):
+                        write_role = entry.pop("writeRole")
+                        entry["canWrite"] = entry["writable"] and auth.allows(scopes, write_role)
+                        values[name] = entry
+                return self._send_json(200, values)
             if route.startswith("/values/") and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.VIEW)
                 name = route[len("/values/"):]
+                spec = datalayer.registry.spec(name)
+                if spec is None:
+                    return self._problem(404, "Write rejected", "unknown node " + name)
+                auth.require(self.headers, spec.write_role)
                 body = self._read_json()
                 if not isinstance(body, dict) or "value" not in body:
                     return self._problem(400, "Body must be {\"value\": ...}")

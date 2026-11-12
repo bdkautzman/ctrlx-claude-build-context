@@ -1,68 +1,14 @@
-// System Analyzer web UI - plain JS, no build step, no CDN (devices are often offline).
-// Charts: uPlot (vendor/, MIT). Colors: a fixed categorical order (validated for color-vision
-// deficiencies); an entity keeps its color while it is charted, it never follows its rank.
-//
-// Auth: the ctrlX menu opens "/<snap>/?token=${bearertoken}". We move the token from the URL
-// into sessionStorage (so it is not left in history/bookmarks) and send it as
-// "Authorization: Bearer" on every API call. The reverse proxy validates it because
-// "/<snap>/api" is listed as restricted in the package manifest.
+// System Analyzer web UI - this app's page. Plain JS, no build step, no CDN (devices are often offline).
+// Charts: uPlot (vendor/, MIT). Colors: a fixed categorical order (validated for color-vision deficiencies); an entity
+// keeps its color while it is charted, it never follows its rank. Axes, grid and event lines take the page's theme
+// colors (kit.css) and the charts are rebuilt when the theme or the Styling colors change.
+// The shared parts (token + API calls, roles, settings drawer, tabs, help menu + tutorial, About, light/dark) are in
+// kit.js - see the list at its top. Roles: view < operate < configure (GET /status says which one the user has).
 "use strict";
 
 (function () {
-  const PREFIX = "/" + location.pathname.split("/").filter(Boolean)[0]; // "/<snap-name>"
-  const API = PREFIX + "/api/v1";
-  const TOKEN_KEY = PREFIX.slice(1) + ".token";
+  const { $, el, api, can, showBanner } = Kit;
 
-  // ---- token ---------------------------------------------------------------
-  function captureToken() {
-    const url = new URL(location.href);
-    const fromUrl = url.searchParams.get("token") || url.searchParams.get("access_token");
-    if (fromUrl) {
-      try { sessionStorage.setItem(TOKEN_KEY, fromUrl); } catch (e) { /* storage blocked */ }
-      url.searchParams.delete("token");
-      url.searchParams.delete("access_token");
-      history.replaceState(null, "", url.pathname + url.search + url.hash);
-      return fromUrl;
-    }
-    try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
-  }
-  const token = captureToken();
-
-  async function request(method, path, body) {
-    const headers = { "Accept": "application/json" };
-    if (token) headers["Authorization"] = "Bearer " + token;
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-    const res = await fetch(API + path, {
-      method, headers, body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: "same-origin", cache: "no-store",
-    });
-    if (res.status === 401) showBanner("Session expired or no token - please reopen this app from the ctrlX menu.");
-    return res;
-  }
-
-  async function api(method, path, body) {
-    const res = await request(method, path, body);
-    let data = null;
-    const text = await res.text();
-    if (text) { try { data = JSON.parse(text); } catch (e) { data = { title: text }; } }
-    if (!res.ok) { const err = new Error((data && (data.detail || data.title)) || res.statusText); err.status = res.status; err.data = data; throw err; }
-    return data;
-  }
-
-  // ---- helpers -------------------------------------------------------------
-  const $ = (id) => document.getElementById(id);
-  function el(tag, attrs, ...children) {
-    const node = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs || {})) {
-      if (k === "class") node.className = v;
-      else if (k === "text") node.textContent = v;
-      else if (v === true) node.setAttribute(k, "");
-      else if (v !== false && v !== null && v !== undefined) node.setAttribute(k, v);
-    }
-    for (const c of children) if (c !== null && c !== undefined && c !== false) node.append(c);
-    return node;
-  }
-  function showBanner(msg) { const b = $("banner"); b.textContent = msg; b.hidden = !msg; }
   function fmtMb(v) {
     if (v === null || v === undefined) return "–";
     const a = Math.abs(v);
@@ -85,14 +31,25 @@
     return m ? m + " min" : s + " s";
   }
   function fmtBytes(b) { return b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : (b / 1024).toFixed(0) + " KB"; }
-  function humanize(key) { return key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()); }
   const UNIT_FMT = { "MB": fmtMb, "%": fmtPct, "": fmtCount };
 
-  // ---- colors (dataviz reference palette, fixed order, light surface) ---------
+  // ---- colors: series from a fixed categorical palette; axes, grid, events from the theme (kit.css variables) ----
   const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
-  const INK2 = "#6a737d", GRID = "#e8eaed";
-  const EVENT_COLORS = { restarted: "#c76b00", stopped: "#c8102e", started: "#00884a", updated: "#6a737d",
-    marker: "#007bc0", analyzer: "#6a737d" };
+  const probe = el("span", { hidden: true });
+  document.body.append(probe);
+  function cssColor(name) { probe.style.color = "var(" + name + ")"; return getComputedStyle(probe).color; }   // -> rgb()
+  let ink = {};
+  function readInk() {
+    const before = JSON.stringify(ink);
+    ink = { muted: cssColor("--muted"), line: cssColor("--line"), ok: cssColor("--ok"), warn: cssColor("--warn"),
+      err: cssColor("--err"), accent: cssColor("--accent") };
+    return JSON.stringify(ink) !== before;
+  }
+  readInk();
+  function eventColor(type) {
+    return ({ restarted: ink.warn, stopped: ink.err, started: ink.ok, updated: ink.muted, marker: ink.accent,
+      analyzer: ink.muted })[type] || ink.muted;
+  }
   const colorOf = new Map();   // entity key -> palette slot (stable while charted)
   let colorClock = 0;
   const colorUsed = new Map(); // entity key -> last time it was charted
@@ -130,9 +87,9 @@
   // ---- state ---------------------------------------------------------------
   const state = {
     preset: 3600, from: 0, to: 0, tab: "overview",
-    app: null, proc: null, threads: new Set(), sort: { key: "rssMb", dir: -1 },
+    app: null, proc: null, threads: new Set(), sort: { key: "rssMb", dir: -1 }, leakSort: { key: null, dir: -1 },
     leakLevel: "apps", leakMetric: "anon", leakApp: "", leakEntity: null,
-    canWrite: false, status: null, overview: null, group: null, analysis: null, events: [],
+    status: null, overview: null, group: null, analysis: null, events: [],
     source: null, busy: false, timer: null, clockOffset: 0,
   };
 
@@ -181,7 +138,7 @@
     for (const e of events) {
       const x = Math.round(u.valToPos(e.time, "x", true));
       if (x < left || x > left + width) continue;
-      ctx.strokeStyle = ctx.fillStyle = EVENT_COLORS[e.type] || INK2;
+      ctx.strokeStyle = ctx.fillStyle = eventColor(e.type);
       ctx.beginPath(); ctx.moveTo(x + 0.5, top); ctx.lineTo(x + 0.5, top + height); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x - 4 * dpr, top); ctx.lineTo(x + 4 * dpr, top); ctx.lineTo(x, top + 6 * dpr); ctx.fill();
     }
@@ -189,27 +146,12 @@
   }
 
   // spec: {unit, series: [{label, color, width, dash, fade}], events, height, fromZero}
-  function renderChart(id, spec, data) {
-    const node = $(id);
-    if (!node || node.offsetParent === null) return;
+  // uPlot options of a chart; the large view in the dialog uses the same with another size
+  function chartOpts(spec, width, height) {
     const fmt = UNIT_FMT[spec.unit] || fmtCount;
-    const sig = spec.series.map((s) => s.label + s.color + (s.dash ? "d" : "")).join("|") + spec.unit + (spec.fromZero !== false);
-    let chart = charts[id];
-    if (!spec.series.length) {
-      if (chart) { chart.u.destroy(); delete charts[id]; }
-      node.replaceChildren(el("p", { class: "muted small empty", text: spec.empty || "No data in this range." }));
-      return;
-    }
-    if (chart && chart.sig === sig && chart.node === node) {
-      chart.u._events = spec.events || [];
-      chart.u.setData(data);     // rescales: x always spans the selected range (scales.x.range)
-      return;
-    }
-    if (chart) chart.u.destroy();
-    node.replaceChildren();
-    const height = spec.height || 200;
-    const opts = {
-      width: Math.max(220, node.clientWidth), height,
+    const strokes = [null].concat(spec.series.map((s) => (s.fade ? alpha(s.color, 0.45) : s.color)));
+    return {
+      width, height,
       cursor: { sync: { key: "sa" }, drag: { x: true, y: false, setScale: false }, points: { size: 6 } },
       scales: {
         x: { time: true, range: () => [state.from, state.to] },
@@ -220,16 +162,18 @@
         } },
       },
       axes: [
-        { stroke: INK2, grid: { stroke: GRID, width: 1 }, ticks: { stroke: GRID, width: 1 } },
-        { stroke: INK2, grid: { stroke: GRID, width: 1 }, ticks: { show: false }, size: 52,
+        { stroke: ink.muted, grid: { stroke: ink.line, width: 1 }, ticks: { stroke: ink.line, width: 1 } },
+        { stroke: ink.muted, grid: { stroke: ink.line, width: 1 }, ticks: { show: false }, size: 52,
           values: (u, vals) => vals.map((v) => fmt(v)) },
       ],
-      series: [{ value: (u, v) => (v === null || v === undefined ? "–" : fmtTime(v)) }].concat(spec.series.map((s) => ({
-        label: s.label, stroke: s.fade ? alpha(s.color, 0.45) : s.color, width: s.width || 2, dash: s.dash,
+      series: [{ value: (u, v) => (v === null || v === undefined ? "–" : fmtTime(v)) }].concat(spec.series.map((s, i) => ({
+        label: s.label, stroke: strokes[i + 1], width: s.width || 2, dash: s.dash,
         points: { show: false }, spanGaps: false,
         value: (u, v) => (v === null || v === undefined ? "–" : fmt(v) + (spec.unit ? " " + spec.unit : "")),
       }))),
-      legend: { live: true },
+      // legend: a solid circle per line (no border; style.css rounds it); fixed value widths in style.css keep the
+      // card's height while the cursor shows values (user's notes 2026-11-11)
+      legend: { live: true, markers: { width: 0, fill: (u, i) => strokes[i] } },
       hooks: {
         setSelect: [(u) => {
           if (u.select.width > 4) {
@@ -241,16 +185,96 @@
         draw: [drawEvents],
       },
     };
-    const u = new uPlot(opts, data, node);
-    u._events = spec.events || [];
-    charts[id] = { u, sig, node, height };
   }
+
+  // spec: {unit, series: [{label, color, width, dash, fade}], events, height, fromZero, empty}
+  function renderChart(id, spec, data) {
+    const node = $(id);
+    if (!node || node.offsetParent === null) return;
+    const sig = spec.series.map((s) => s.label + s.color + (s.dash ? "d" : "")).join("|") + spec.unit + (spec.fromZero !== false)
+      + ink.muted + ink.line;   // a new theme: a new chart
+    let chart = charts[id];
+    if (!spec.series.length) {
+      if (chart) { chart.u.destroy(); delete charts[id]; }
+      node.replaceChildren(el("p", { class: "muted small empty", text: spec.empty || "No data in this range." }));
+      return;
+    }
+    if (big && big.id === id) showBig(spec, data, sig);   // the large view follows the data
+    if (chart && chart.sig === sig && chart.node === node) {
+      chart.u._events = spec.events || [];
+      chart.u.setData(data);     // rescales: x always spans the selected range (scales.x.range)
+      Object.assign(chart, { spec, data });
+      return;
+    }
+    if (chart) chart.u.destroy();
+    node.replaceChildren();
+    const height = spec.height || 200;
+    const u = new uPlot(chartOpts(spec, Math.max(220, node.clientWidth), height), data, node);
+    u._events = spec.events || [];
+    charts[id] = { u, sig, node, height, spec, data };
+    if (!node.dataset.bigView) {                              // a click (no drag-zoom) opens the large view
+      node.dataset.bigView = "1";
+      node.title = "Click for a large view; drag to zoom into the range";
+      node.addEventListener("pointerdown", (ev) => { node._down = [ev.clientX, ev.clientY]; });
+      node.addEventListener("click", (ev) => {
+        const d = node._down || [ev.clientX, ev.clientY];
+        if (Math.hypot(ev.clientX - d[0], ev.clientY - d[1]) > 4 || ev.target.closest(".u-legend")) return;
+        openBig(id);
+      });
+    }
+  }
+
+  // ---- large view of a chart: a dialog over the page (user's note 2026-11-11); Esc or a click beside it closes it
+  let big = null;   // {id, u, sig}
+  const bigDialog = el("dialog", { id: "chart-dialog", class: "dialog chart-dialog", "aria-labelledby": "chart-dialog-title" },
+    el("div", { class: "dialog-body" },
+      el("div", { class: "card-head dialog-head" },
+        el("div", {}, el("h2", { id: "chart-dialog-title" }), el("p", { class: "sub", id: "chart-dialog-sub" })),
+        el("button", { type: "button", class: "tool tool-bare", id: "chart-dialog-close", title: "Close", "aria-label": "Close" }, Kit.icon("close"))),
+      el("div", { id: "chart-dialog-plot" })));
+  document.body.append(bigDialog);
+  $("chart-dialog-close").onclick = () => bigDialog.close();
+  // a click beside the dialog (on the backdrop) closes it; a zoom drag that ends there does not
+  bigDialog.addEventListener("pointerdown", (ev) => { bigDialog._downOutside = ev.target === bigDialog; });
+  bigDialog.addEventListener("click", (ev) => { if (ev.target === bigDialog && bigDialog._downOutside) bigDialog.close(); });
+  bigDialog.addEventListener("close", () => { if (big && big.u) big.u.destroy(); big = null; $("chart-dialog-plot").replaceChildren(); });
+  window.addEventListener("resize", () => {
+    if (big && big.u) big.u.setSize({ width: $("chart-dialog-plot").clientWidth, height: bigHeight() });
+  });
+  const bigHeight = () => Math.max(260, Math.min(640, Math.round(innerHeight * 0.62)));
+  function openBig(id) {
+    const c = charts[id];
+    if (!c) return;
+    // title: the card's title (and the chart's own title in a card with several charts, e.g. "nginx · Memory")
+    const card = c.node.closest(".card"), box = c.node.parentElement;
+    const h2 = card && card.querySelector("h2"), h3 = box !== card && box.querySelector("h3");
+    const sub = box.querySelector(".sub") || (card && card.querySelector(".sub, .card-head .muted"));
+    $("chart-dialog-title").textContent = [h2, h3].filter(Boolean).map((n) => n.textContent.trim()).join(" · ");
+    $("chart-dialog-sub").textContent = sub ? sub.textContent : "";
+    big = { id, u: null, sig: "" };
+    bigDialog.showModal();
+    showBig(c.spec, c.data, c.sig);
+  }
+  function showBig(spec, data, sig) {
+    if (big.u && big.sig === sig) { big.u._events = spec.events || []; big.u.setData(data); return; }
+    if (big.u) big.u.destroy();
+    const plot = $("chart-dialog-plot");
+    plot.replaceChildren();
+    big.u = new uPlot(chartOpts(spec, Math.max(320, plot.clientWidth), bigHeight()), data, plot);
+    big.u._events = spec.events || [];
+    big.sig = sig;
+  }
+
   function resizeCharts() {
     for (const c of Object.values(charts)) {
       if (c.node.offsetParent !== null) c.u.setSize({ width: Math.max(220, c.node.clientWidth), height: c.height });
     }
   }
   window.addEventListener("resize", () => { clearTimeout(resizeCharts.t); resizeCharts.t = setTimeout(resizeCharts, 150); });
+  // light/dark or new Styling colors: charts are drawn on a canvas - rebuild them in the new colors
+  function onInk() { if (readInk()) { for (const id of Object.keys(charts)) { charts[id].u.destroy(); delete charts[id]; } refresh(false); } }
+  document.addEventListener("kit:theme", onInk);
+  document.addEventListener("kit:style", onInk);
 
   async function fetchSeries(ids, points) {
     const out = { times: [], series: {} };
@@ -277,33 +301,23 @@
 
   // ---- status / pills --------------------------------------------------------
   async function refreshStatus() {
-    try {
-      const asked = Date.now() / 1000;
-      const s = await api("GET", "/status");
-      if (typeof s.serverTime === "number") state.clockOffset = s.serverTime - (asked + Date.now() / 1000) / 2;
-      state.status = s;
-      state.canWrite = !!s.canWrite;
-      document.title = s.title;
-      $("app-title").textContent = s.title;
-      $("app-version").textContent = /^\d/.test(s.version) ? "v" + s.version : s.version;
-      const c = s.collector;
-      const own = c.samples ? (c.avgCpuMs / 10 / c.intervalSeconds) : null;
-      const pill = $("pill-sampling");
-      pill.textContent = "Sampling " + c.intervalSeconds + " s · own CPU " + (own === null ? "…" : own.toFixed(1) + " %");
-      pill.className = "pill " + (c.error ? "pill-warn" : "pill-ok");
-      pill.title = "Each sample of /proc took " + c.lastCpuMs + " ms CPU (average " + c.avgCpuMs + " ms)" + (c.error ? " - " + c.error : "");
-      const r = s.recording, mp = $("pill-medium");
-      mp.textContent = r.state === "off" ? "Medium: off" : "Medium: " + r.medium + " · " + r.state;
-      mp.className = "pill " + (r.state === "recording" ? "pill-ok" : r.state === "off" ? "pill-unknown" : "pill-warn");
-      mp.title = r.error || (r.path || "Long-term recording on an external medium");
-      const conn = $("conn");
-      if (s.datalayer.connected) { conn.className = "pill pill-ok"; conn.textContent = "Data Layer: connected"; }
-      else { conn.className = "pill pill-warn"; conn.textContent = s.datalayer.enabled ? "Data Layer: connecting…" : "Data Layer: off"; }
-      if (state.tab === "settings") renderStatusList();
-      showBanner("");
-    } catch (e) {
-      if (e.status !== 401) showBanner("Cannot reach the app: " + e.message);
-    }
+    const asked = Date.now() / 1000;
+    const s = await Kit.refreshStatus();   // title, version, Data Layer pill, role pill, [data-role] elements, colors
+    if (!s) return;
+    if (typeof s.serverTime === "number") state.clockOffset = s.serverTime - (asked + Date.now() / 1000) / 2;
+    if (!state.status && s.leakMetric) { state.leakMetric = s.leakMetric; $("leak-metric").value = s.leakMetric; }
+    state.status = s;
+    const c = s.collector;
+    const own = c.samples ? (c.avgCpuMs / 10 / c.intervalSeconds) : null;
+    const pill = $("pill-sampling");
+    pill.textContent = "Sampling " + c.intervalSeconds + " s · own CPU " + (own === null ? "…" : own.toFixed(1) + " %");
+    pill.className = "pill " + (c.error ? "pill-warn" : "pill-ok");
+    pill.title = "Each sample of /proc took " + c.lastCpuMs + " ms CPU (average " + c.avgCpuMs + " ms)" + (c.error ? " - " + c.error : "");
+    const r = s.recording, mp = $("pill-medium");
+    mp.textContent = r.state === "off" ? "Medium: off" : "Medium: " + r.medium + " · " + r.state;
+    mp.className = "pill " + (r.state === "recording" ? "pill-ok" : r.state === "off" ? "pill-unknown" : "pill-warn");
+    mp.title = r.error || (r.path || "Long-term recording on an external medium");
+    if (state.tab === "overview") renderStatusList();
   }
 
   function renderStatusList() {
@@ -326,6 +340,11 @@
       ["Data Layer", s.datalayer.connected ? "connected, " + s.datalayer.registered + " nodes" : (s.datalayer.error || "not connected")],
     ];
     $("status-list").replaceChildren(...rows.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: String(v) })]));
+    const r = s.recording;
+    const rec = [["Recording", r.state + (r.error ? " - " + r.error : "")],
+      ["Folder", r.path || (r.medium ? "(medium not mounted)" : "–")],
+      ["Last write", r.lastWrite ? fmtTime(r.lastWrite) : "–"], ["Written", fmtBytes(r.bytes || 0) + " since the app started"]];
+    $("rec-status").replaceChildren(...rec.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]));
     const err = s.settings.error || s.datalayer.error || c.error || "";
     $("st-error").textContent = s.datalayer.connected ? (s.settings.error || c.error || "") : err;
     $("st-error").hidden = !$("st-error").textContent;
@@ -411,7 +430,7 @@
         verdictBadge(r.verdict), el("span", { class: "g-name", text: r.name }),
         el("span", { class: "g-val", text: "+" + fmtMb(r.growthMbPerHour) + " MB/h" }),
         el("span", { class: "muted small", text: "fit " + r.fit.toFixed(2) + (r.hoursUntilFull ? " · full in " + fmtDuration(r.hoursUntilFull * 3600) : "") }));
-      item.addEventListener("click", () => { state.leakLevel = "apps"; state.leakEntity = r.entity; $("leak-level").value = "apps"; selectTab("leaks"); });
+      item.addEventListener("click", () => { state.leakLevel = "apps"; state.leakEntity = r.entity; $("leak-level").value = "apps"; location.hash = "#leaks"; });
       return item;
     }));
   }
@@ -422,26 +441,54 @@
   }
 
   // ---- apps -----------------------------------------------------------------
+  // ---- sortable tables (Apps, Leaks): a click on a column title cycles high → low, low → high, unsorted; text columns
+  // (data-text) start with A → Z. The sorted column shows an arrow (↓ high to low, ↑ low to high) and a bold title;
+  // rows without a value stay at the bottom (user's note 2026-11-11).
+  const VERDICT_RANK = { growing: 3, possible: 2, stable: 1, insufficient: 0 };
+  function sortRows(rows, sort, tie) {
+    if (!sort.key) return rows;
+    const val = (r) => (sort.key === "verdict" ? VERDICT_RANK[r.verdict] : r[sort.key]);
+    return rows.slice().sort((x, y) => {
+      const a = val(x), b = val(y);
+      if (a === b) return tie ? tie(x, y) : 0;
+      if (a === null || a === undefined) return 1;
+      if (b === null || b === undefined) return -1;
+      return (typeof a === "string" ? a.localeCompare(b) : a - b) * sort.dir;
+    });
+  }
+  function setupSortable(tableId, sort, render) {
+    for (const th of document.querySelectorAll("#" + tableId + " th[data-sort]")) {
+      th.tabIndex = 0;
+      const step = () => {
+        const first = th.dataset.text ? 1 : -1;
+        if (sort.key !== th.dataset.sort) { sort.key = th.dataset.sort; sort.dir = first; }
+        else if (sort.dir === first) sort.dir = -first;
+        else sort.key = null;
+        render();
+      };
+      th.addEventListener("click", step);
+      th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); step(); } });
+    }
+  }
+  function showSort(tableId, sort) {
+    for (const th of document.querySelectorAll("#" + tableId + " th[data-sort]")) {
+      const on = th.dataset.sort === sort.key;
+      th.classList.toggle("sorted", on);
+      th.dataset.dir = on ? (sort.dir > 0 ? "up" : "down") : "";
+      th.setAttribute("aria-sort", on ? (sort.dir > 0 ? "ascending" : "descending") : "none");
+      th.title = on ? (sort.dir > 0 ? "Sorted low to high (A → Z)" : "Sorted high to low (Z → A)") + " - click to change" : "Click to sort";
+    }
+  }
+
   function renderAppsTable() {
     const ov = state.overview;
     if (!ov) return;
     const growth = new Map(((state.analysis && state.analysis.results) || []).map((r) => [r.app, r]));
     const rows = ov.apps.map((a) => Object.assign({}, a, { growth: growth.has(a.key) ? growth.get(a.key).growthMbPerHour : null,
       verdict: growth.has(a.key) ? growth.get(a.key).verdict : null }));
-    const { key, dir } = state.sort;
-    rows.sort((x, y) => {
-      const a = x[key], b = y[key];
-      if (a === b) return x.name.localeCompare(y.name);
-      if (a === null || a === undefined) return 1;
-      if (b === null || b === undefined) return -1;
-      return (typeof a === "string" ? a.localeCompare(b) : a - b) * dir;
-    });
-    for (const th of document.querySelectorAll("#apps-table th[data-sort]")) {
-      th.classList.toggle("sorted", th.dataset.sort === key);
-      th.setAttribute("aria-sort", th.dataset.sort === key ? (dir > 0 ? "ascending" : "descending") : "none");
-    }
+    showSort("apps-table", state.sort);
     const body = $("apps-table").tBodies[0];
-    body.replaceChildren(...rows.map((a) => {
+    body.replaceChildren(...sortRows(rows, state.sort, (x, y) => x.name.localeCompare(y.name)).map((a) => {
       const tr = el("tr", { class: "clickable" + (state.app === a.key ? " selected" : ""), tabindex: "0", "data-key": a.key },
         el("td", {}, el("span", { class: "strong", text: a.name }), a.self ? el("span", { class: "tag", text: "this app" }) : null),
         el("td", { class: "muted", text: a.kind }),
@@ -586,7 +633,9 @@
       body.replaceChildren(el("tr", {}, el("td", { colspan: "11", class: "error", text: e.message })));
       return;
     }
-    const rows = result.results;
+    const rows = sortRows(result.results.map((r) => Object.assign({}, r, {
+      change: r.startMb === null || r.endMb === null ? null : r.endMb - r.startMb })), state.leakSort);
+    showSort("leak-table", state.leakSort);
     const self = ((state.overview && state.overview.apps) || []).find((a) => a.self);
     if (!rows.length) body.replaceChildren(el("tr", {}, el("td", { colspan: "11", class: "muted", text: "No data in this range." })));
     else body.replaceChildren(...rows.map((r) => {
@@ -634,189 +683,50 @@
     if (!evs.length) { body.replaceChildren(el("tr", {}, el("td", { colspan: "5", class: "muted", text: "No events in this range." }))); return; }
     body.replaceChildren(...evs.map((e) => el("tr", {},
       el("td", { class: "nowrap", text: fmtTime(e.time) }),
-      el("td", {}, el("span", { class: "evdot", style: "background:" + (EVENT_COLORS[e.type] || INK2) }), document.createTextNode(e.type)),
+      el("td", {}, el("span", { class: "evdot", style: "background:" + eventColor(e.type) }), document.createTextNode(e.type)),
       el("td", { text: e.appName || e.app || "" }), el("td", { class: "muted", text: e.service || "" }), el("td", { text: e.text }))));
-    $("btn-marker").disabled = !state.canWrite;
-    $("marker-text").disabled = !state.canWrite;
   }
 
-  // ---- settings form (generated from defaults + rules) ---------------------
-  let meta = null;
-  let loaded = null;
-
-  function buildFields(container, defaults, path) {
-    for (const [key, def] of Object.entries(defaults)) {
-      const full = path ? path + "." + key : key;
-      const rule = (meta.rules && meta.rules[full]) || {};
-      const label = rule.label || humanize(key);
-      if (rule.hidden) continue; // value is kept unchanged (readForm starts from the loaded settings)
-      if (def !== null && typeof def === "object" && !Array.isArray(def)) {
-        const inner = el("div", { class: "fields" });
-        container.append(el("fieldset", {}, el("legend", { text: rule.label || humanize(key) }), inner));
-        buildFields(inner, def, full);
-        continue;
-      }
-      const id = "f-" + full.replace(/\./g, "-");
-      let input;
-      if (Array.isArray(rule.enum)) {
-        input = el("select", { id });
-        for (const opt of rule.enum) input.append(el("option", { value: String(opt), text: String(opt) }));
-      } else if (typeof def === "boolean") {
-        input = el("input", { id, type: "checkbox" });
-      } else if (typeof def === "number") {
-        const isInt = (meta.types || {})[full] === "integer";
-        input = el("input", { id, type: "number", step: isInt ? "1" : "any", min: rule.min, max: rule.max });
-      } else if (Array.isArray(def)) {
-        input = el("input", { id, type: "text", placeholder: "JSON array" });
-      } else {
-        input = el("input", { id, type: "text", maxlength: rule.maxLength });
-      }
-      input.dataset.path = full;
-      input.dataset.kind = Array.isArray(def) ? "array" : typeof def;
-      const field = typeof def === "boolean"
-        ? el("div", { class: "field" }, el("label", { class: "checkbox", for: id }, input, document.createTextNode(label)))
-        : el("div", { class: "field" }, el("label", { for: id, text: label }), input);
-      if (rule.help) field.append(el("div", { class: "help", text: rule.help }));
-      container.append(field);
-    }
-  }
-
-  function getAt(obj, path) { return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj); }
-  function setAt(obj, path, value) {
-    const parts = path.split("."); let o = obj;
-    for (const p of parts.slice(0, -1)) { if (typeof o[p] !== "object" || o[p] === null) o[p] = {}; o = o[p]; }
-    o[parts[parts.length - 1]] = value;
-  }
-
-  function fillForm(settings) {
-    for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      const v = getAt(settings, input.dataset.path);
-      if (input.type === "checkbox") input.checked = !!v;
-      else if (input.dataset.kind === "array") input.value = JSON.stringify(v ?? []);
-      else input.value = v ?? "";
-      input.disabled = !state.canWrite;
-      input.closest(".field").classList.remove("invalid");
-    }
-    for (const id of ["btn-save", "btn-revert", "btn-defaults", "btn-rec-save"]) $(id).disabled = !state.canWrite;
-    $("rec-threads").checked = !!settings.recording.threads;
-    $("rec-threads").disabled = $("rec-medium").disabled = !state.canWrite;
-  }
-
-  function readForm() {
-    const result = JSON.parse(JSON.stringify(loaded)); // keeps unknown keys
-    for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      let v;
-      if (input.type === "checkbox") v = input.checked;
-      else if (input.dataset.kind === "number") v = input.value === "" ? NaN : Number(input.value);
-      else if (input.dataset.kind === "array") { try { v = JSON.parse(input.value || "[]"); } catch (e) { v = input.value; } }
-      else v = input.value;
-      setAt(result, input.dataset.path, v);
-    }
-    return result;
-  }
-
-  function showErrors(errors) {
-    const list = $("settings-errors");
-    list.replaceChildren(...(errors || []).map((m) => el("li", { text: m })));
-    list.hidden = !errors || !errors.length;
-    for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      const bad = (errors || []).some((m) => m.startsWith(input.dataset.path + ":"));
-      input.closest(".field").classList.toggle("invalid", bad);
-    }
-  }
-
-  async function loadSettings() {
-    try {
-      if (!meta) {
-        meta = await api("GET", "/settings/meta");
-        const container = $("settings-fields");
-        container.replaceChildren();
-        buildFields(container, meta.defaults, "");
-      }
-      loaded = await api("GET", "/settings");
-      state.leakMetric = loaded.leak.metric;
-      $("leak-metric").value = state.leakMetric;
-      fillForm(loaded);
-      showErrors([]);
-    } catch (e) {
-      $("settings-fields").replaceChildren(el("p", { class: "error", text: "Cannot load settings: " + e.message }));
-    }
-  }
-
-  async function saveSettings(ev) {
-    ev.preventDefault();
-    $("save-state").textContent = "Saving…";
-    try {
-      loaded = await api("PUT", "/settings", readForm());
-      fillForm(loaded);
-      showErrors([]);
-      $("save-state").textContent = "Saved " + new Date().toLocaleTimeString();
-    } catch (e) {
-      showErrors((e.data && e.data.errors) || [e.message]);
-      $("save-state").textContent = "Not saved";
-    }
-    refreshStatus();
-  }
-
-  async function resetDefaults() {
-    if (!confirm("Reset all settings to their defaults?")) return;
-    try { loaded = await api("POST", "/settings/reset"); fillForm(loaded); showErrors([]); $("save-state").textContent = "Defaults restored"; }
-    catch (e) { showErrors([e.message]); }
-  }
-
-  // ---- recording card ---------------------------------------------------------
-  async function loadMedia() {
-    let info;
-    try { info = await api("GET", "/media"); } catch (e) { $("rec-state").textContent = e.message; return; }
-    const sel = $("rec-medium");
-    const current = loaded ? loaded.recording.medium : "";
+  // ---- settings drawer (kit.js); the medium: a list of the device's media + "Look for media" ----------------------
+  async function fillMedia(select, current) {
+    select.replaceChildren(el("option", { value: "", text: "Off" }), el("option", { value: current, text: current || "…" }));
+    select.value = current;
+    let info = { media: [] };
+    try { info = await api("GET", "/media"); } catch (e) { /* keep the current value */ }
     const options = [el("option", { value: "", text: "Off" })];
     for (const m of info.media) {
       options.push(el("option", { value: m.name, text: m.name + (m.freeMb !== null ? " · " + fmtMb(m.freeMb) + " MB free" : "") + (m.writable ? "" : " · read-only") }));
     }
     if (current && !info.media.some((m) => m.name === current)) options.push(el("option", { value: current, text: current + " · not mounted" }));
-    sel.replaceChildren(...options);
-    sel.value = current;
-    const r = info.recording;
-    const rows = [["State", r.state + (r.error ? " - " + r.error : "")],
-      ["Folder", r.path || (r.medium ? "(medium not mounted)" : "–")],
-      ["Last write", r.lastWrite ? fmtTime(r.lastWrite) : "–"], ["Written", fmtBytes(r.bytes || 0) + " since the app started"]];
-    if (!info.media.length) rows.unshift(["Media", info.error || "none mounted (Settings → Storage)"]);
-    $("rec-status").replaceChildren(...rows.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]));
+    if (!info.media.length) options.push(el("option", { value: "", text: info.error || "(none mounted - Settings → Storage)", disabled: true }));
+    select.replaceChildren(...options);
+    select.value = current;
   }
-
-  async function saveRecording() {
-    if (!loaded) return;
-    const next = JSON.parse(JSON.stringify(loaded));
-    next.recording.medium = $("rec-medium").value;
-    next.recording.threads = $("rec-threads").checked;
-    $("rec-state").textContent = "Saving…";
-    try {
-      loaded = await api("PUT", "/settings", next);
-      fillForm(loaded);
-      $("rec-state").textContent = next.recording.medium ? "Recording to " + next.recording.medium + " from the next minute" : "Recording off";
-    } catch (e) {
-      $("rec-state").textContent = "Not saved: " + ((e.data && e.data.errors) || [e.message]).join("; ");
-    }
-    await refreshStatus();
-    await loadMedia();
+  function mediumField(id) {
+    const select = el("select", { id });
+    let current = "";
+    select.setValue = (v) => { current = v || ""; fillMedia(select, current); };
+    select.getValue = () => select.value;
+    const look = el("button", { type: "button", class: "btn btn-refresh", id: "btn-media-refresh", title: "Look for media again",
+      "aria-label": "Look for media again" }, Kit.icon("refresh"));
+    look.onclick = () => fillMedia(select, select.value || current);
+    return { node: el("div", { class: "with-button" }, select, look), input: select, wide: true };
   }
+  const settings = Kit.setupSettings({
+    field: (path, rule, def, id) => (path === "recording.medium" ? mediumField(id) : null),
+    onSaved: (saved) => {
+      if (saved && saved.leak) { state.leakMetric = saved.leak.metric; $("leak-metric").value = state.leakMetric; }
+      refreshStatus();
+      refresh(true);
+    },
+  });
 
-  // ---- tabs and refresh -------------------------------------------------------
-  function selectTab(name) {
-    state.tab = name;
-    for (const t of document.querySelectorAll(".tab")) t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false");
-    for (const p of document.querySelectorAll(".tabpanel")) p.hidden = p.id !== "tab-" + name;
-    try { sessionStorage.setItem(TOKEN_KEY + ".tab", name); } catch (e) { /* storage blocked */ }
-    refresh(true);
-  }
-
+  // ---- pages and refresh ---------------------------------------------------------
   async function renderTab() {
-    if (state.tab === "overview") await renderOverview();
+    if (state.tab === "overview") { await renderOverview(); renderStatusList(); }
     else if (state.tab === "apps") await renderApps();
     else if (state.tab === "leaks") await renderLeaks();
     else if (state.tab === "events") renderEvents();
-    else if (state.tab === "settings") { renderStatusList(); await loadMedia(); }
     resizeCharts();
   }
 
@@ -864,19 +774,47 @@
     const btn = $("btn-export");
     btn.disabled = true;
     try {
-      const res = await request("GET", "/export?" + rangeQuery() + "&level=" + level + "&format=" + fmt);
-      if (!res.ok) { let msg = res.statusText; try { const d = await res.json(); msg = d.detail || d.title || msg; } catch (e) { /* keep */ } throw new Error(msg); }
-      const blob = await res.blob();
-      const name = ((res.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/) || [])[1] || "export." + fmt;
-      const a = el("a", { href: URL.createObjectURL(blob), download: name });
-      document.body.append(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      await Kit.download("/export?" + rangeQuery() + "&level=" + level + "&format=" + fmt, "export." + fmt);
     } catch (e) {
       showBanner("Export failed: " + e.message);
     } finally {
       btn.disabled = false;
     }
   }
+
+  // ---- help menu, tutorial ---------------------------------------------------------
+  Kit.setupHelp([
+    { title: "Welcome",
+      text: "This tour shows the System Analyzer: CPU and memory of every app on this device. Step through it with the " +
+        "arrows (or the ← → keys); the control of each step blinks. Everything stays usable while the tour is open." },
+    { title: "Time range", target: () => document.querySelector(".rangebar"),
+      text: "Every chart and table shows this range. Pick a preset, enter from/to, or drag across a chart to zoom in." },
+    { title: "Pages", target: () => $("tabs"),
+      text: "Overview, the apps with their processes and threads, memory growth (leaks) and events. Each page has its own " +
+        "address (…/#apps), so it can be bookmarked." },
+    { title: "Overview", page: "overview", target: () => $("tiles"),
+      text: "The device now: CPU, memory, pressure, the number of apps and the analyzer's own load." },
+    { title: "Analyzer", page: "overview", target: () => $("analyzer-card"),
+      text: "The analyzer itself: samples, the RAM history, the device clock and the recording on an external medium." },
+    { title: "Apps", page: "apps", target: () => $("apps-table"),
+      text: "Every app with CPU and memory over the range. Click an app for its charts, processes and threads." },
+    { title: "Leaks", page: "leaks", target: () => $("leak-table"),
+      text: "Memory that grows steadily over the range - with the growth per hour and how well it fits a line." },
+    { title: "Events", page: "events", target: () => $("events-table"),
+      text: () => "Restarts, updates and markers in the range - also shown as lines in the charts." +
+        (can("operate") ? " Add a marker before a test to find its start later." : "") },
+    { title: "Export", target: () => $("btn-export"), text: "Downloads the range as CSV or JSON: apps, processes, threads or the system." },
+    { title: "Settings", when: () => can("configure"), target: () => $("btn-settings"),
+      text: "Sampling, history, leak detection and the external medium. Stored in the ctrlX app data, so they are saved " +
+        "and loaded with configurations.", act: () => settings.open() },
+    { title: "Your permission", when: () => !can("configure"), target: () => $("role"),
+      text: () => can("operate") ? "Operator: you may add markers, but not change the settings."
+        : "View only: you see everything, but can't add markers or change settings." },
+    { title: "Light or dark", target: () => $("btn-theme"),
+      text: "Switches the page between light and dark mode. Each browser keeps its own choice." },
+    { title: "Help", target: () => $("btn-help"),
+      text: "Start this tour again, open the app's page, or see About: version, author, license." },
+  ]);
 
   // ---- start ---------------------------------------------------------------
   for (const b of document.querySelectorAll("[data-preset]")) {
@@ -888,14 +826,8 @@
     showBanner("");
     zoomTo(from, to);
   });
-  for (const t of document.querySelectorAll(".tab")) t.addEventListener("click", () => selectTab(t.dataset.tab));
-  for (const th of document.querySelectorAll("#apps-table th[data-sort]")) {
-    th.addEventListener("click", () => {
-      const key = th.dataset.sort;
-      state.sort = { key, dir: state.sort.key === key ? -state.sort.dir : (key === "name" || key === "kind" ? 1 : -1) };
-      renderAppsTable();
-    });
-  }
+  setupSortable("apps-table", state.sort, renderAppsTable);
+  setupSortable("leak-table", state.leakSort, () => renderLeaks());
   $("opt-minmax").addEventListener("change", () => renderApps());
   $("leak-level").addEventListener("change", (e) => { state.leakLevel = e.target.value; state.leakEntity = null; refresh(true); });
   $("leak-metric").addEventListener("change", (e) => { state.leakMetric = e.target.value; state.leakEntity = null; refresh(true); });
@@ -912,24 +844,15 @@
     } catch (e) { $("marker-state").textContent = "Not added: " + e.message; }
   });
   $("btn-export").addEventListener("click", exportData);
-  $("settings-form").addEventListener("submit", saveSettings);
-  $("btn-revert").addEventListener("click", () => { fillForm(loaded); showErrors([]); $("save-state").textContent = ""; });
-  $("btn-defaults").addEventListener("click", resetDefaults);
-  $("btn-rec-save").addEventListener("click", saveRecording);
-  $("btn-rec-refresh").addEventListener("click", loadMedia);
 
   (async function init() {
     await refreshStatus();
-    await loadSettings();
     // right after the app started, a 1 h range would squeeze the data into its right edge
     const tiers = state.status ? state.status.history.tiers : [];
     const oldest = Math.min(...tiers.filter((t) => t.oldest).map((t) => t.oldest));
     if (isFinite(oldest) && deviceNow() - oldest < 900) state.preset = 900;
-    let tab = "overview";
-    try { tab = sessionStorage.getItem(TOKEN_KEY + ".tab") || "overview"; } catch (e) { /* storage blocked */ }
-    if (location.hash === "#settings") tab = "settings";
-    if (!document.querySelector('.tab[data-tab="' + tab + '"]')) tab = "overview";
-    selectTab(tab);
+    Kit.setupTabs({ onShow: (page) => { state.tab = page; refresh(true); } });   // refreshes the shown page
+    if (location.hash === "#settings") settings.open();
     setInterval(refreshStatus, 10000);
   })();
 })();

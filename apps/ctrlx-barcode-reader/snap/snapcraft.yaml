@@ -12,7 +12,8 @@
 
 name: ctrlx-barcode-reader
 title: Barcode Reader
-version: 0.2.0
+version: 0.3.0
+license: MIT          # SPDX id - the same as APP_LICENSE in src/app/config.py and the LICENSE file (tests/test_about.py)
 summary: Reads 1D/2D barcodes from GigE Vision cameras, triggered via UI or Data Layer
 description: |
   <!--

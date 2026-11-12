@@ -73,11 +73,14 @@ Formerly **Core Monitor** (`ctrlx-core-monitor` 0.1.x): see "Moving from Core Mo
 | Scope | Allows |
 |---|---|
 | `ctrlx-core-connector.web.all.r` "View Core Connector" | tiles, widget, browsing and reading the Data Layer of every core |
-| `ctrlx-core-connector.web.all.rw` "Manage Core Connector" | adding/removing connections, settings, **writing Data Layer values and adding/deleting KVD nodes** |
+| `ctrlx-core-connector.web.operate.x` "Operate Core Connector" | the above, plus **writing Data Layer values** on the cores (0.3.0) |
+| `ctrlx-core-connector.web.all.rw` "Configure Core Connector" | the above, plus adding/removing connections, **adding/deleting KVD nodes**, settings |
 
 Writes and KVD changes run with the rights of the **app** on this device and of each **connection's
-user** on the other cores - not with the rights of the person in the browser. Give "Manage Core
+user** on the other cores - not with the rights of the person in the browser. Give "Operate" and "Configure Core
 Connector" only to people who may change these devices; use connection users with just the rights needed.
+The top bar of both pages has a light/dark button; the help menu has the tutorial and **About** (name, version,
+author, license, AI note).
 
 ## Configuration (app data)
 
@@ -96,7 +99,7 @@ loaded with ctrlX configurations:
 }
 ```
 
-* Add cores with **+ Add core** (needs "Manage Core Connector"), remove them on their tile. Hand edits of
+* Add cores with **+ Add core** (needs "Configure Core Connector"), remove them on their tile. Hand edits of
   the file are picked up automatically; invalid content is rejected and logged (the previous settings stay active).
 * `name`: letters, digits, `-` (max. 24) - it becomes the remote `cm-<name>` (case kept; the dialog refuses
   a name that differs from another one only in case).

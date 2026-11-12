@@ -22,6 +22,7 @@ Routes
   DELETE /<snap>/api/v1/scans/<id>   write
   GET  /<snap>/api/v1/settings       read
   GET  /<snap>/api/v1/settings/meta  read   (defaults + rules for the UI)
+  GET  /<snap>/api/v1/profiles       view   the scan profiles (the run card; the settings are configure-only)
   PUT  /<snap>/api/v1/settings       write  (validate, persist to app data, apply)
   POST /<snap>/api/v1/settings/reset write
   GET  /<snap>/api/v1/values         read   (Data Layer nodes of this app)
@@ -300,16 +301,16 @@ def _make_handler(store, datalayer, manager):
         # -- API ----------------------------------------------------------
         def _api(self, method, route):
             if route == "/appdata/save" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_save(self._read_body(), store)
                 return self._send_json(status, body)
             if route == "/appdata/load" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_load(self._read_body(), store)
                 return self._send_json(status, body)
 
             if route == "/status" and method == "GET":
-                scopes = auth.require(self.headers, write=False)
+                scopes = auth.require(self.headers, auth.VIEW)
                 last = manager.last()
                 return self._send_json(200, {
                     "app": config.SNAP_NAME,
@@ -318,7 +319,14 @@ def _make_handler(store, datalayer, manager):
                     "uptimeSeconds": int(time.monotonic() - _START_TIME),
                     "settings": store.status(),
                     "datalayer": datalayer.status(),
-                    "canWrite": auth.can_write(scopes),
+                    "user": auth.user_name(self.headers),
+                    "role": auth.role_of(scopes),           # view | operate | configure
+                    "canOperate": auth.allows(scopes, auth.OPERATE),
+                    "canConfigure": auth.allows(scopes, auth.CONFIGURE),
+                    "maxAddresses": store.get()["scan"]["maxAddresses"],   # the run card's estimate (settings: configure)
+                    "style": store.get().get("style"),      # page colors for every role (kit.js Kit.applyStyle)
+                    "about": {"author": config.APP_AUTHOR, "url": config.APP_URL,       # help menu -> About
+                              "license": config.APP_LICENSE, "ai": config.APP_AI_NOTE},
                     "user": auth.user_name(self.headers),
                     "scan": manager.current(),
                     "nextRuns": manager.next_runs(),
@@ -329,10 +337,10 @@ def _make_handler(store, datalayer, manager):
                         "summary": last["summary"], "changes": last.get("changes")},
                 })
             if route == "/network" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 return self._send_json(200, netinfo.snapshot())
             if route == "/estimate" and method == "POST":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 try:
                     nets = netinfo.local_networks(netinfo.interfaces())
                 except (netinfo.NetinfoError, OSError):
@@ -340,7 +348,7 @@ def _make_handler(store, datalayer, manager):
                 return self._send_json(200, estimate(self._read_json(), nets))
 
             if route == "/scans" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.OPERATE)
                 body = self._read_json()
                 profile_id = body.get("profile") if isinstance(body, dict) else None
                 if not isinstance(profile_id, str):
@@ -353,14 +361,14 @@ def _make_handler(store, datalayer, manager):
                     return self._problem(409, "Scan running", str(exc))
                 return self._send_json(202, {"id": scan_id})
             if route == "/scans" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 return self._send_json(200, {"scans": manager.history.list(), "usage": manager.history.usage()})
             if route == "/scans/current" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 query = parse_qs(urlsplit(self.path).query)
                 return self._send_json(200, manager.current(with_hosts=query.get("hosts") == ["1"]))
             if route == "/scans/current/abort" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.OPERATE)
                 if not manager.abort():
                     return self._problem(409, "No scan running")
                 log.info("Scan abort requested via web UI by %s", auth.user_name(self.headers) or "?")
@@ -371,13 +379,13 @@ def _make_handler(store, datalayer, manager):
                 if not ID_PATTERN.fullmatch(scan_id) or len(parts) > 2:
                     return self._problem(404, "Unknown scan")
                 if method == "DELETE" and len(parts) == 1:
-                    auth.require(self.headers, write=True)
+                    auth.require(self.headers, auth.OPERATE)
                     if not manager.history.delete(scan_id):
                         return self._problem(404, "Unknown scan")
                     log.info("Scan %s deleted by %s", scan_id, auth.user_name(self.headers) or "?")
                     return self._send_json(200, {"deleted": scan_id})
                 if method == "GET":
-                    auth.require(self.headers, write=False)
+                    auth.require(self.headers, auth.VIEW)
                     result = manager.rated(scan_id)
                     if result is None:
                         return self._problem(404, "Unknown scan")
@@ -395,11 +403,14 @@ def _make_handler(store, datalayer, manager):
                                                 "network-scan-{}.csv".format(scan_id))
                 return self._problem(404, "Unknown API route")
 
+            if route == "/profiles" and method == "GET":    # the run card needs them; the settings are configure-only
+                auth.require(self.headers, auth.VIEW)
+                return self._send_json(200, store.get_redacted()["profiles"])
             if route == "/settings" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, store.get_redacted())
             if route == "/settings" and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 try:
                     store.update(self._read_json())
                 except SettingsError as exc:
@@ -407,20 +418,30 @@ def _make_handler(store, datalayer, manager):
                 log.info("Settings changed via web UI")
                 return self._send_json(200, store.get_redacted())
             if route == "/settings/meta" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, {"defaults": store.defaults(), "rules": store.rules(),
                                                  "types": store.types()})
             if route == "/settings/reset" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 store.reset_to_defaults(persist=True)
                 return self._send_json(200, store.get_redacted())
 
             if route == "/values" and method == "GET":
-                auth.require(self.headers, write=False)
-                return self._send_json(200, datalayer.registry.snapshot())
+                scopes = auth.require(self.headers, auth.VIEW)
+                values = {}
+                for name, entry in datalayer.registry.snapshot().items():
+                    if auth.allows(scopes, entry.pop("viewRole")):
+                        write_role = entry.pop("writeRole")
+                        entry["canWrite"] = entry["writable"] and auth.allows(scopes, write_role)
+                        values[name] = entry
+                return self._send_json(200, values)
             if route.startswith("/values/") and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.VIEW)
                 name = route[len("/values/"):]
+                spec = datalayer.registry.spec(name)
+                if spec is None:
+                    return self._problem(404, "Write rejected", "unknown node " + name)
+                auth.require(self.headers, spec.write_role)
                 body = self._read_json()
                 if not isinstance(body, dict) or "value" not in body:
                     return self._problem(400, "Body must be {\"value\": ...}")

@@ -10,13 +10,18 @@
       "scopes": [
         {
           "identifier": "ctrlx-amr-fleet.web.all.r",
-          "name": "View the AMR fleet",
-          "description": "View the AMR map, the fleet data and the settings"
+          "name": "View AMR Fleet View",
+          "description": "View: the AMR map and the fleet data of the AMR Fleet View"
+        },
+        {
+          "identifier": "ctrlx-amr-fleet.web.operate.x",
+          "name": "Operate AMR Fleet View",
+          "description": "View and operate: also write Data Layer values of the AMR Fleet View (no maps, AMR list or settings)"
         },
         {
           "identifier": "ctrlx-amr-fleet.web.all.rw",
-          "name": "Manage the AMR fleet view",
-          "description": "View the AMR map and change the settings and the fleet data node"
+          "name": "Configure AMR Fleet View",
+          "description": "View, operate and configure: also change the settings, maps and AMR list of the AMR Fleet View"
         }
       ]
     }
@@ -43,6 +48,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-amr-fleet.web.all.r",
+          "ctrlx-amr-fleet.web.operate.x",
           "ctrlx-amr-fleet.web.all.rw"
         ],
         "items": []
@@ -58,6 +64,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-amr-fleet.web.all.r",
+          "ctrlx-amr-fleet.web.operate.x",
           "ctrlx-amr-fleet.web.all.rw"
         ],
         "items": []
@@ -119,6 +126,7 @@
         },
         "permissions": [
           "ctrlx-amr-fleet.web.all.r",
+          "ctrlx-amr-fleet.web.operate.x",
           "ctrlx-amr-fleet.web.all.rw"
         ],
         "categories": [

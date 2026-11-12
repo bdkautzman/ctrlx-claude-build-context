@@ -67,6 +67,7 @@ RULES = {
     },
     "fleet": {"label": "Fleet"},
     "fleet.input": {
+        "wide": True,                       # long entries: the whole row of the settings form
         "label": "Input (how the AMRs reach the app)",
         "enum": ["fleet-json", "amr-json", "amr-fields"],
         "enumLabels": {"fleet-json": "One JSON node for the whole fleet (fleet/amrs)",
@@ -117,6 +118,9 @@ RULES = {
     "style.staleAmr": dict(COLOR, label="AMRs without current data"),
     "style.amrColors": {"label": "AMR colors", "format": "color", "itemPattern": HEX_COLOR, "minItems": 1,
                         "maxItems": 16, "help": "Each AMR gets one of these colors (always the same one for an id)."},
+    "style.panelDark": dict(COLOR, label="Panels (dark mode)",
+                            help="Panels while the page is in dark mode (the moon/sun button in the top bar)."),
+    "style.textDark": dict(COLOR, label="Text (dark mode)"),
     "simulation": {"label": "Simulation"},
     "simulation.enabled": {
         "label": "Simulate AMRs",

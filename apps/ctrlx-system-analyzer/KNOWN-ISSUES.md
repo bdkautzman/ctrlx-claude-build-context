@@ -13,8 +13,8 @@ this document. **"Not recorded" means the records don't say** - it may have been
 
 | Device | Facts as recorded |
 |---|---|
-| **Real ctrlX CORE** | 0.1.1, 2026-10-30. arm64, rexroth-arch01, ctrlX OS 4.6.5/4.6.6 (automationcore 4.6.5), 4 cores with apps on 0-1 [#73], cgroup v2, no `/proc/pressure` [#74], NTP inactive, clock 7 days behind [#75]. 213-215 processes, 425-437 threads. USB stick (FAT32) at `/media/sda1` [#76] |
-| **ctrlX COREvirtual** | 0.1.0, 2026-10-27. amd64, 4 cores, ctrlX OS 4.6, snapd 2.72, cgroup v1 hybrid. 176-180 processes, 744-1100 threads. It "runs 4 h at a time" |
+| **Real ctrlX CORE** | 0.1.1, 2026-10-30; 0.2.0 since 2026-11-12 (roles and UI only, "Not tested yet"). arm64, rexroth-arch01, ctrlX OS 4.6.5/4.6.6 (automationcore 4.6.5), 4 cores with apps on 0-1 [#73], cgroup v2, no `/proc/pressure` [#74], NTP inactive, clock 7 days behind [#75]. 213-215 processes, 425-437 threads. USB stick (FAT32) at `/media/sda1` [#76] |
+| **ctrlX COREvirtual** | 0.1.0, 2026-10-27; 0.2.0 since 2026-11-12 (roles and UI only, "Not tested yet"). amd64, 4 cores, ctrlX OS 4.6, snapd 2.72, cgroup v1 hybrid. 176-180 processes, 744-1100 threads. It "runs 4 h at a time" |
 | **Build VM** | emulated CPU [#47], 154 processes, 300 threads, 250-500 ms CPU per sample. Local runs and the unit tests |
 
 Last recorded state. The state today was not checked.
@@ -178,6 +178,17 @@ update of uPlot means repeating that.
 
 ## Not tested yet
 
+* **0.2.0 on a device** (kit UI, three roles): **amd64 done on the COREvirtual 2026-11-12**: settings and plugs (system-observe, removable-media)
+  unchanged by the update, Data Layer and log clean, 61.7 MB a few minutes after start; roles through the API with
+  kit-view / kit-operate / kit-configure (settings 403/403/200, marker 403/200/200 through `/events` and through
+  `PUT /values/events/marker` - four test markers "role test ..." are in the event list); `ui_check --device virtual` as
+  admin and the three test users OK. The RAM history starts again at the update (RAM only, as designed).
+  **arm64 on the real CORE X3 2026-11-12**: the X3 had none of the apps any more (installed fresh, `--service`, about
+  200 s each; the app data of 2026-11-05 was still there and loaded); plugs connected by the installer, Data Layer and
+  log clean, the same role checks through the API as on the COREvirtual all as expected, `ui_check --device x3` as admin
+  and the three test users OK. `system-observe` and `removable-media` connected by the installer; 64.0 MB a few minutes after
+  the start, 70.0 MB after about 50 min (history filling its budget, 7); markers per role through `/events` and
+  `PUT /values/events/marker`.
 * **Multi-hour and multi-day ranges**: verdicts come from 30-60 min runs; the longest figure recorded is a thread count over
   2 h on the COREvirtual. Not tested: the 1-minute and 10-minute tiers over their full lengths (24 h, 7 days), the 30-day
   range, a verdict from them.

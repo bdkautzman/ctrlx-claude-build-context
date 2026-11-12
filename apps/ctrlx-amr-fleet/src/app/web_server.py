@@ -308,16 +308,16 @@ def _make_handler(store, datalayer, fleet, maps, amr_list, map_files):
         # -- API ----------------------------------------------------------
         def _api(self, method, route):
             if route == "/appdata/save" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_save(self._read_body(), store)
                 return self._send_json(status, body)
             if route == "/appdata/load" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_load(self._read_body(), store)
                 return self._send_json(status, body)
 
             if route == "/status" and method == "GET":
-                scopes = auth.require(self.headers, write=False)
+                scopes = auth.require(self.headers, auth.VIEW)
                 return self._send_json(200, {
                     "app": config.SNAP_NAME,
                     "title": config.APP_TITLE,
@@ -325,16 +325,22 @@ def _make_handler(store, datalayer, fleet, maps, amr_list, map_files):
                     "uptimeSeconds": int(time.monotonic() - _START_TIME),
                     "settings": store.status(),
                     "datalayer": datalayer.status(),
-                    "canWrite": auth.can_write(scopes),
+                    "user": auth.user_name(self.headers),
+                    "role": auth.role_of(scopes),           # view | operate | configure
+                    "canOperate": auth.allows(scopes, auth.OPERATE),
+                    "canConfigure": auth.allows(scopes, auth.CONFIGURE),
+                    "style": store.get().get("style"),      # page colors for every role (kit.js Kit.applyStyle)
+                    "about": {"author": config.APP_AUTHOR, "url": config.APP_URL,       # help menu -> About
+                              "license": config.APP_LICENSE, "ai": config.APP_AI_NOTE},
                 })
 
             # settings (and the raw node list with settings/active) only for users who may change them:
             # read-only users don't see the settings at all; the view gets what it needs from /view-config
             if route == "/settings" and method == "GET":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, store.get_redacted())
             if route == "/settings" and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 try:
                     store.update(self._read_json())
                 except SettingsError as exc:
@@ -342,20 +348,30 @@ def _make_handler(store, datalayer, fleet, maps, amr_list, map_files):
                 log.info("Settings changed via web UI")
                 return self._send_json(200, store.get_redacted())
             if route == "/settings/meta" and method == "GET":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, {"defaults": store.defaults(), "rules": store.rules(),
                                                  "types": store.types()})
             if route == "/settings/reset" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 store.reset_to_defaults(persist=True)
                 return self._send_json(200, store.get_redacted())
 
             if route == "/values" and method == "GET":
-                auth.require(self.headers, write=True)
-                return self._send_json(200, datalayer.registry.snapshot())
+                scopes = auth.require(self.headers, auth.VIEW)
+                values = {}
+                for name, entry in datalayer.registry.snapshot().items():
+                    if auth.allows(scopes, entry.pop("viewRole")):
+                        write_role = entry.pop("writeRole")
+                        entry["canWrite"] = entry["writable"] and auth.allows(scopes, write_role)
+                        values[name] = entry
+                return self._send_json(200, values)
             if route.startswith("/values/") and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.VIEW)
                 name = route[len("/values/"):]
+                spec = datalayer.registry.spec(name)
+                if spec is None:
+                    return self._problem(404, "Write rejected", "unknown node " + name)
+                auth.require(self.headers, spec.write_role)
                 body = self._read_json()
                 if not isinstance(body, dict) or "value" not in body:
                     return self._problem(400, "Body must be {\"value\": ...}")
@@ -367,7 +383,7 @@ def _make_handler(store, datalayer, fleet, maps, amr_list, map_files):
                 return self._send_json(200, {"name": name, "value": value})
 
             if route == "/amr-list" and amr_list is not None and method in ("GET", "PUT"):
-                auth.require(self.headers, write=True)      # part of the settings: not for read-only users
+                auth.require(self.headers, auth.CONFIGURE)      # part of the settings: not for read-only users
                 if method == "PUT":
                     body = self._read_json()
                     try:
@@ -385,16 +401,16 @@ def _make_handler(store, datalayer, fleet, maps, amr_list, map_files):
                 return self._send_json(200, dict(amr_list.status(), ids=amr_list.ids()))
 
             if route == "/maps" and method == "GET" and map_files is not None:
-                auth.require(self.headers, write=True)      # part of the settings: not for read-only users
+                auth.require(self.headers, auth.CONFIGURE)      # part of the settings: not for read-only users
                 return self._send_json(200, {"maps": map_files.list_maps(), "active": store.get()["map"]["file"],
                                              "maxBytes": MAX_FILE_BYTES, "canUpload": store.storage_available()})
             match = _MAP_FILE_ROUTE.fullmatch(route)
             if match and method == "PUT" and map_files is not None:
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._upload_map(match.group(1))
 
             if route == "/view-config" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 settings = store.get()
                 return self._send_json(200, {
                     "style": settings["style"],
@@ -407,7 +423,7 @@ def _make_handler(store, datalayer, fleet, maps, amr_list, map_files):
                     "pathStepM": PATH_STEP_M,
                 })
             if route == "/fleet" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 stale_after_s = store.get()["fleet"]["staleAfterMs"] / 1000.0
                 snap = fleet.snapshot(stale_after_s, include_amrs=False)
                 if self._query().get("since") == str(snap["revision"]):
@@ -418,19 +434,19 @@ def _make_handler(store, datalayer, fleet, maps, amr_list, map_files):
                 snap["mapId"] = occ_map.id if occ_map is not None else None
                 return self._send_json(200, snap)
             if route == "/fleet/path" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 path = fleet.path(self._query().get("id", ""))
                 if path is None:
                     return self._problem(404, "No such AMR")
                 return self._send_json(200, path)
             if route == "/map" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 info = maps.info()
                 info["unitsPerMeter"] = store.get()["map"]["unitsPerMeter"]
                 return self._send_json(200, info)
             tile = _TILE_ROUTE.fullmatch(route)
             if tile and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 color = self._query().get("color", DEFAULT_TILE_COLOR)
                 if not _COLOR.fullmatch(color):
                     return self._problem(400, "color must be 6 hex digits (rrggbb)")

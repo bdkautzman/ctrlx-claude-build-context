@@ -30,6 +30,8 @@ class NodeSpec:
     minimum: Optional[float] = None
     maximum: Optional[float] = None
     max_length: Optional[int] = None
+    view_role: str = "view"        # web API: lowest role that sees the node (settings/active: "configure")
+    write_role: str = "operate"    # web API: lowest role that may write it (writable nodes only)
     # called with the validated value BEFORE it is stored; raise NodeWriteError to reject it
     on_write: Optional[Callable[[Any], None]] = field(default=None, repr=False)
     # called with (new value, old value) AFTER an accepted write was stored - for actions that
@@ -94,6 +96,10 @@ class NodeRegistry:
     def specs(self):
         return list(self._specs.values())
 
+    def spec(self, name):
+        """The NodeSpec of a node, or None."""
+        return self._specs.get(name)
+
     def address(self, name):
         return self.root + "/" + name
 
@@ -142,6 +148,8 @@ class NodeRegistry:
                 "writable": spec.writable,
                 "description": spec.description,
                 "unit": spec.unit,
+                "viewRole": spec.view_role,
+                "writeRole": spec.write_role,
             }
             for name, spec in self._specs.items()
         }
@@ -192,7 +200,7 @@ def build_node_specs(settings, version, commands=None):
         NodeSpec("status/state", "string", "starting", description="Application state"),
         NodeSpec("status/heartbeat", "uint64", 0,
                  description="Counter incremented every general.heartbeatIntervalMs"),
-        NodeSpec("settings/active", "string", "{}",
+        NodeSpec("settings/active", "string", "{}", view_role="configure",
                  description="Active settings as JSON (read-only, change via web UI or app data)"),
         # -- commands ------------------------------------------------------------------
         NodeSpec("trigger", "bool8", False, writable=True, on_write=on_trigger, after_write=after_trigger,

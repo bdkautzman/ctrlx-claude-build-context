@@ -12,7 +12,7 @@
 
 name: ctrlx-acme-template
 title: Template App
-version: 0.5.0
+version: 0.6.0
 license: MIT          # SPDX id - the same as APP_LICENSE in src/app/config.py and the LICENSE file (tests/test_about.py)
 summary: ctrlX OS app template with web UI, Data Layer nodes and app-data settings
 description: |

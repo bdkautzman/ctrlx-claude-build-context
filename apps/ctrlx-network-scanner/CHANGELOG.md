@@ -1,7 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
+- **Kit UI** (template 0.5.0, user's request 2026-11-10): the page runs on the kit's `www/kit.js` / `kit.css`
+  (API calls, roles, settings drawer, help menu + tutorial, About, light/dark) instead of its own copies; app code stays
+  in `app.js` / `style.css`.
+- **Three roles** view / operate / configure (new scope `ctrlx-network-scanner.web.operate.x`, manifest names and
+  descriptions for all three). View: results, history, reports, the profiles for the run card (`GET /profiles`,
+  `/status` `maxAddresses`). Operate: **start, abort and delete scans** (delete: the user's choice 2026-11-10).
+  Configure: profiles, whitelist/blacklist, settings. Before: `.r` / `.rw`.
+- The **Settings tab is gone**: the settings are in the kit's drawer (*Settings* in the top bar), the status card is on
+  the Overview, the Data Layer nodes on their own tab. Profiles and Whitelist/Blacklist tabs only for configure.
+- **Settings drawer** (kit): help texts as ⓘ tooltips next to the labels, true/false as switches, *Save* stores and
+  closes the drawer.
+- **Styling** settings (new, as in the template): `style.accent`, `panel`, `text`, `panelDark`, `textDark`; page
+  background, lines and secondary text are derived. **Light / dark** button in the top bar (per browser).
+- **About** in the help menu: name, version, author, license (MIT), AI note (`GET /status` `about`; `config.py`
+  `APP_AUTHOR`, `APP_URL`, `APP_LICENSE`, `APP_AI_NOTE`; `snapcraft.yaml` `license: MIT`).
+- `/status` answers `role`, `canOperate`, `canConfigure`, `style`, `about`; `GET /values` lists the nodes for view
+  (`NodeSpec.view_role`: `settings/active` only for configure), `PUT /values/<node>` needs operate
+  (`NodeSpec.write_role`).
+- Tests: `tests/test_about.py`, the role split in `tests/test_web_and_nodes.py`, UI scenario as reader and operator.
 - **UI feedback overlay, dev only** (2026-11-09, from the kit template, user's request): `./run-local.sh` sets
   `APP_DEV_FEEDBACK` to the kit's `tools/ui-feedback/overlay.js`; the dev server (`src/app/dev_feedback.py`, hooks in
   `web_server.py` and `config.py`) adds it to the HTML pages and keeps the notes in `.dev/feedback.json`. Alt+click an

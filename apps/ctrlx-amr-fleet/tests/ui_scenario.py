@@ -1,7 +1,8 @@
 """UI smoke scenario for tools/ui_check.py (headless Chromium); helpers: templates/python-webapp/tests/ui_scenario.py.
 
     python3 ../../tools/ui_check.py . --narrow          # admin: simulation, details, lock, styling, widget
-    python3 ../../tools/ui_check.py . --role reader     # read-only user: no settings (button, drawer, API)
+    python3 ../../tools/ui_check.py . --role reader     # view: no settings (button, drawer, API)
+    python3 ../../tools/ui_check.py . --role operator   # operate: no settings either (they are configure)
     python3 ../../tools/ui_check.py . --device          # installed app: screenshots only, changes nothing
 
 Screenshots: start, details (expanded tile), follow (lock + heading-up), focus-small (zoomed far out right
@@ -40,15 +41,17 @@ def run(ui):
     if ui.local:
         page.wait_for_function(r"/^\(\d+\)$/.test(document.getElementById('amr-count').textContent)",
                                timeout=30000)
-    if ui.role == "reader":
+    configure = ui.role in ("admin", "writer")   # maps, AMR list, settings (user's split 2026-11-10)
+    if not configure:
         check_reader(ui)
     else:
-        assert page.locator("#btn-settings").is_visible(), "a user who may write sees the settings button"
+        assert page.locator("#btn-settings").is_visible(), "a user who may configure sees the settings button"
+    about_and_theme(ui)
     if page.locator("#amr-list li").count():
         details_and_lock(ui)
         path(ui)
     help_and_tutorial(ui)
-    if ui.role != "reader" and ui.local:
+    if configure and ui.local:
         styling(ui)
         inputs(ui)
         map_file(ui)
@@ -57,18 +60,19 @@ def run(ui):
 
 def check_reader(ui):
     page = ui.page
-    assert not page.locator("#btn-settings").is_visible(), "read-only: no settings button"
+    assert not page.locator("#btn-settings").is_visible(), ui.role + ": no settings button"
+    assert page.locator("#role").is_visible(), "role pill"
     page.evaluate("location.hash = '#settings'")
     page.reload(wait_until="load")   # the token stays in sessionStorage
     ui.wait_ready()
-    assert page.locator("#drawer").is_hidden(), "read-only: #settings must not open the drawer"
-    for path in ("/settings", "/settings/meta", "/values"):
+    assert page.locator("#drawer.open").count() == 0, ui.role + ": #settings must not open the drawer"
+    for path in ("/settings", "/settings/meta", "/amr-list", "/maps"):
         try:
             ui.api("GET", path)
         except urllib.error.HTTPError as exc:
             assert exc.code == 403, (path, exc.code)
         else:
-            raise AssertionError(path + " is readable for a read-only user")
+            raise AssertionError(path + " is readable for " + ui.role)
 
 
 def details_and_lock(ui):
@@ -161,7 +165,7 @@ def help_and_tutorial(ui):
             ui.shot("tutorial")
         page.click("#tour-next")                           # the last one is "Done"
     assert tour.is_hidden() and page.locator("#tour-ring").is_hidden(), "Done ends the tutorial"
-    assert ("Settings" in titles) == (ui.role != "reader"), titles
+    assert ("Settings" in titles) == (ui.role in ("admin", "writer")), titles
     assert titles[0] == "Welcome" and titles[-1] == "Help", titles
     page.click("#btn-help")                                # keyboard: arrows step, Escape ends
     page.click("#btn-tutorial")
@@ -233,10 +237,20 @@ def inputs(ui):
     try:
         with page.expect_response(lambda r: r.url.endswith("/api/v1/amr-list")):   # the editor stays from styling():
             page.click("#btn-settings")                                             # wait until it is reloaded
-        page.wait_for_selector("#amr-ids .amr-id")
+        page.locator("#amr-list-summary").wait_for()                 # the drawer: one line + "Edit…"
         labels = page.locator("#f-fleet-input option").all_inner_texts()
         assert labels[0].startswith("One JSON node for the whole fleet") and len(labels) == 3, labels
+        dialog = page.locator("#amr-list-dialog[open]")
+        page.click("#btn-amr-edit")                                  # the editor is a dialog (user's note 2026-11-11)
+        dialog.wait_for()
         assert page.locator("#amr-ids .amr-id").count() == len(original_list)
+        page.fill("#amr-id-new", "X-1")                              # Esc drops what was changed in the dialog
+        page.keyboard.press("Enter")
+        page.keyboard.press("Escape")
+        dialog.wait_for(state="detached")
+        assert "not saved" not in page.inner_text("#amr-list-count"), "Esc keeps the list as it was"
+        page.click("#btn-amr-edit")
+        dialog.wait_for()
         page.fill("#amr-id-new", "AMR 5")                      # invalid: a space
         page.click("#btn-amr-add")
         assert page.locator("#amr-list-errors").is_visible()
@@ -256,6 +270,11 @@ def inputs(ui):
                 f.write("# test fleet\nT-1,one\nT-2;two\nT-3\n")
             page.set_input_files("#amr-list-file", good)
             page.wait_for_function("document.querySelectorAll('#amr-ids .amr-id').length === 3")
+        page.locator("#amr-list-dialog .info").focus()             # its help text: an info tooltip
+        ui.shot("amr-list-dialog", page.locator("#amr-list-dialog"))
+        page.click("#btn-amr-done")                                 # Done keeps the changes for Save
+        dialog.wait_for(state="detached")
+        assert page.inner_text("#amr-list-summary") == "T-1, T-2, T-3"
         page.select_option("#f-fleet-input", "amr-fields")
         ui.shot("inputs")
         page.click("#btn-save")
@@ -314,6 +333,27 @@ def map_file(ui):
         page.keyboard.press("Escape")
     finally:
         ui.api("PUT", "/settings", original, as_admin=True)
+
+
+def about_and_theme(ui):
+    """About (help menu, kit.js) and light/dark: the map keeps its colors, the panels turn dark."""
+    page = ui.page
+    page.click("#btn-help")
+    page.click("#btn-about")
+    dialog = page.locator("#about-dialog[open]")
+    dialog.wait_for()
+    text = dialog.inner_text()
+    for part in ("AMR Fleet View", "Version", "Author", "MIT", "AI"):
+        assert part in text, "About dialog without " + part
+    ui.shot("about", dialog)
+    page.keyboard.press("Escape")
+    dialog.wait_for(state="detached")
+    page.click("#btn-theme")
+    page.locator("html[data-theme=dark]").wait_for(state="attached")
+    page.wait_for_timeout(500)
+    ui.shot("dark")
+    page.click("#btn-theme")
+    page.locator("html[data-theme=light]").wait_for(state="attached")
 
 
 def widget(ui):

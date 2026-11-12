@@ -32,6 +32,10 @@ measurements, error texts), what was tried and what is still open, so a later an
 * Everything only checked locally (unit tests, `run-local.sh`, `tools/ui_check.py` without `--device`).
 * 0.5.0 (UI changes of 2026-11-09/10) runs on the COREvirtual only (2026-11-10, CHANGELOG 0.5.0): not on a real CORE
   (X3 / X7 not reachable that day), no arm64 build yet. Saving Styling colors was tested locally only.
+* 0.6.0 (2026-11-12, kit hooks from the apps' move onto kit.js): **arm64 on the real CORE X3**: app data of 2026-11-05
+  kept, Data Layer and log clean, 33.2 MB; roles through the API with kit-view / kit-operate / kit-configure (settings and
+  settings/meta 403/403/200, `PUT /values/values/setpoint` 403/200/200 - runtime only); `ui_check --device x3` as admin
+  and the three test users OK. amd64 built, not installed (the COREvirtual had stopped).
 * Info tooltips, Styling colors, light/dark mode, switches and tabs (2026-11-09): headless Chromium only (`tools/ui_check.py`), not
   through the ctrlX reverse proxy, not on a touch panel (tap on the "i" icon) and not in Firefox/Safari.
   `color-mix()` needs Chrome 111 / Firefox 113 / Safari 16.2 or newer - older browsers show the page without colors

@@ -55,7 +55,7 @@ leak-table row says so ("this app · history fills its budget"); measured on the
 budget): 60 MB RSS after 2 min, 68.5 MB from 40 min on (23.5 MB history, 906 series) - flat for the
 last 25 min of the test.
 
-**External medium** (setting `recording.medium`, chosen in *Settings → Recording*): ctrlX OS mounts
+**External medium** (setting `recording.medium`, chosen in the app's settings drawer, *External medium*): ctrlX OS mounts
 USB sticks and SD cards under `/media/<name>` (*Settings → Storage*; a USB stick on the real CORE:
 `/media/sda1`, named after the device, not the stick's label). Every minute the app appends
 CSV rows (min/avg/max per metric) to
@@ -91,10 +91,19 @@ shown too (thread leaks). The Data Layer node `analysis/growing` has the *growin
 | Tab | |
 |---|---|
 | Overview | tiles (CPU, memory, pressure, apps, the analyzer's own load), CPU per core, system memory, the 8 largest / busiest apps, pressure, growing apps |
-| Apps | table of all apps (sortable; CPU, anon, RSS, PSS, swap, growth over the range); an app: memory/CPU/count charts (optional min/max), its processes; a process: memory/CPU charts, threads with policy/priority/core, up to 8 threads charted |
+| Apps | table of all apps (CPU, anon, RSS, PSS, swap, growth over the range); an app: memory/CPU/count charts (optional min/max), its processes; a process: memory/CPU charts, threads with policy/priority/core, up to 8 threads charted |
 | Leaks | ranked growth table (apps or processes, metric, app filter); a row: lowest values, average and the fitted trend |
-| Events | restarts, stops, starts, updates, markers; add a marker |
-| Settings | recording medium, status (sampling cost, RAM history, tiers), all settings |
+| Events | restarts, stops, starts, updates, markers; add a marker (operate) |
+
+The Overview also has the analyzer's status card (sampling cost, RAM history, tiers, medium). **Settings** (recording
+medium with a refresh button that looks for media again, all settings) open in a drawer from the top bar (configure
+only). The Apps and Leaks tables sort by a click on a column title: high → low, low → high, unsorted (arrow and bold
+title on the sorted column). **A click on a chart opens it large** in a dialog. The top bar has a light/dark button;
+the help menu has the tutorial and **About** (name, version, author, license, AI note).
+
+**Roles** (0.2.0; the kit's view < operate < configure): **view** (`ctrlx-system-analyzer.web.all.r`) sees every page
+and exports; **operate** (`.web.operate.x`) also adds event markers; **configure** (`.web.all.rw`, and the ctrlX admin)
+also changes the settings and the recording medium.
 
 Range bar above all tabs: 15 min … 30 days, custom from/to, drag across a chart to zoom; presets
 follow "now" (refresh every 5 s for 15 min … every 4 min for 24 h). Export: apps, processes,
@@ -137,6 +146,7 @@ and shows all times as the device's - also the date folders and `time` column on
     APP_DEV_MEDIA_ROOT=/tmp/media ./run-local.sh   # folders in /tmp/media count as media
     ../../tools/check.sh .
     python3 ../../tools/ui_check.py . --narrow
+    python3 ../../tools/ui_check.py . --role reader      # / --role operator
     ./build-snap-amd64.sh               # / ./build-snap-arm64.sh
 
 ## License

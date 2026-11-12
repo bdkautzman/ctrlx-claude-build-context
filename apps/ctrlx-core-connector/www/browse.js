@@ -6,7 +6,7 @@
 "use strict";
 
 (function () {
-  const { $, api, el, icon, showBanner, webUrl, coreTitle, setupHelp, LOCAL_ID } = window.CC;
+  const { $, api, el, icon, showBanner, webUrl, coreTitle, setupHelp, LOCAL_ID, can } = window.CC;
 
   const coreId = new URLSearchParams(location.search).get("core") || LOCAL_ID;
   const CORE_API = "/cores/" + encodeURIComponent(coreId);
@@ -14,7 +14,6 @@
   const MAX_REFRESH_ROWS = 300;
   const ICONS = { Folder: "folder", Variable: "variable", Resource: "resource", Collection: "collection", Type: "type", Method: "method" };
 
-  let canWrite = false;
   let core = null;
   let kvd = { available: false, nodes: new Set(), error: null };
   const nodes = new Map();   // path -> {entry, row, group, valEl, tagsEl, expanded, loaded, depth}
@@ -72,13 +71,15 @@
   }
 
   async function loadStatus() {
-    try { canWrite = !!(await api("GET", "/status")).canWrite; } catch (e) { /* banner from api() */ }
+    const title = document.title;
+    await Kit.refreshStatus();   // role, role pill, colors, About (it sets the app's title - this page keeps its own)
+    document.title = title;
   }
 
-  // the read interval (settings, readable for every user of the app) - checked again every 5 s
+  // the read interval (a setting; GET /status gives it to every role) - checked again every 5 s
   async function loadReadInterval() {
     try {
-      const ms = (await api("GET", "/settings")).browser.refreshMs;
+      const ms = (await api("GET", "/status")).browserRefreshMs;
       if (Number.isFinite(ms) && ms > 0) readMs = ms;
     } catch (e) { /* keep the last one */ }
   }
@@ -99,7 +100,7 @@
       : "Nodes can be added on this core: the Key Value Database app runs on it";
     $("kvd-pill").classList.toggle("pill-warn", !!kvd.error);
     const addBtn = $("btn-add-node");
-    addBtn.hidden = !(kvd.available && canWrite);
+    addBtn.hidden = !(kvd.available && can("configure"));
     addBtn.disabled = !!kvd.error;
     addBtn.title = kvd.error ? "Not possible: " + kvd.error : "Add a node to the Key Value Database of this core";
     for (const [path, n] of nodes) setTags(n, path);
@@ -368,7 +369,7 @@
 
     // write
     if (ops.write && d.path) {
-      if (canWrite) parts.push(writeForm(d));
+      if (can("operate")) parts.push(writeForm(d));
       else parts.push(el("p", { class: "muted small", text: "Writing needs the permission “Manage Core Connector”." }));
     }
 
@@ -395,7 +396,7 @@
     }
 
     // KVD: delete what is defined in nodes.json
-    if (canWrite && kvd.available && kvd.nodes.has(d.path)) {
+    if (can("configure") && kvd.available && kvd.nodes.has(d.path)) {
       const del = el("button", { type: "button", class: "btn btn-danger btn-with-icon", id: "btn-delete-node" }, icon("trash"), el("span", { text: "Delete KVD node" }));
       del.onclick = () => deleteNode(d.path);
       parts.push(el("div", { class: "actions kvd-actions" }, del,
@@ -587,7 +588,7 @@
   const EXAMPLE_NODE = "framework/metrics/system/cpu-utilisation-percent";   // on ctrlX OS 3.6 and 4.x
   const shownRow = (sel) => [...$("tree").querySelectorAll(sel)].map((e) => e.closest(".row"))
     .find((r) => r && r.getClientRects().length) || null;
-  const kvdEditing = () => kvd.available && canWrite;
+  const kvdEditing = () => kvd.available && can("configure");
   const readText = () => readMs % 1000 ? readMs + " ms" : readMs === 1000 ? "second" : readMs / 1000 + " seconds";
   const firstKvdNode = () => [...kvd.nodes].filter((p) => !p.includes("*")).sort()[0];   // not KVD's "a/**" patterns
   const help = setupHelp([
@@ -608,7 +609,7 @@
     { title: "Details", target: () => $("detail"), act: () => gotoPath(EXAMPLE_NODE),
       text: () => "The selected node: its value (read every " + readText() + "), node class, operations, types and references. " +
         "Click the empty part of the tree to deselect it. “Show me” selects the CPU load of the core." },
-    { title: "Write", when: () => canWrite,
+    { title: "Write", when: () => can("operate"),
       target: () => document.querySelector(".write-form") || shownRow(".tag-w"),
       canAct: () => !!shownRow(".tag-w"), act: () => select(shownRow(".tag-w").dataset.path),
       text: "A writable node (tag W) gets a “Write” field in its details: numbers, true/false and text as " +
@@ -618,7 +619,7 @@
       text: () => "“Add node” is there for every core with the Key Value Database app (KVD) installed - its " +
         "status shows “Editable”: add a variable - any type, with initial value, unit, description, " +
         "read-only - or a folder. KVD restarts its nodes for every change: all of them are unavailable for " +
-        "about a second." + (!canWrite ? " Adding needs the permission “Manage Core Connector”."
+        "about a second." + (!can("configure") ? " Adding needs the permission “Configure Core Connector”."
           : !kvd.available ? " This core has no KVD: the button is not shown here." : "") },
     { title: "Delete KVD node", when: kvdEditing,
       target: () => $("btn-delete-node") || shownRow(".tag-kvd"),

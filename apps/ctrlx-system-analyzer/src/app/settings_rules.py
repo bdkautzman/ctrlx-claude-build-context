@@ -13,6 +13,7 @@ Supported rule keys:
   label:    human readable label for the web UI (optional)
   help:     help text for the web UI (optional)
   hidden:   true -> not shown in the web UI (value is preserved)
+  format:   "color" -> the web UI shows a color picker + hex field (pattern HEX_COLOR: the COLOR rule)
   items:    for arrays of objects: {"template": {...}, "rules": {field: rule}} - every element
             is normalized against the template (types, missing keys) and checked with the rules
   maxItems/minItems: maximum/minimum array length
@@ -29,6 +30,9 @@ validate_settings(settings) -> [error messages] and pass it to SettingsStore(...
 it runs on every validation, messages start with the dotted path. Example:
 apps/ctrlx-network-scanner/src/app/settings_rules.py.
 """
+
+HEX_COLOR = r"#[0-9a-fA-F]{6}"
+COLOR = {"pattern": HEX_COLOR, "format": "color"}
 
 RULES = {
     # Format version of settings.json. Increase it (and migrate in settings_store) when you make
@@ -117,11 +121,21 @@ RULES = {
         "label": "Medium",
         "maxLength": 64,
         "pattern": r"(?!\.\.?$)[^/\\\x00]*",      # one folder name, not . or ..
-        "hidden": True,
-        "help": "Folder name under /media - chosen in the Recording card.",
+        "help": "A medium mounted under /media (a USB stick or SD card, Settings → Storage of the device): one CSV row "
+                "per app and minute is written there. Off: nothing is recorded. \"Look for media\" lists them again.",
     },
     "recording.threads": {
         "label": "Record threads",
         "help": "Also write one row per thread and minute (larger files).",
     },
+    # Page colors for every user (GET /status "style" -> kit.js Kit.applyStyle); background, lines and secondary
+    # text are derived (kit.css). Light or dark: each browser's choice (top bar button).
+    "style": {"label": "Styling"},
+    "style.accent": dict(COLOR, label="Accent", help="Buttons, the brand mark, focus rings - in light and dark mode."),
+    "style.panel": dict(COLOR, label="Panels", help="Top bar, cards, settings. Page background, lines and secondary "
+                                                     "text are derived from Panels and Text."),
+    "style.text": dict(COLOR, label="Text"),
+    "style.panelDark": dict(COLOR, label="Panels (dark mode)",
+                            help="Panels while the page is in dark mode (the moon/sun button in the top bar)."),
+    "style.textDark": dict(COLOR, label="Text (dark mode)"),
 }

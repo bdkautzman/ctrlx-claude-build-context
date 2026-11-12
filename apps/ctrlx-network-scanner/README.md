@@ -40,12 +40,17 @@ attempts/s, 16-32 at a time); scan production networks only with the plant owner
 | Overview | start/abort a scan, live progress with the hosts found so far, last scan, schedules, this device's networks |
 | Results | any scan from the history: tiles, changes since the previous scan, host table with filter (text, rating), host details with ports/services; buttons add hosts/ports to the whitelist or blacklist; PDF/CSV/JSON download |
 | History | chart of hosts per scan (red dot = forbidden findings), table with open/PDF/delete |
-| Profiles | editor with live size estimate, target/port preset chips, load limits, schedule; save, save and run, duplicate, delete |
-| Whitelist / Blacklist | the rating lists |
-| Settings | address limit, history limits, log level; status; Data Layer nodes with their values |
+| Profiles | editor with live size estimate, target/port preset chips, load limits, schedule; save, save and run, duplicate, delete (configure) |
+| Whitelist / Blacklist | the rating lists (configure) |
+| Data Layer | the app's nodes with their values |
 
-Read-only users (`ctrlx-network-scanner.web.all.r`) see everything and download reports; starting
-scans and changing anything needs `...web.all.rw` (or the ctrlX admin scope).
+The Overview also has the app's status card. **Settings** (address limit, history limits, log level, styling) open in
+a drawer from the top bar (*Settings*, configure only). The top bar has a light/dark button; the help menu has the
+tutorial and **About** (name, version, author, license, AI note).
+
+**Roles** (0.2.0; the kit's view < operate < configure): **view** (`ctrlx-network-scanner.web.all.r`) sees results and
+history and downloads reports; **operate** (`.web.operate.x`) also starts, aborts and deletes scans; **configure**
+(`.web.all.rw`, and the ctrlX admin) also edits profiles, the whitelist/blacklist and the settings.
 
 ## Whitelist / blacklist (rating only - the user's decision)
 
@@ -106,6 +111,7 @@ APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh         # the same, reachable through t
 ../../tools/check.sh .                           # unit tests (scans only touch 127.0.0.x) + checks
 python3 ../../tools/ui_check.py . --narrow       # headless browser: scan, results, lists, downloads
 python3 ../../tools/ui_check.py . --role reader
+python3 ../../tools/ui_check.py . --role operator
 python3 ../../tools/pdf_check.py report.pdf      # render a report's pages to PNG and look at them
 ./build-snap-amd64.sh && ./build-snap-arm64.sh
 ```

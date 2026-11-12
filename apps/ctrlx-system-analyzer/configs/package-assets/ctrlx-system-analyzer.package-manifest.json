@@ -11,12 +11,17 @@
         {
           "identifier": "ctrlx-system-analyzer.web.all.r",
           "name": "View System Analyzer",
-          "description": "View CPU and memory history, leak analysis, events and exports of the System Analyzer"
+          "description": "View: CPU and memory history, leak analysis, events and exports of the System Analyzer"
+        },
+        {
+          "identifier": "ctrlx-system-analyzer.web.operate.x",
+          "name": "Operate System Analyzer",
+          "description": "View and operate: also add event markers (no settings)"
         },
         {
           "identifier": "ctrlx-system-analyzer.web.all.rw",
-          "name": "Manage System Analyzer",
-          "description": "Also change the System Analyzer settings, the recording medium and add event markers"
+          "name": "Configure System Analyzer",
+          "description": "View, operate and configure: also change the settings and the recording medium of the System Analyzer"
         }
       ]
     }
@@ -43,6 +48,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-system-analyzer.web.all.r",
+          "ctrlx-system-analyzer.web.operate.x",
           "ctrlx-system-analyzer.web.all.rw"
         ],
         "items": []
@@ -58,6 +64,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-system-analyzer.web.all.r",
+          "ctrlx-system-analyzer.web.operate.x",
           "ctrlx-system-analyzer.web.all.rw"
         ],
         "items": []

@@ -24,7 +24,7 @@ Template: `templates/python-webapp/configs/package-assets/ctrlx-acme-template.pa
 Three roles since template 0.2.0 (user's request 2026-11-07): **view** (status, values, results), **operate**
 (+ write runtime values, start/stop/trigger actions - no settings), **configure** (+ settings); each includes the
 one before. ctrlX OS's own services use the same three levels (`scheduler.view/operate/manage`,
-`diagnosis.*`, `logbook.*` on a CORE's Users & Permissions page). Apps made before 0.2.0 have only `.r` and `.rw`.
+`diagnosis.*`, `logbook.*` on a CORE's Users & Permissions page). The five apps have all three since 2026-11-11 (before: `.r` and `.rw`).
 Every menu entry and widget lists all three scopes in `permissions`, otherwise users with only one of the
 lower roles don't see it. Scope id pattern `<id>.<service>.<scope_name>.<access>` with access `r|w|rw|x`.
 The admin scope `rexroth-device.all.rwx` must always grant full access. The app **must enforce** scopes itself

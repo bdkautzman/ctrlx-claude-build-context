@@ -1,9 +1,8 @@
 // AMR Fleet View web UI - plain JS, no build step, no CDN (devices are often offline).
 //
-// Auth: the ctrlX menu opens "/<snap>/?token=${bearertoken}". We move the token from the URL
-// into sessionStorage (so it is not left in history/bookmarks) and send it as
-// "Authorization: Bearer" on every API call. The reverse proxy validates it because
-// "/<snap>/api" is listed as restricted in the package manifest.
+// The kit's shared parts (token + API calls, roles, settings drawer, About, light/dark) are in kit.js - see the list
+// at its top. This page keeps its own help menu and tutorial (map-specific: an example AMR, the list panel, the card
+// placed over the map). Roles (user's split 2026-11-10): maps, the AMR list and the settings = configure.
 //
 // Coordinates: "world" = map units, x right, y up - the units of the map file and of the AMR
 // JSON. The view is {cx, cy, zoom (CSS px per map unit), rot (rad)}: a world point is moved by
@@ -17,47 +16,15 @@
 "use strict";
 
 (function () {
-  const PREFIX = "/" + location.pathname.split("/").filter(Boolean)[0]; // "/<snap-name>"
-  const API = PREFIX + "/api/v1";
-  const TOKEN_KEY = PREFIX.slice(1) + ".token";
+  const PREFIX = Kit.PREFIX, API = Kit.API;
   const PREF_KEY = PREFIX.slice(1) + ".prefs";
-
-  // ---- token / API -----------------------------------------------------------
-  function captureToken() {
-    const url = new URL(location.href);
-    const fromUrl = url.searchParams.get("token") || url.searchParams.get("access_token");
-    if (fromUrl) {
-      try { sessionStorage.setItem(TOKEN_KEY, fromUrl); } catch (e) { /* storage blocked */ }
-      url.searchParams.delete("token");
-      url.searchParams.delete("access_token");
-      history.replaceState(null, "", url.pathname + url.search + url.hash);
-      return fromUrl;
-    }
-    try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
-  }
-  const token = captureToken();
+  const { api, can } = Kit;
 
   function authHeaders(extra) {
     const headers = Object.assign({}, extra);
-    if (token) headers["Authorization"] = "Bearer " + token;
+    if (Kit.token) headers["Authorization"] = "Bearer " + Kit.token;
     return headers;
   }
-
-  async function api(method, path, body) {
-    const headers = authHeaders({ "Accept": "application/json" });
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-    const res = await fetch(API + path, {
-      method, headers, body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: "same-origin", cache: "no-store",
-    });
-    let data = null;
-    const text = await res.text();
-    if (text) { try { data = JSON.parse(text); } catch (e) { data = { title: text }; } }
-    if (res.status === 401) showBanner("Session expired or no token - please reopen this app from the ctrlX menu.");
-    if (!res.ok) { const err = new Error((data && (data.detail || data.title)) || res.statusText); err.status = res.status; err.data = data; throw err; }
-    return data;
-  }
-
   async function apiImage(path) {
     const res = await fetch(API + path, { headers: authHeaders(), credentials: "same-origin" });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -157,7 +124,6 @@
   let showMinimap = prefs.get("minimap", true);
   let dirty = true;
   let firstFleetAnswer = false;  // for data-ui-ready
-  let canWrite = false;
   const MAX_DETAIL_INFO = 16;
   const paths = new Map();                          // id -> {pts: [[x, y, performance.now() ms], ...], loading}
   const pathOn = new Set(prefs.get("paths", []));   // AMRs whose path this viewer switched on
@@ -442,7 +408,7 @@
     }
     $("followbar").hidden = !follow;
     $("follow-name").textContent = follow || "";
-    $("heading-up").checked = headingUp;
+    headingSwitch.value = headingUp;
     updateList();
     dirty = true;
   }
@@ -954,7 +920,7 @@
     if (!amrs.size) {
       empty.replaceChildren(document.createTextNode("No AMRs. Write the fleet JSON to the Data Layer node "),
         el("code", { text: PREFIX.slice(1) + "/fleet/amrs" }),
-        document.createTextNode(canWrite ? " or switch on the simulation in the settings." : "."));
+        document.createTextNode(can("configure") ? " or switch on the simulation in the settings." : "."));
     } else if (!rows.size) {
       empty.textContent = "No AMR matches the filter.";
     }
@@ -1015,22 +981,8 @@
   }
 
   async function refreshStatus() {
-    try {
-      const s = await api("GET", "/status");
-      canWrite = !!s.canWrite;
-      $("btn-settings").hidden = !canWrite;          // read-only users get no settings at all
-      if (!canWrite && !$("drawer").hidden) closeSettings();
-      document.title = s.title;
-      $("app-title").textContent = s.title;
-      $("app-version").textContent = /^\d/.test(s.version) ? "v" + s.version : s.version;
-      const conn = $("conn");
-      if (s.datalayer.connected) { conn.className = "pill pill-ok"; conn.textContent = "Data Layer: connected"; }
-      else { conn.className = "pill pill-warn"; conn.textContent = s.datalayer.enabled ? "Data Layer: connecting…" : "Data Layer: off"; }
-      conn.title = s.datalayer.error || "Data Layer connection";
-      showBanner("");
-    } catch (e) {
-      if (e.status !== 401) showBanner("Cannot reach the app: " + e.message);
-    }
+    const s = await Kit.refreshStatus();   // title, version, Data Layer pill, role pill, [data-role] elements, colors
+    if (s) $("conn").title = s.datalayer.error || "Data Layer connection";
   }
 
   // What the view needs (GET /view-config, also for read-only users): units, AMR size, colors.
@@ -1058,33 +1010,33 @@
     try {
       const v = await api("GET", "/view-config");
       const json = JSON.stringify(v);
-      if (json !== viewConfigJson && $("drawer").hidden) {   // don't disturb a preview in the settings
+      if (json !== viewConfigJson && !settings.isOpen()) {   // don't disturb a preview in the settings
         viewConfigJson = json;
         applyViewConfig(v);
       }
     } catch (e) { /* keep the current one; refreshStatus reports connection problems */ }
   }
 
-  // Styling (settings "style"): the three base colors set the page chrome - background, lines and
-  // secondary text are derived in style.css with color-mix(); the map colors go to the canvas.
+  // Styling (settings "style"): kit.js sets the page colors (Accent, Panels, Text - light and dark); the map colors
+  // go to the canvas here - from GET /view-config and from kit.js ("kit:style": GET /status, the preview in the drawer).
   const HEX = /^#[0-9a-fA-F]{6}$/;
-  function inkFor(hex) {   // readable text on a colored button: dark on light colors, white on dark
+  function inkFor(hex) {   // readable text on a colored surface: dark on light colors, white on dark
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
       .map((c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
     return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#1f2328" : "#ffffff";
   }
+  let mapStyleJson = "";
   function applyStyle(style) {
     if (!style) return;
+    const json = JSON.stringify([style.mapBackground, style.mapFloor, style.mapGrid, style.staleAmr, style.mapWalls, style.amrColors]);
+    if (json === mapStyleJson) return;   // kit.js announces the colors with every status poll
+    mapStyleJson = json;
     const root = document.documentElement.style;
     const set = (name, value) => { if (HEX.test(value || "")) { root.setProperty("--" + name, value); colors[name] = value; } };
-    set("accent", style.accent);
-    set("card", style.panel);
-    set("text", style.text);
     set("map-bg", style.mapBackground);
     set("map-floor", style.mapFloor);
     set("map-grid", style.mapGrid);
     set("amr-stale", style.staleAmr);
-    if (HEX.test(style.accent || "")) root.setProperty("--accent-ink", inkFor(style.accent));
     const palette = (style.amrColors || []).filter((c) => HEX.test(c));
     if (palette.length) amrPalette = palette;
     if (HEX.test(style.mapWalls || "")) {
@@ -1099,6 +1051,9 @@
     updateList();
     dirty = true;
   }
+  // page colors (Styling) or light/dark changed: the canvas reads accent, text and panel colors again
+  document.addEventListener("kit:style", (ev) => { readColors(); applyStyle(ev.detail); dirty = true; });
+  document.addEventListener("kit:theme", () => { readColors(); updateList(); dirty = true; });
 
   // ---- input: mouse, touch, keyboard ---------------------------------------------------------
   const pointers = new Map();   // pointerId -> {x, y}
@@ -1189,7 +1144,7 @@
 
   window.addEventListener("keydown", (ev) => {
     const tag = (ev.target.tagName || "").toLowerCase();
-    if (!$("drawer").hidden) { if (ev.key === "Escape") closeSettings(); return; }
+    if (settings.isOpen() || document.querySelector("dialog[open]")) return;   // kit.js: Escape closes the drawer / About
     if (!helpMenu.hidden && ev.key === "Escape") { setHelpMenu(false); helpBtn.focus(); return; }
     if (tag === "input" || tag === "select" || tag === "textarea" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (tour && (ev.key === "ArrowLeft" || ev.key === "ArrowRight" || ev.key === "Escape")) {   // the tutorial has the arrows
@@ -1228,7 +1183,7 @@
   mini.addEventListener("pointercancel", () => { miniDrag = false; });
 
   function northUp() {
-    if (follow && headingUp) { headingUp = false; prefs.set("headingUp", false); $("heading-up").checked = false; }
+    if (follow && headingUp) { headingUp = false; prefs.set("headingUp", false); headingSwitch.value = false; }
     view.rot = 0;
     dirty = true;
   }
@@ -1239,12 +1194,14 @@
   $("btn-fit").addEventListener("click", fitView);
   $("btn-north").addEventListener("click", northUp);
   $("btn-unfollow").addEventListener("click", () => setFollow(null));
-  $("heading-up").addEventListener("change", (ev) => {
-    headingUp = ev.target.checked;
+  // "Rotate map with AMR": true/false = the kit's switch
+  const headingSwitch = Kit.switchInput(headingUp, { id: "heading-up", onChange: (on) => {
+    headingUp = on;
     prefs.set("headingUp", headingUp);
     if (!headingUp) view.rot = 0;
     dirty = true;
-  });
+  } });
+  $("heading-up-slot").replaceWith(headingSwitch.node);
   function setLabels(on) {
     showLabels = on;
     prefs.set("labels", on);
@@ -1261,81 +1218,26 @@
   $("btn-panel").addEventListener("click", () => setPanel($("panel").hidden));
   $("amr-filter").addEventListener("input", updateList);
 
-  // ---- settings drawer (form generated from defaults + rules) ------------------------------
-  let meta = null;
-  let loaded = null;
-
-  function buildFields(container, defaults, path) {
-    for (const [key, def] of Object.entries(defaults)) {
-      const full = path ? path + "." + key : key;
-      const rule = (meta.rules && meta.rules[full]) || {};
-      const label = rule.label || humanize(key);
-      if (rule.hidden) continue; // value is kept unchanged (readForm starts from the loaded settings)
-      if (def !== null && typeof def === "object" && !Array.isArray(def)) {
-        const inner = el("div", { class: "fields" });
-        container.append(el("fieldset", {}, el("legend", { text: rule.label || humanize(key) }), inner));
-        buildFields(inner, def, full);
-        continue;
-      }
-      const id = "f-" + full.replace(/\./g, "-");
-      if (rule.format === "color") {
-        container.append(colorField(id, full, label, rule, Array.isArray(def)));
-        continue;
-      }
-      let input;
-      if (Array.isArray(rule.enum)) {
-        input = el("select", { id });
-        const labels = rule.enumLabels || {};      // what the select shows; the value is stored
-        for (const opt of rule.enum) input.append(el("option", { value: String(opt), text: labels[opt] || String(opt) }));
-      } else if (typeof def === "boolean") {
-        input = el("input", { id, type: "checkbox" });
-      } else if (typeof def === "number") {
-        const isInt = (meta.types || {})[full] === "integer";
-        input = el("input", { id, type: "number", step: isInt ? "1" : "any", min: rule.min, max: rule.max });
-      } else if (Array.isArray(def)) {
-        input = el("input", { id, type: "text", placeholder: "JSON array" });
-      } else {
-        input = el("input", { id, type: "text", maxlength: rule.maxLength });
-      }
-      input.dataset.path = full;
-      input.dataset.kind = Array.isArray(def) ? "array" : typeof def;
-      const field = typeof def === "boolean"
-        ? el("div", { class: "field" }, el("label", { class: "checkbox", for: id }, input, document.createTextNode(label)))
-        : el("div", { class: "field" + (rule.enumLabels ? " field-wide" : "") }, el("label", { for: id, text: label }), input);
-      if (rule.help) field.append(el("div", { class: "help", text: rule.help }));
-      container.append(field);
-    }
-  }
-
-  // A color: picker + hex text field kept in step; the text field carries data-path (it is the value).
-  function colorInput(value, onChange) {
+  // ---- settings drawer (kit.js) with this app's own parts: the AMR color list, the map file drop-down + upload,
+  // the AMR list (stored before the settings) and "Default colors". Colors show while edited: kit.js previews the
+  // page colors and announces the style ("kit:style" -> applyStyle for the map).
+  function colorInput(value, onChange) {   // picker + hex text field kept in step
     const picker = el("input", { type: "color", class: "color-picker", "aria-label": "Pick a color" });
     const text = el("input", { type: "text", class: "color-hex", maxlength: "7", spellcheck: "false", placeholder: "#rrggbb" });
-    const sync = (v) => { text.value = v; if (HEX.test(v)) picker.value = v.toLowerCase(); };
     picker.addEventListener("input", () => { text.value = picker.value; onChange(); });
     text.addEventListener("input", () => { if (HEX.test(text.value)) picker.value = text.value.toLowerCase(); onChange(); });
-    sync(value || "#000000");
-    return { node: el("span", { class: "color-input" }, picker, text), picker, text, sync };
+    text.value = value || "#000000";
+    if (HEX.test(text.value)) picker.value = text.value.toLowerCase();
+    return { node: el("span", { class: "color-input" }, picker, text) };
   }
-  function colorField(id, path, label, rule, isList) {
-    const field = el("div", { class: "field" + (isList ? " field-wide" : "") });
-    if (!isList) {
-      const c = colorInput("#000000", previewStyle);
-      c.text.id = id;
-      c.text.dataset.path = path;
-      c.text.dataset.kind = "string";
-      c.text.syncColor = c.sync;
-      field.append(el("label", { for: id, text: label }), c.node);
-    } else {
-      const box = el("div", { class: "color-list", id });
-      box.dataset.path = path;
-      box.dataset.kind = "colors";
-      box.dataset.max = rule.maxItems || 16;
-      box.dataset.min = rule.minItems || 1;
-      field.append(el("label", { text: label }), box);
-    }
-    if (rule.help) field.append(el("div", { class: "help", text: rule.help }));
-    return field;
+  const previewStyle = () => settings.preview();
+  function colorListField(id, rule) {   // style.amrColors: add / remove colors
+    const box = el("div", { class: "color-list", id });
+    box.dataset.max = rule.maxItems || 16;
+    box.dataset.min = rule.minItems || 1;
+    box.getValue = () => readColorList(box);
+    box.setValue = (v) => fillColorList(box, Array.isArray(v) ? v : []);
+    return { node: box, input: box, wide: true };
   }
   function fillColorList(box, values) {
     const items = values.map((v) => {
@@ -1350,7 +1252,7 @@
     const add = el("button", { type: "button", class: "btn btn-small btn-add", text: "+ Color" });
     add.addEventListener("click", () => {
       const current = readColorList(box);
-      const defaults = (meta && meta.defaults.style.amrColors) || ["#888888"];
+      const defaults = (settings.meta && settings.meta.defaults.style.amrColors) || ["#888888"];
       fillColorList(box, current.concat([defaults[current.length % defaults.length]]));
       previewStyle();
     });
@@ -1359,62 +1261,16 @@
   }
   function updateColorListButtons(box) {
     const n = box.querySelectorAll(".color-item").length;
-    for (const b of box.querySelectorAll(".btn-remove")) b.disabled = !canWrite || n <= Number(box.dataset.min);
+    for (const b of box.querySelectorAll(".btn-remove")) b.disabled = n <= Number(box.dataset.min);
     const add = box.querySelector(".btn-add");
-    if (add) add.disabled = !canWrite || n >= Number(box.dataset.max);
+    if (add) add.disabled = n >= Number(box.dataset.max);
   }
   function readColorList(box) { return [...box.querySelectorAll(".color-hex")].map((t) => t.value.trim()); }
-  function previewStyle() {   // live preview while editing; Revert / closing restores the saved one
-    if (!loaded) return;
-    applyStyle(readForm().style);
-  }
   function defaultColors() {
-    const style = meta.defaults.style;
-    const current = readForm();
-    current.style = JSON.parse(JSON.stringify(style));
-    fillForm(current, true);
+    const current = settings.readForm();
+    current.style = JSON.parse(JSON.stringify(settings.meta.defaults.style));
+    settings.fill(current);
     previewStyle();
-  }
-
-  function getAt(obj, path) { return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj); }
-  function setAt(obj, path, value) {
-    const parts = path.split("."); let o = obj;
-    for (const p of parts.slice(0, -1)) { if (typeof o[p] !== "object" || o[p] === null) o[p] = {}; o = o[p]; }
-    o[parts[parts.length - 1]] = value;
-  }
-
-  function fillForm(settings, keepErrors) {
-    for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      const v = getAt(settings, input.dataset.path);
-      if (input.dataset.kind === "colors") fillColorList(input, Array.isArray(v) ? v : []);
-      else if (input.type === "checkbox") input.checked = !!v;
-      else if (input.dataset.kind === "array") input.value = JSON.stringify(v ?? []);
-      else if (input.syncColor) input.syncColor(v ?? "");
-      else {
-        if (input.tagName === "SELECT" && v != null && ![...input.options].some((o) => o.value === String(v))) {
-          input.append(el("option", { value: String(v), text: String(v) + " – not available" }));
-        }
-        input.value = v ?? "";
-      }
-      input.disabled = !canWrite;
-      if (!keepErrors) input.closest(".field").classList.remove("invalid");
-    }
-    for (const b of document.querySelectorAll("#settings-fields .color-picker, #settings-fields .color-hex")) b.disabled = !canWrite;
-    for (const id of ["btn-save", "btn-revert", "btn-defaults"]) $(id).disabled = !canWrite;
-  }
-
-  function readForm() {
-    const result = JSON.parse(JSON.stringify(loaded)); // keeps unknown keys
-    for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      let v;
-      if (input.type === "checkbox") v = input.checked;
-      else if (input.dataset.kind === "number") v = input.value === "" ? NaN : Number(input.value);
-      else if (input.dataset.kind === "array") { try { v = JSON.parse(input.value || "[]"); } catch (e) { v = input.value; } }
-      else if (input.dataset.kind === "colors") v = readColorList(input);
-      else v = input.value.trim();
-      setAt(result, input.dataset.path, v);
-    }
-    return result;
   }
 
   // ---- AMR list (per-AMR input modes, amr-list.txt in the app data): edited here, stored with Save -----
@@ -1445,14 +1301,14 @@
     const box = $("amr-ids");
     box.replaceChildren(...amrListDraft.map((id) => {
       const remove = el("button", { type: "button", class: "btn-icon", title: "Remove " + id, "aria-label": "Remove " + id }, icon("close"));
-      remove.disabled = !canWrite;
       remove.addEventListener("click", () => { amrListDraft = amrListDraft.filter((x) => x !== id); renderAmrList(); });
       return el("span", { class: "amr-id", "data-id": id }, document.createTextNode(id), remove);
     }));
     if (!amrListDraft.length) box.append(el("span", { class: "muted", text: "No AMRs in the list" }));
     const changed = amrListDraft.join("\n") !== amrListSaved.join("\n");
     $("amr-list-count").textContent = "(" + amrListDraft.length + (changed ? ", not saved" : "") + ")";
-    for (const id of ["amr-id-new", "btn-amr-add", "btn-amr-upload"]) $(id).disabled = !canWrite;
+    $("amr-list-summary").textContent = amrListDraft.length
+      ? amrListDraft.slice(0, 8).join(", ") + (amrListDraft.length > 8 ? ", …" : "") : "No AMRs in the list";
   }
   function addAmrId() {
     const input = $("amr-id-new"), id = input.value.trim();
@@ -1480,7 +1336,10 @@
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
-  function amrListField() {
+  // In the drawer: the list in one line and "Edit…"; the editing is in a dialog (user's note 2026-11-11). Done keeps
+  // the changes for Save, Cancel / Esc drops the ones made in the dialog.
+  let amrDialog = null, amrListBefore = [];
+  function amrListDialog() {
     const file = el("input", { type: "file", id: "amr-list-file", accept: ".txt,.csv,text/plain,text/csv", hidden: true });
     file.addEventListener("change", () => { if (file.files[0]) uploadAmrList(file.files[0]); file.value = ""; });
     const input = el("input", { type: "text", id: "amr-id-new", placeholder: "AMR id, e.g. AMR-05", maxlength: "64",
@@ -1492,14 +1351,41 @@
     upload.addEventListener("click", () => file.click());
     const download = el("button", { type: "button", class: "btn btn-small btn-ghost", id: "btn-amr-download", text: "Download" });
     download.addEventListener("click", downloadAmrList);
+    const help = "The per-AMR input modes offer Data Layer nodes for these AMRs. A list file has one id per line ('#' " +
+      "starts a comment; in a CSV line the first field counts). Save in the settings stores it as amr-list.txt in the app data.";
+    const done = el("button", { type: "button", class: "btn btn-primary", id: "btn-amr-done", text: "Done" });
+    const cancel = el("button", { type: "button", class: "btn", id: "btn-amr-cancel", text: "Cancel" });
+    const closeX = el("button", { type: "button", class: "tool tool-bare", title: "Cancel", "aria-label": "Cancel" }, icon("close"));
+    const dlg = el("dialog", { id: "amr-list-dialog", class: "dialog dialog-wide", "aria-labelledby": "amr-list-h" },
+      el("div", { class: "dialog-body" },
+        el("div", { class: "card-head dialog-head" },
+          el("h2", { id: "amr-list-h" }, document.createTextNode("AMR list"),
+            el("span", { class: "info info-down", tabindex: "0", role: "img", "aria-label": help, "data-tip": help })), closeX),
+        el("div", { class: "amr-ids", id: "amr-ids" }),
+        el("div", { class: "amr-list-tools" }, input, add, upload, download, file),
+        el("p", { class: "muted small", id: "amr-list-note" }),
+        el("ul", { class: "error-list", id: "amr-list-errors", hidden: true }),
+        el("div", { class: "actions" }, done, cancel)));
+    const drop = () => { amrListDraft = amrListBefore.slice(); amrListErrors([]); renderAmrList(); };
+    done.addEventListener("click", () => dlg.close());
+    cancel.addEventListener("click", () => { drop(); dlg.close(); });
+    closeX.addEventListener("click", () => { drop(); dlg.close(); });
+    dlg.addEventListener("cancel", drop);                  // Esc
+    document.body.append(dlg);
+    return dlg;
+  }
+  function amrListField() {
+    const edit = el("button", { type: "button", class: "btn btn-small", id: "btn-amr-edit", text: "Edit…" });
+    edit.addEventListener("click", () => {
+      amrListBefore = amrListDraft.slice();
+      amrDialog.showModal();
+      $("amr-id-new").focus();
+    });
+    if (!amrDialog) amrDialog = amrListDialog();
     return el("div", { class: "field field-wide", id: "amr-list-field" },
-      el("label", { for: "amr-id-new" }, document.createTextNode("AMR list "), el("span", { id: "amr-list-count", class: "muted" })),
-      el("div", { class: "amr-ids", id: "amr-ids" }),
-      el("div", { class: "amr-list-tools" }, input, add, upload, download, file),
-      el("div", { class: "help", text: "The per-AMR input modes offer Data Layer nodes for these AMRs. A list file has one id per " +
-        "line ('#' starts a comment; in a CSV line the first field counts). Save stores it as amr-list.txt in the app data." }),
-      el("div", { class: "help", id: "amr-list-note" }),
-      el("ul", { class: "error-list", id: "amr-list-errors", hidden: true }));
+      el("div", { class: "field-label" }, el("label", { for: "btn-amr-edit" }, document.createTextNode("AMR list "),
+        el("span", { id: "amr-list-count", class: "muted" }))),
+      el("div", { class: "amr-list-line" }, el("span", { id: "amr-list-summary", class: "muted" }), edit));
   }
 
   // ---- map file (settings): drop-down of the maps in the app data and the bundled ones; an upload is stored in
@@ -1524,7 +1410,7 @@
   async function loadMapFiles(current) {
     mapFiles = await api("GET", "/maps");
     renderMapOptions(current);
-    $("btn-map-upload").disabled = !canWrite || !mapFiles.canUpload;
+    $("btn-map-upload").disabled = !mapFiles.canUpload;
     if (!mapFiles.canUpload) mapUploadMessage([], "App data storage is not available right now - uploads are not possible.");
   }
   function putFile(path, file, onProgress) {   // XMLHttpRequest: fetch reports no upload progress
@@ -1562,129 +1448,63 @@
       await loadMapFiles(name);                 // the new file, selected (unsaved)
       mapUploadMessage([], (name !== file.name ? file.name + " uploaded as " + name : name + " uploaded") + ", " +
         formatBytes(entry.size) + " - " +
-        (loaded && name === loaded.map.file ? "the map reloads." : "Save to show it."));
+        (settings.loaded && name === settings.loaded.map.file ? "the map reloads." : "Save to show it."));
     } catch (e) {
       mapUploadMessage([name + " not uploaded: " + e.message]);
     } finally {
-      upload.disabled = !canWrite || !mapFiles.canUpload;
+      upload.disabled = !mapFiles.canUpload;
     }
   }
-  function mapFileField() {   // the generated text field of map.file becomes a drop-down (same id and data-path)
-    const old = $("f-map-file");
-    const select = el("select", { id: "f-map-file" });
-    select.dataset.path = old.dataset.path;
-    select.dataset.kind = old.dataset.kind;
+  function mapFileField(id) {   // map.file: a drop-down of the maps + "Upload map…" (kit.js field hook)
+    const select = el("select", { id });
+    select.setValue = (v) => renderMapOptions(v || "");
+    select.getValue = () => select.value;
     const file = el("input", { type: "file", id: "map-upload-file", accept: ".txt,text/plain", hidden: true });
     file.addEventListener("change", () => { if (file.files[0]) uploadMap(file.files[0]); file.value = ""; });
     const upload = el("button", { type: "button", class: "btn btn-small", id: "btn-map-upload", text: "Upload map…" });
     upload.addEventListener("click", () => file.click());
-    old.replaceWith(el("div", { class: "map-file-row" }, select, upload, file));
-    const field = select.closest(".field");
-    field.classList.add("field-wide");
-    field.append(el("div", { class: "help", id: "map-upload-note" }), el("ul", { class: "error-list", id: "map-upload-errors", hidden: true }));
+    const node = el("div", {}, el("div", { class: "map-file-row" }, select, upload, file),
+      el("div", { class: "help", id: "map-upload-note" }), el("ul", { class: "error-list", id: "map-upload-errors", hidden: true }));
+    return { node, input: select, wide: true };
   }
 
-  function showErrors(errors) {
-    const list = $("settings-errors");
-    list.replaceChildren(...(errors || []).map((m) => el("li", { text: m })));
-    list.hidden = !errors || !errors.length;
-    for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      const bad = (errors || []).some((m) => m.startsWith(input.dataset.path + ":") || m.startsWith(input.dataset.path + "["));
-      input.closest(".field").classList.toggle("invalid", bad);
-    }
-  }
-
-  async function loadSettings() {
-    try {
-      if (!meta) {
-        meta = await api("GET", "/settings/meta");
-        const container = $("settings-fields");
-        container.replaceChildren();
-        buildFields(container, meta.defaults, "");
-        const styleSet = $("f-style-accent") && $("f-style-accent").closest("fieldset");
-        if (styleSet) {
-          const btn = el("button", { type: "button", class: "btn btn-small", id: "btn-default-colors", text: "Default colors" });
-          btn.addEventListener("click", defaultColors);
-          styleSet.querySelector("legend").after(el("div", { class: "fieldset-tools" }, btn,
-            el("span", { class: "muted", text: "Changes show right away; Save keeps them for everyone." })));
-        }
-        const inputField = $("f-fleet-input") && $("f-fleet-input").closest(".field");
-        if (inputField) inputField.after(amrListField());
-        if ($("f-map-file")) mapFileField();
+  const settings = Kit.setupSettings({
+    field: (path, rule, def, id) => (path === "style.amrColors" ? colorListField(id, rule)
+      : path === "map.file" ? mapFileField(id) : null),
+    afterBuild: () => {
+      const styleSet = $("f-style-accent") && $("f-style-accent").closest("fieldset");
+      if (styleSet) {
+        const btn = el("button", { type: "button", class: "btn btn-small", id: "btn-default-colors", text: "Default colors" });
+        btn.addEventListener("click", defaultColors);
+        styleSet.querySelector("legend").after(el("div", { class: "fieldset-tools" }, btn,
+          el("span", { class: "muted", text: "Changes show right away; Save keeps them for everyone." })));
       }
-      loaded = await api("GET", "/settings");
+      const inputField = $("f-fleet-input") && $("f-fleet-input").closest(".field");
+      if (inputField) inputField.after(amrListField());
+    },
+    onLoaded: async (loaded) => {
       if ($("map-upload-file")) { mapUploadMessage([]); await loadMapFiles(loaded.map.file); }
-      fillForm(loaded);
-      showErrors([]);
       if ($("amr-list-field")) {
         amrListSaved = (await api("GET", "/amr-list")).ids;
         amrListDraft = amrListSaved.slice();
         amrListErrors([]);
         renderAmrList();
       }
-    } catch (e) {
-      $("settings-fields").replaceChildren(el("p", { class: "error", text: "Cannot load settings: " + e.message }));
-    }
-  }
-
-  async function saveSettings(ev) {
-    ev.preventDefault();
-    $("save-state").textContent = "Saving…";
-    try {
-      if ($("amr-list-field") && amrListDraft.join("\n") !== amrListSaved.join("\n")) {   // first: a new mode finds its AMRs
-        try {
-          amrListSaved = (await api("PUT", "/amr-list", { ids: amrListDraft })).ids;
-          amrListErrors([]);
-          renderAmrList();
-        } catch (e) {
-          amrListErrors((e.data && e.data.errors) || [e.message], "AMR list not saved:");
-          throw e;
-        }
+    },
+    beforeSave: async () => {   // first the AMR list: a new input mode finds its AMRs
+      if (!$("amr-list-field") || amrListDraft.join("\n") === amrListSaved.join("\n")) return;
+      try {
+        amrListSaved = (await api("PUT", "/amr-list", { ids: amrListDraft })).ids;
+        amrListErrors([]);
+        renderAmrList();
+      } catch (e) {
+        amrListErrors((e.data && e.data.errors) || [e.message], "AMR list not saved:");
+        throw e;
       }
-      loaded = await api("PUT", "/settings", readForm());
-      viewConfigJson = "";
-      applyViewConfig(viewConfigFrom(loaded));
-      fillForm(loaded);
-      showErrors([]);
-      $("save-state").textContent = "Saved " + new Date().toLocaleTimeString();
-      loadMap();
-    } catch (e) {
-      showErrors((e.data && e.data.errors) || [e.message]);
-      $("save-state").textContent = "Not saved";
-    }
-  }
-
-  async function resetDefaults() {
-    if (!confirm("Reset all settings to their defaults?")) return;
-    try {
-      loaded = await api("POST", "/settings/reset");
-      viewConfigJson = "";
-      applyViewConfig(viewConfigFrom(loaded)); fillForm(loaded); showErrors([]);
-      $("save-state").textContent = "Defaults restored";
-      loadMap();
-    } catch (e) { showErrors([e.message]); }
-  }
-
-  function openSettings() {
-    if (!canWrite) return;   // read-only users: no settings (the API answers 403 anyway)
-    $("drawer").hidden = false;
-    $("save-state").textContent = "";
-    loadSettings();
-  }
-  function closeSettings() {
-    $("drawer").hidden = true;
-    if (loaded) applyStyle(loaded.style);   // drop an unsaved preview
-    canvas.focus({ preventScroll: true });
-  }
-
-  $("settings-form").addEventListener("submit", saveSettings);
-  $("btn-revert").addEventListener("click", () => {
-    fillForm(loaded); applyStyle(loaded.style); showErrors([]); $("save-state").textContent = "";
-    if ($("amr-list-field")) { amrListDraft = amrListSaved.slice(); amrListErrors([]); renderAmrList(); }
+    },
+    onRevert: () => { if ($("amr-list-field")) { amrListDraft = amrListSaved.slice(); amrListErrors([]); renderAmrList(); } },
+    onSaved: (loaded) => { viewConfigJson = ""; applyViewConfig(viewConfigFrom(loaded)); loadMap(); },
   });
-  $("btn-defaults").addEventListener("click", resetDefaults);
-  $("btn-settings").addEventListener("click", openSettings);
-  $("btn-close-settings").addEventListener("click", closeSettings);
 
   // ---- help menu ---------------------------------------------------------------------------------
   const helpBtn = $("btn-help"), helpMenu = $("help-menu");
@@ -1752,10 +1572,16 @@
     { title: "Status", target: () => ["sim-badge", "fleet-pill", "conn"].map($),
       text: "Whether the AMR data is current (number of AMRs, “live” or the time since the last update), " +
         "“Simulation” while the AMRs come from the built-in simulation, and the Data Layer connection." },
-    { title: "Settings", when: () => canWrite, target: () => $("btn-settings"),
+    { title: "Settings", when: () => can("configure"), target: () => $("btn-settings"),
       text: "Map file and units, the fleet data, colors, the path history and the simulation. Only users who " +
         "may change settings see this button." },
-    { title: "Help", target: () => helpBtn, text: "Start this tour again, or open the app's page on GitHub." },
+    { title: "Your permission", when: () => !can("configure"), target: () => $("role"),
+      text: () => can("operate") ? "Operator: you see the fleet and may write its Data Layer values, but not change maps, " +
+        "the AMR list or the settings." : "View only: you see the fleet, but can't change anything. Ask an administrator for more." },
+    { title: "Light or dark", target: () => $("btn-theme"),
+      text: "Switches the page between light and dark mode (the map keeps its colors). Each browser keeps its own choice." },
+    { title: "Help", target: () => helpBtn,
+      text: "Start this tour again, open the app's page on GitHub, or see About: version, author, license." },
   ];
   const tourSteps = () => TOUR.filter((st) => !st.when || st.when());
   function pickTourAmr() {
@@ -1807,7 +1633,7 @@
   }
   function tourLoop() { if (tour) { placeTour(); requestAnimationFrame(tourLoop); } }
   function startTour() {
-    if (!$("drawer").hidden) closeSettings();
+    if (settings.isOpen()) settings.close();
     const running = !!tour;
     tour = { i: 0, amr: pickTourAmr(), step: null };
     tourCard.hidden = false;
@@ -1841,7 +1667,7 @@
   (async function init() {
     wallHex = (colors["map-wall"] || "#333d4a").replace("#", "").slice(0, 6);
     setLabels(showLabels);
-    $("heading-up").checked = headingUp;
+    headingSwitch.value = headingUp;
     const narrow = window.matchMedia("(max-width: 760px)").matches;
     $("panel").hidden = !prefs.get("panel", !narrow);
     new ResizeObserver(() => { resize(); layoutMinimap(); }).observe($("mapwrap"));
@@ -1853,6 +1679,6 @@
     requestAnimationFrame(frame);
     pollFleet();
     setInterval(() => { refreshStatus(); loadViewConfig(); }, 5000);   // picks up style changes of others
-    if (location.hash === "#settings") openSettings();
+    if (location.hash === "#settings") settings.open();
   })();
 })();

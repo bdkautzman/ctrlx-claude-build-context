@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Network Scanner</title>
-  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy.
+       kit.css / kit.js: the kit's shared UI parts (from the template, don't edit them here); style.css / app.js: this app. -->
+  <link rel="stylesheet" href="kit.css">
   <link rel="stylesheet" href="style.css">
   <link rel="icon" href="data:,">
 </head>
@@ -17,36 +19,54 @@
       <span id="app-version" class="muted"></span>
     </div>
     <div class="topbar-right">
+      <!-- only shown to users who may not do everything ("View only", "Operator") -->
+      <span id="role" class="pill pill-role" hidden></span>
       <span id="scan-pill" class="pill pill-unknown">…</span>
       <span id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</span>
+      <!-- data-role="configure": only users who may change settings see it (kit.js) -->
+      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" data-role="configure" hidden
+              title="Settings" aria-label="Settings" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-sliders"/></svg><span class="btn-label">Settings</span></button>
+      <button type="button" id="btn-theme" class="btn btn-small btn-theme" title="Switch to dark mode"
+              aria-label="Dark mode" aria-pressed="false"><svg class="ic"><use href="#i-moon"/></svg></button>
+      <div class="menu-wrap">
+        <button type="button" id="btn-help" class="btn btn-small btn-help" title="Help" aria-label="Help"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu"><svg class="ic"><use href="#i-help"/></svg></button>
+        <div id="help-menu" class="menu" role="menu" aria-label="Help" hidden>
+          <a role="menuitem" id="help-page" href="https://github.com/bdkautzman" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-external"/></svg>App page</a>
+          <button type="button" role="menuitem" id="btn-tutorial"><svg class="ic"><use href="#i-play"/></svg>Tutorial</button>
+          <button type="button" role="menuitem" id="btn-about"><svg class="ic"><use href="#i-info"/></svg>About</button>
+        </div>
+      </div>
     </div>
   </header>
 
-  <nav class="tabs" role="tablist" aria-label="Sections">
-    <button type="button" role="tab" class="tab" data-tab="overview" aria-selected="true">Overview</button>
-    <button type="button" role="tab" class="tab" data-tab="results">Results</button>
-    <button type="button" role="tab" class="tab" data-tab="history">History</button>
-    <button type="button" role="tab" class="tab" data-tab="profiles">Profiles</button>
-    <button type="button" role="tab" class="tab" data-tab="lists">Whitelist / Blacklist</button>
-    <button type="button" role="tab" class="tab" data-tab="settings">Settings</button>
+  <!-- pages: tabs under the top bar (kit.js Kit.setupTabs); the hash names the page. Profiles and lists are
+       settings: only for the configure role (data-role) -->
+  <nav class="tabs" id="tabs" aria-label="Pages">
+    <a href="#overview">Overview</a>
+    <a href="#results">Results</a>
+    <a href="#history">History</a>
+    <a href="#profiles" data-role="configure" hidden>Profiles</a>
+    <a href="#lists" data-role="configure" hidden>Whitelist / Blacklist</a>
+    <a href="#datalayer">Data Layer</a>
   </nav>
 
   <div id="banner" class="banner" hidden></div>
-  <div id="readonly-note" class="note" hidden>You can view scans and download reports. Starting scans and changing
-    profiles or lists needs the permission "Manage Network Scanner".</div>
 
   <!-- ============================== Overview ============================== -->
-  <main id="tab-overview" class="panel grid" role="tabpanel">
+  <main>
+  <section id="tab-overview" class="panel grid page" data-page="overview">
     <section class="card" aria-labelledby="run-h">
       <h2 id="run-h">Run a scan</h2>
       <div class="row">
         <label class="grow">Profile
           <select id="run-profile"></select>
         </label>
-        <button type="button" id="btn-start" class="btn btn-primary">Start scan</button>
+        <button type="button" id="btn-start" class="btn btn-primary" hidden>Start scan</button>
         <button type="button" id="btn-abort" class="btn btn-danger" hidden>Abort</button>
       </div>
       <p id="run-estimate" class="muted small"></p>
+      <p id="run-note" class="muted small" hidden>Starting scans needs the permission “Operate Network Scanner”.</p>
       <div id="progress" class="progress-box" hidden>
         <div class="progress-head">
           <strong id="pg-title"></strong>
@@ -102,10 +122,21 @@
       </div>
       <p id="net-gw" class="muted small"></p>
     </section>
-  </main>
+    <section class="card" id="status-card">
+      <h2>Status</h2>
+      <dl class="kv">
+        <dt>Uptime</dt><dd id="st-uptime">–</dd>
+        <dt>Settings source</dt><dd id="st-source">–</dd>
+        <dt>Settings persisted</dt><dd id="st-persisted">–</dd>
+        <dt>History</dt><dd id="st-history">–</dd>
+        <dt>Signed in as</dt><dd id="st-user">–</dd>
+      </dl>
+      <p id="st-error" class="error" hidden></p>
+    </section>
+  </section>
 
   <!-- ============================== Results ============================== -->
-  <main id="tab-results" class="panel" role="tabpanel" hidden>
+  <section id="tab-results" class="panel page" data-page="results" hidden>
     <section class="card">
       <div class="row wrap">
         <label class="grow">Scan
@@ -141,10 +172,10 @@
       <p class="muted small">Ratings use the current whitelist and blacklist. Click a host for its ports and to add
         findings to a list.</p>
     </section>
-  </main>
+  </section>
 
   <!-- ============================== History ============================== -->
-  <main id="tab-history" class="panel" role="tabpanel" hidden>
+  <section id="tab-history" class="panel page" data-page="history" hidden>
     <section class="card">
       <div class="card-head">
         <h2>Previous scans</h2>
@@ -160,10 +191,10 @@
         </table>
       </div>
     </section>
-  </main>
+  </section>
 
   <!-- ============================== Profiles ============================== -->
-  <main id="tab-profiles" class="panel profiles" role="tabpanel" hidden>
+  <section id="tab-profiles" class="panel profiles page" data-page="profiles" hidden>
     <section class="card profile-list-card">
       <h2>Profiles</h2>
       <ul id="prof-list" class="prof-list"></ul>
@@ -238,10 +269,10 @@
         </div>
       </form>
     </section>
-  </main>
+  </section>
 
   <!-- ============================== Lists ============================== -->
-  <main id="tab-lists" class="panel" role="tabpanel" hidden>
+  <section id="tab-lists" class="panel page" data-page="lists" hidden>
     <section class="card">
       <h2>Whitelist and blacklist</h2>
       <p class="muted small">The lists rate scan results, they don't limit what is scanned. <b class="ok">Whitelist</b> =
@@ -274,45 +305,10 @@
         <span id="lists-state" class="muted" aria-live="polite"></span>
       </div>
     </section>
-  </main>
+  </section>
 
   <!-- ============================== Settings ============================== -->
-  <main id="tab-settings" class="panel grid" role="tabpanel" hidden>
-    <section class="card">
-      <div class="card-head">
-        <h2>Settings</h2>
-        <span class="muted small">Stored in ctrlX app data · saved and loaded with configurations</span>
-      </div>
-      <form id="set-form" novalidate>
-        <div class="fields">
-          <div class="field"><label for="s-maxaddr">Max. addresses per scan</label><input id="s-maxaddr" data-s="scan.maxAddresses" type="number" min="1" max="65536" step="1">
-            <div class="help">A scan whose targets cover more addresses is refused before it starts.</div></div>
-          <div class="field"><label for="s-hscans">Keep at most [scans]</label><input id="s-hscans" data-s="history.maxScans" type="number" min="1" max="1000" step="1"></div>
-          <div class="field"><label for="s-hmb">Keep at most [MB]</label><input id="s-hmb" data-s="history.maxMegabytes" type="number" min="1" max="200" step="1">
-            <div class="help">History is kept on the device (not in app data); oldest scans are deleted first.</div></div>
-          <div class="field"><label for="s-log">Log level</label>
-            <select id="s-log" data-s="general.logLevel"><option>ERROR</option><option>WARNING</option><option>INFO</option><option>DEBUG</option></select></div>
-          <div class="field"><label for="s-hb">Heartbeat interval [ms]</label><input id="s-hb" data-s="general.heartbeatIntervalMs" type="number" min="100" max="60000" step="1"></div>
-        </div>
-        <ul id="set-errors" class="error-list" hidden></ul>
-        <div class="actions">
-          <button type="submit" id="btn-set-save" class="btn btn-primary">Save</button>
-          <button type="button" id="btn-set-revert" class="btn">Revert</button>
-          <span id="set-state" class="muted" aria-live="polite"></span>
-        </div>
-      </form>
-    </section>
-    <section class="card">
-      <h2>Status</h2>
-      <dl class="kv">
-        <dt>Uptime</dt><dd id="st-uptime">–</dd>
-        <dt>Settings source</dt><dd id="st-source">–</dd>
-        <dt>Settings persisted</dt><dd id="st-persisted">–</dd>
-        <dt>History</dt><dd id="st-history">–</dd>
-        <dt>Signed in as</dt><dd id="st-user">–</dd>
-      </dl>
-      <p id="st-error" class="error" hidden></p>
-    </section>
+  <section id="tab-datalayer" class="panel grid page" data-page="datalayer" hidden>
     <section class="card card-wide">
       <h2>Data Layer nodes</h2>
       <p class="muted small">A PLC can start a scan by writing a profile ID to <code id="dl-start">scan/start</code> and read the
@@ -324,8 +320,31 @@
         </table>
       </div>
     </section>
+  </section>
   </main>
 
+  <!-- settings: slide in from the right; only for the configure role (kit.js Kit.setupSettings) -->
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+  <aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="settings-h" aria-hidden="true" inert>
+    <div class="card-head drawer-head">
+      <h2 id="settings-h">Settings</h2>
+      <button type="button" id="btn-close-settings" class="tool tool-bare" title="Close" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="muted drawer-note">Stored in ctrlX app data · saved and loaded with configurations. Profiles and the
+      whitelist / blacklist have pages of their own.</p>
+    <form id="settings-form" novalidate>
+      <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
+      <ul id="settings-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+        <button type="button" id="btn-revert" class="btn">Revert</button>
+        <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
+        <span id="save-state" class="muted" aria-live="polite"></span>
+      </div>
+    </form>
+  </aside>
+
+  <script src="kit.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

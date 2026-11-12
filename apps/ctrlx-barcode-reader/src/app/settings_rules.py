@@ -13,6 +13,7 @@ Supported rule keys:
   label:    human readable label for the web UI (optional)
   help:     help text for the web UI (optional)
   hidden:   true -> not shown in the web UI (value is preserved)
+  format:   "color" -> the web UI shows a color picker + hex field (pattern HEX_COLOR: the COLOR rule)
   items:    for arrays of objects: {"template": {...}, "rules": {field: rule}} - every element
             is normalized against the template (types, missing keys) and checked with the rules
   maxItems/minItems: maximum/minimum array length
@@ -36,6 +37,9 @@ from app.decoder import FORMAT_NAMES
 
 PIXEL_FORMATS = ["", "Mono8", "BayerRG8", "BayerGR8", "BayerGB8", "BayerBG8", "RGB8", "BGR8"]
 AUTO_MODES = ["Off", "Once", "Continuous"]
+
+HEX_COLOR = r"#[0-9a-fA-F]{6}"
+COLOR = {"pattern": HEX_COLOR, "format": "color"}
 
 RULES = {
     # Format version of settings.json. Increase it (and migrate in settings_store) when you make
@@ -71,6 +75,7 @@ RULES = {
     "camera.pixelFormat": {
         "label": "Pixel format",
         "enum": PIXEL_FORMATS,
+        "enumLabels": {"": "(keep the camera's format)"},
         "help": "Empty: keep the camera's format. 8-bit formats only. Mono8 is enough for codes and the "
                 "fastest; a Bayer format shows a color image.",
     },
@@ -166,6 +171,16 @@ RULES = {
     "simulation.width": {"label": "Width [px]", "min": 256, "max": 4096},
     "simulation.height": {"label": "Height [px]", "min": 256, "max": 4096},
     "simulation.codes": {"label": "Codes per image", "min": 0, "max": 6},
+    # Page colors for every user (GET /status "style" -> kit.js Kit.applyStyle); background, lines and secondary
+    # text are derived (kit.css). Light or dark: each browser's choice (top bar button).
+    "style": {"label": "Styling"},
+    "style.accent": dict(COLOR, label="Accent", help="Buttons, the brand mark, focus rings - in light and dark mode."),
+    "style.panel": dict(COLOR, label="Panels", help="Top bar, cards, settings. Page background, lines and secondary "
+                                                     "text are derived from Panels and Text."),
+    "style.text": dict(COLOR, label="Text"),
+    "style.panelDark": dict(COLOR, label="Panels (dark mode)",
+                            help="Panels while the page is in dark mode (the moon/sun button in the top bar)."),
+    "style.textDark": dict(COLOR, label="Text (dark mode)"),
 }
 
 

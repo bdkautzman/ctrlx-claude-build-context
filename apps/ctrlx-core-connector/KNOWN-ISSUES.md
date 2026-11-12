@@ -18,7 +18,7 @@ this document. **"Not recorded" means the records don't say** - it may have been
 | **The user's ctrlX OS 3.6 core** | 192.168.1.10. No login for it in `devices.toml`, so the kit tools can't reach it directly: seen only through the user's own remote `iot-core` on the COREvirtual and as core "IIoT-Core" in the app on the COREvirtual |
 | Data Layer library | recorded as `ctrlx-datalayer` 3.5 client in #79; #78 quotes the 3.6 enum |
 
-History on the devices. The state today was not checked.
+History on the devices. Last recorded: 0.3.0 on the COREvirtual since 2026-11-12, the real CORE (X3) 0.3.0 since 2026-11-12.
 
 | Version | Installed and verified | How |
 |---|---|---|
@@ -51,13 +51,15 @@ go-ahead at ~14:45 CDT (SERVICE, uninstall task, back to OPERATING; Core Connect
 | 13 | Uninstalling an app keeps its app data, incl. plain-text passwords | caveat (ctrlX OS) | delete the folder afterwards |
 | 14 | Core Monitor and Core Connector together delete each other's remotes | by design (same prefix) | uninstall Core Monitor |
 | 15 | Certificate check off by default | caveat | needed for the default self-signed certificate; a setting per connection |
-| 16 | Writes run with the rights of the app / connection user, not of the person in the browser | by design | give "Manage Core Connector" sparingly |
+| 16 | Writes run with the rights of the app / connection user, not of the person in the browser | by design | give the operate and configure scopes sparingly |
 | 17 | `run-local.sh` against a device's Data Layer manages that device's `cm-*` remotes | caveat | an empty local list deletes them - don't |
 | 18 | A missing node and a remote that is not mounted answer the same | caveat | see 9 |
 | 19 | A remote to the device itself failed | **open**, tested once | use a second device; this device is read from the root anyway |
 | 20 | Provider glue from before template 0.1.5: `on_write` can't veto | caveat, current state not recorded | see "Maintainer facts" |
 | 21 | Two KVD sample values changed on the COREvirtual by mistake | noted, previous value not read | see below |
 | 22 | Not tested yet (list below) | open | - |
+| 23 | A remote core that drops keeps its last values on the tile | caveat (0.3.0, seen on the COREvirtual) | the "error" mark and "not connected" show it; no time of the last read |
+| 24 | Browser texts after the role split: the write hint names "Manage Core Connector", "Editable" shows to users who can't add nodes | **open** (0.3.0) | the hint should name "Operate Core Connector"; nothing is allowed that shouldn't be |
 
 ## Details
 
@@ -167,7 +169,8 @@ A remote to the device itself (`tcp://...@127.0.0.1`) failed the same way, teste
 
 ### 16-17. Rights and local runs (README)
 
-Writes and KVD changes run with the rights of the **app** on this device and of each **connection's user** on the
+Since 0.3.0 writing a value needs the operate scope, KVD changes and connections the configure scope. Writes and KVD
+changes run with the rights of the **app** on this device and of each **connection's user** on the
 other cores - not with those of the person in the browser. `run-local.sh` against a device's Data Layer manages that
 device's `cm-*` remotes from its local settings: an empty list deletes them. The app never touches remotes that don't
 start with `cm-`.
@@ -197,9 +200,45 @@ On 2026-10-31, while probing, two KVD sample values on the COREvirtual were writ
 `samples/kvd/variables/variable` was set to 0, its documented initial value. **Its previous value was not read**, so
 that it was 0 before is not known. The records don't name the second value.
 
+### 23. Last values of a remote that drops (2026-11-12, 0.3.0, COREvirtual)
+
+Setup: 0.3.0 installed at 14:07 UTC, connections Test-Core (X3, 192.168.1.7) and IIoT-Core (the ctrlX OS 3.6 core,
+192.168.1.10); the build VM could not reach 192.168.1.7 (no LAN access that day). `GET /cores`: both read once at
+14:09:52 / 14:09:53 UTC, then state `error`, "not connected" (`CLIENT_NOT_CONNECTED`). The tiles kept the values of
+that one read (uptime 2d 15h 43m 51s on both screenshots, 5 min apart) under the orange "error" mark. The app keeps
+the last values on purpose (`monitor._set_status` only updates the state on an error); the API has `updated`, the tile
+doesn't show it. Open: whether the remotes really connected for a moment, and whether the tile should grey out the
+old values or show "last read HH:MM".
+
+### 24. Browser texts after the role split (2026-11-12, 0.3.0)
+
+Seen in the `ui_check --device virtual` screenshots and the source:
+
+* `www/browse.js:373`: a user without the operate scope reads "Writing needs the permission “Manage Core Connector”" -
+  the scope of that name is gone since 0.3.0; writing needs "Operate Core Connector". The tour step (line 622) is right.
+* The **Editable** pill in the browser's top bar shows for every role when the core has KVD (it describes the core, not
+  the user). The operator sees it but gets no *Add node*; view the same. Options: show it only with `canConfigure`, or
+  a tooltip that says adding needs "Configure Core Connector".
+
+Rights are not affected: the API answered 403 as it should ("Not tested yet" → 0.3.0). A fix changes the UI: user's UI
+check, then 0.3.1.
+
 ## Not tested yet
 
-* **App memory and CPU**: no measurement of this app is recorded on any device (the kit's target is < 75 MB per app).
+* **0.3.0 on a device** (kit UI, three roles): **amd64 done on the COREvirtual 2026-11-12**: settings and plugs unchanged by the update, Data
+  Layer and log clean, 36.1 MB a few minutes after start; roles through the API with kit-view / kit-operate / kit-configure
+  (settings 403/403/200, value write on a core 403/404/404 and KVD delete 403/403/404 - a core name that does not
+  exist, so nothing was written); `ui_check --device virtual` as admin and the three test users OK. The remote cores
+  (X3, the ctrlX OS 3.6 core) were not reachable: values read once at 14:09:52 UTC after the start, then "not
+  connected" (see 23). **arm64 on the real CORE X3 2026-11-12**: the X3 had none of the apps any more (installed fresh, `--service`, about
+  200 s each; the app data of 2026-11-05 was still there and loaded); plugs connected by the installer, Data Layer and
+  log clean, the same role checks through the API as on the COREvirtual all as expected, `ui_check --device x3` as admin
+  and the three test users OK. 35.0 MB a few minutes after the start. Its connection `virtual-core` (the COREvirtual through the
+  Windows host, 192.168.1.211:8443) stayed "not connected": the COREvirtual had stopped by then (port 8443 did not
+  answer from the build VM either), so no remote browsing between the two was tested.
+* **App memory and CPU**: only one figure: 0.3.0 on the COREvirtual 2026-11-12, a few minutes after the start, 36.1 MB
+  RSS, 3.4 % of one core, 8 threads (System Analyzer `apps/summary`; three connections, two not connected). No
+  long run, nothing on the real CORE (the kit's target is < 75 MB per app).
 * **Home screen widget on a real home screen**: 0.2.0 recorded "widget (test page)"; later `ui_check --device` runs
   list the widget, the real home screen is not recorded.
 * **ctrlX OS 3.6 target**: recorded are the connected state, metrics, `scheduler/admin/state` and browsing through the

@@ -1,7 +1,8 @@
 """UI scenario for tools/ui_check.py - Barcode Reader in headless Chromium.
 
     eval "$(./dev-env.sh)"; python3 ../../tools/ui_check.py . --narrow   # local: simulated camera (needs .dev/)
-    python3 ../../tools/ui_check.py . --role reader                       # without the camera/settings controls
+    python3 ../../tools/ui_check.py . --role reader                       # view: no camera/settings controls
+    python3 ../../tools/ui_check.py . --role operator                     # operate: read, live, continuous, reconnect
     python3 ../../tools/ui_check.py . --device [NAME]                     # the installed app (read-only steps)
 
 Locally the app starts with the defaults (a GigE camera at 192.168.1.99 that the build VM can't stream
@@ -9,7 +10,7 @@ from): prepare() switches it to the simulated camera (Aravis' fake camera + gene
 read, so the start screenshot shows an image with code outlines.
 Steps (local admin): Read, the history (pin an older read, back to the newest), draw a decode region with
 the mouse and read inside it, clear it, the live picture, continuous reading on/off, the settings drawer
-(symbology checkboxes, Discover lists the fake camera, an invalid value is rejected).
+(symbology checkboxes, Discover lists the fake camera, an invalid value is rejected), light/dark, About, the tutorial.
 On a device nothing is triggered (a read changes the Data Layer result nodes a PLC may watch).
 """
 
@@ -33,16 +34,22 @@ def seq(page):
 def run(ui):
     page = ui.page
     page.locator("#cam-pill", has_text="Camera:").wait_for()
+    about(ui)
     if not ui.local:
         assert page.locator("#camera-kv dt").count() >= 1
         return
     page.locator("#r-seq", has_text="#1").wait_for()
     page.locator("#img:not([hidden])").wait_for()
 
-    if ui.role == "reader":
-        for b in ("#btn-read", "#btn-live", "#btn-continuous", "#btn-region", "#btn-settings", "#btn-reconnect"):
-            assert page.locator(b).is_hidden(), b + " must be hidden for a reader"
-        ui.shot("reader")
+    if ui.role in ("reader", "operator"):     # roles (user's split 2026-11-10): region + settings = configure
+        operate = ui.role == "operator"
+        for b in ("#btn-read", "#btn-live", "#btn-continuous", "#btn-reconnect"):
+            assert page.locator(b).is_visible() == operate, b + " vs role " + ui.role
+        for b in ("#btn-region", "#btn-settings"):
+            assert page.locator(b).is_hidden(), b + " must be hidden for " + ui.role
+        assert page.locator("#role").is_visible(), "role pill"
+        ui.shot("role")
+        tutorial(ui)
         return
 
     # read from the UI: codes in the result card, outlines on the image
@@ -51,13 +58,16 @@ def run(ui):
     page.locator("#result-badge.badge-ok").wait_for()
     n = page.locator("#codes li").count()
     assert n >= 1 and page.locator("#overlay polygon").count() == n, "one outline per code"
+    ui.shot("read")
+
+    # history: its own page (tab); a click on the older read shows it on the Reader page, then back to the newest
+    page.click('#tabs a[href="#history"]')
     page.locator("#history-body tr").nth(1).wait_for()
     page.locator("#history-body img.thumb[src]").nth(1).wait_for()
-    ui.shot("read")
-    ui.shot("history", page.locator(".history-card"))
-
-    # history: pin the older read, then back to the newest
+    assert page.locator('[data-page="reader"]').is_hidden() and page.inner_text("#history-tab-count") == "2"
+    ui.shot("history")
     page.locator("#history-body tr").nth(1).click()
+    page.locator('[data-page="reader"]:not([hidden])').wait_for()
     page.locator("#viewing-note:not([hidden])").wait_for()
     assert page.locator("#r-seq").text_content() == "#1"
     assert page.locator("#btn-download").is_disabled(), "PNG only for the newest read"
@@ -139,3 +149,49 @@ def run(ui):
     page.click("#btn-revert")
     page.click("#btn-close-settings")
     page.locator("#drawer.open").wait_for(state="detached")
+
+    # a true/false setting is a switch; help texts are info tooltips
+    page.click("#btn-settings")
+    page.locator("#drawer.open").wait_for()
+    switch = page.locator("#drawer [role=switch]").first
+    switch.wait_for()
+    assert page.locator("#drawer .field .help").count() == 0, "help texts belong into the info tooltips"
+    assert page.locator("#drawer .info").count() >= 1
+    page.click("#btn-close-settings")
+    page.locator("#drawer.open").wait_for(state="detached")
+
+    # light / dark (per browser), then the tutorial
+    page.click("#btn-theme")
+    page.locator("html[data-theme=dark]").wait_for(state="attached")
+    ui.shot("dark")
+    page.click("#btn-theme")
+    page.locator("html[data-theme=light]").wait_for(state="attached")
+    tutorial(ui)
+
+
+def about(ui):
+    """Help menu -> About: name, version, author, license, AI note; Esc closes it."""
+    page = ui.page
+    page.click("#btn-help")
+    page.click("#btn-about")
+    dialog = page.locator("#about-dialog[open]")
+    dialog.wait_for()
+    text = dialog.inner_text()
+    for part in ("Barcode Reader", "Version", "Author", "MIT", "AI"):
+        assert part in text, "About dialog without " + part
+    ui.shot("about", dialog)
+    page.keyboard.press("Escape")
+    dialog.wait_for(state="detached")
+
+
+def tutorial(ui):
+    page = ui.page
+    page.click("#btn-help")
+    page.click("#btn-tutorial")
+    page.locator("#tour:not([hidden])").wait_for()
+    ui.shot("tutorial")
+    for _ in range(20):
+        if page.locator("#tour").is_hidden():
+            break
+        page.click("#tour-next")
+    assert page.locator("#tour").is_hidden(), "the tutorial did not end"

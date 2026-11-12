@@ -12,7 +12,8 @@
 
 name: ctrlx-network-scanner
 title: Network Scanner
-version: 0.1.0
+version: 0.2.0
+license: MIT          # SPDX id - the same as APP_LICENSE in src/app/config.py and the LICENSE file (tests/test_about.py)
 summary: Scan the networks of the ctrlX CORE - hosts, ports, services, PDF reports
 description: |
   <!--

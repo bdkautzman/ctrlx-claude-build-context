@@ -12,7 +12,8 @@
 
 name: ctrlx-core-connector
 title: Core Connector
-version: 0.2.4
+version: 0.3.0
+license: MIT          # SPDX id - the same as APP_LICENSE in src/app/config.py and the LICENSE file (tests/test_about.py)
 summary: Connect to other ctrlX COREs - status, Data Layer browser, KVD nodes
 description: |
   <!--

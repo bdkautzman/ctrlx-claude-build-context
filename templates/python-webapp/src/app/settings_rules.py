@@ -18,6 +18,7 @@ Supported rule keys:
   maxItems/minItems: maximum/minimum array length
   itemPattern: arrays of strings - regular expression every element must match
   format:   "color" -> the web UI shows a color picker + hex field (with pattern HEX_COLOR: the COLOR rule below)
+  wide:     true -> the field takes the whole row of the settings form (long texts, long drop-down entries)
   unique:   field name that must be unique within an array of objects (also used to match
             elements when restoring secrets)
   Example with items, unique, secret, pattern, maxItems: apps/ctrlx-core-connector/src/app/settings_rules.py

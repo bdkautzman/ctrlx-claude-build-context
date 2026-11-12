@@ -39,8 +39,11 @@ ctrlX menu → **Barcode Reader**.
 | Camera card | model, serial, address, image format, exposure/gain, trigger mode, stream port/packets, counters, warnings; **Reconnect** |
 | Settings | drawer with all settings; **Discover** lists the GigE Vision cameras on the device's networks |
 
-Users with only `ctrlx-barcode-reader.web.all.r` see results, images and the history but no controls (a
-live picture makes the camera take pictures, so it needs `.rw` too).
+**Roles** (0.3.0; the kit's view < operate < configure): **view** (`ctrlx-barcode-reader.web.all.r`) sees results,
+images, the history and the camera state; **operate** (`.web.operate.x`) also uses *Read*, *Continuous*, *Live* (a live
+picture makes the camera take pictures) and *Reconnect*; **configure** (`.web.all.rw`, and the ctrlX admin) also changes
+the settings, the decode *Region* and runs camera *Discover*. The top bar has a light/dark button; the help menu has
+the tutorial and **About** (name, version, author, license, AI note).
 
 ## Data Layer (`ctrlx-barcode-reader/...`)
 

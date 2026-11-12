@@ -2,8 +2,28 @@
 
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 
-## Unreleased
+## 0.3.0
 
+- **Kit UI** (template 0.5.0, user's request 2026-11-10): the page runs on the kit's `www/kit.js` / `kit.css`
+  (API calls, roles, settings drawer, help menu + tutorial, About, light/dark) instead of its own copies; app code stays
+  in `app.js` / `style.css`.
+- Both pages (tiles and the Data Layer browser) on the kit; `common.js` keeps the app's names for the kit functions.
+- **Three roles** view / operate / configure (new scope `ctrlx-core-connector.web.operate.x`; manifest, menus and widget
+  list all three). View: tiles, widget, browsing and reading every core. Operate: **writing values** on a connected
+  core (`PUT .../values`). Configure: connections add/delete, **Key Value Database nodes** add/delete, settings
+  (user's split 2026-11-10). Before: `.r` / `.rw` ("Manage Core Connector").
+- The browser page reads its interval from `/status` `browserRefreshMs` (view users get no settings).
+- *Skip certificate check* in the add dialog is a switch.
+- **Settings drawer** (kit): help texts as ⓘ tooltips next to the labels, true/false as switches, *Save* stores and
+  closes the drawer.
+- **Styling** settings (new, as in the template): `style.accent`, `panel`, `text`, `panelDark`, `textDark`; page
+  background, lines and secondary text are derived. **Light / dark** button in the top bar (per browser).
+- **About** in the help menu: name, version, author, license (MIT), AI note (`GET /status` `about`; `config.py`
+  `APP_AUTHOR`, `APP_URL`, `APP_LICENSE`, `APP_AI_NOTE`; `snapcraft.yaml` `license: MIT`).
+- `/status` answers `role`, `canOperate`, `canConfigure`, `style`, `about`; `GET /values` lists the nodes for view
+  (`NodeSpec.view_role`: `settings/active` only for configure), `PUT /values/<node>` needs operate
+  (`NodeSpec.write_role`).
+- Tests: `tests/test_about.py`, the role split in `tests/test_web_and_nodes.py`, UI scenario as reader and operator.
 - **UI feedback overlay, dev only** (2026-11-09, from the kit template, user's request): `./run-local.sh` sets
   `APP_DEV_FEEDBACK` to the kit's `tools/ui-feedback/overlay.js`; the dev server (`src/app/dev_feedback.py`, hooks in
   `web_server.py` and `config.py`) adds it to the HTML pages and keeps the notes in `.dev/feedback.json`. Alt+click an

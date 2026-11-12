@@ -30,6 +30,8 @@ class NodeSpec:
     minimum: Optional[float] = None
     maximum: Optional[float] = None
     max_length: Optional[int] = None
+    view_role: str = "view"        # web API: lowest role that sees the node (settings/active: "configure")
+    write_role: str = "operate"    # web API: lowest role that may write it (writable nodes only)
     on_write: Optional[Callable[[Any], None]] = field(default=None, repr=False)
 
 
@@ -90,6 +92,10 @@ class NodeRegistry:
     def specs(self):
         return list(self._specs.values())
 
+    def spec(self, name):
+        """The NodeSpec of a node, or None."""
+        return self._specs.get(name)
+
     def address(self, name):
         return self.root + "/" + name
 
@@ -135,6 +141,8 @@ class NodeRegistry:
                 "writable": spec.writable,
                 "description": spec.description,
                 "unit": spec.unit,
+                "viewRole": spec.view_role,
+                "writeRole": spec.write_role,
             }
             for name, spec in self._specs.items()
         }
@@ -147,7 +155,7 @@ def build_node_specs(settings, version):
         NodeSpec("status/state", "string", "starting", description="Application state"),
         NodeSpec("status/heartbeat", "uint64", 0,
                  description="Counter incremented every general.pollIntervalMs"),
-        NodeSpec("settings/active", "string", "{}",
+        NodeSpec("settings/active", "string", "{}", view_role="configure",
                  description="Active settings as JSON, passwords masked (change via web UI or app data)"),
         NodeSpec("cores/configured", "uint64", len(settings.get("cores", [])) + 1,
                  description="Number of cores: this device + the configured connections"),

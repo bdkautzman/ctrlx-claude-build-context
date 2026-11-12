@@ -123,7 +123,8 @@ Open from the ctrlX sidebar or overview (**AMR Fleet View**).
 | **Lock to an AMR** | lock button on its tile, or double-click the AMR on the map (again: unlocks) | `Esc` unlocks |
 | Path of an AMR | path button on its tile (again: hides it); several at once | |
 | Overview | minimap (bottom right): click/drag to move the view | |
-| Help | `?` button (top right): the app's GitHub page, **Tutorial** | in the tutorial: `←` `→`, `Esc` |
+| Help | `?` button (top right): the app's GitHub page, **Tutorial**, **About** (name, version, author, license, AI note) | in the tutorial: `←` `→`, `Esc` |
+| Light / dark page | moon / sun button in the top bar (remembered per browser; the first time it follows the system) | |
 
 * **Lock (follow)**: the AMR stays in the centre and the map moves around it. With *Rotate map with AMR*
   (on by default) the map also turns, so the AMR always points up and appears completely stationary.
@@ -143,8 +144,14 @@ Open from the ctrlX sidebar or overview (**AMR Fleet View**).
   who may change them), help. The control of each step pulses while it is shown; the AMR steps use an example AMR that
   pulses on the map, and *Show me* does the step's action. Everything stays usable while it is open.
 * Labels, minimap and the AMR list can be switched off (remembered per browser).
-* **Read-only users** (scope `ctrlx-amr-fleet.web.all.r` only) see the map, the list and the details,
-  but no settings: no button, `#settings` does nothing, and the settings API answers 403.
+* **Roles** (0.6.0; the kit's view < operate < configure): **view** (`ctrlx-amr-fleet.web.all.r`) sees the map,
+  the list and the details; **operate** (`.web.operate.x`) may also write the app's writable Data Layer values
+  through the web API; **configure** (`.web.all.rw`, and the ctrlX admin) also changes the settings, uploads maps
+  and edits the AMR list. Without configure there is no Settings button, `#settings` does nothing, and the
+  settings, map and AMR-list APIs answer 403.
+* **Settings** open in a drawer from the right (*Settings* in the top bar); help texts are behind the ⓘ next to
+  each label, true/false settings are switches, *Save* stores and closes the drawer. The AMR list (per-AMR input
+  modes) is one line with *Edit…*, which opens a dialog to add, remove, upload or download ids.
 * Phone/HMI width (≤ 600 px): one-row top bar, smaller minimap, the list floats over the map.
 * AMR size on the map: `fleet.amrLengthM` × `fleet.amrWidthM`; zoomed out they keep their shape at a
   minimum length of 16 px.
@@ -167,6 +174,7 @@ Open from the ctrlX sidebar or overview (**AMR Fleet View**).
 | `simulation.enabled` | `false` | built-in demo fleet (no PLC needed) |
 | `simulation.amrCount` / `speedMps` | `4` / `0.8` | up to 200 AMRs (performance tests) |
 | `style.accent` / `panel` / `text` | `#007bc0` / `#ffffff` / `#1f2328` | base colors of the page; page background, lines and secondary text are derived (a dark palette works) |
+| `style.panelDark` / `textDark` | `#1c2128` / `#e6e8eb` | panels and text while the page is in dark mode (moon/sun button) |
 | `style.mapBackground` / `mapFloor` / `mapWalls` / `mapGrid` | `#dde2e8` / `#ffffff` / `#333d4a` / `#e9ecef` | map colors (walls are drawn into the tiles by the server) |
 | `style.staleAmr`, `style.amrColors` | `#9aa3ad`, 10 colors | AMRs without current data; the colors AMRs get (by id, the same in the widget) |
 
@@ -183,17 +191,18 @@ external writes; switching it off clears the fleet once.
 ## Web API (`/ctrlx-amr-fleet/api/v1`, token required)
 
 `GET` / `PUT /amr-list` (the AMR list; `PUT` with `{"ids": [...]}` or an uploaded file's `{"text": "..."}`,
-needs `.rw`) · `GET /maps` (map files for the drop-down: `maps` = name, source, size, modified; `active`,
-`maxBytes`, `canUpload`; needs `.rw`) · `PUT /maps/<name>[?replace=1]` (body = the map file, stored in the
+configure) · `GET /maps` (map files for the drop-down: `maps` = name, source, size, modified; `active`,
+`maxBytes`, `canUpload`; configure) · `PUT /maps/<name>[?replace=1]` (body = the map file, stored in the
 app data; 409 when it exists without `replace=1`, 413 above 64 MB, 400 for a name or content that is not a
-map; needs `.rw`) · `GET /fleet[?since=<revision>]` (AMRs + status; only the status when nothing changed since that
+map; configure) · `GET /fleet[?since=<revision>]` (AMRs + status; only the status when nothing changed since that
 revision) · `GET /fleet/path?id=<id>` (driven path of one AMR: `points` = `[x, y, age in s]`, oldest
 first; 404 for an unknown id) · `GET /view-config` (colors, units, AMR size, refresh, path history - all
 the view needs, also for read-only users) · `GET /map` (active map: file, source, error, cell size, extent, tile levels) ·
 `GET /map/tiles/<map id>/<level>/<x>/<y>.png[?color=rrggbb]` (tile; the map id is a content hash, so
-tiles are cacheable) · plus the template routes (`/status`, `/settings`, `/values`, app-data save/load).
-`GET /settings`, `/settings/meta` and `/values` need `ctrlx-amr-fleet.web.all.rw` (`/values` contains
-`settings/active`); everything else reads with `.r`. The Data Layer node `settings/active` itself is
+tiles are cacheable) · plus the template routes (`/status` with `role`, `canOperate`, `canConfigure`, `style`
+and `about`; `/settings`, `/values`, app-data save/load). The settings routes need configure
+(`ctrlx-amr-fleet.web.all.rw`); `GET /values` lists the nodes for view, without `settings/active` below
+configure; `PUT /values/<node>` needs operate; everything else reads with view (`.web.all.r`). The Data Layer node `settings/active` itself is
 governed by the Data Layer permissions of the ctrlX user, not by this app.
 
 ## Home screen widget
@@ -201,8 +210,7 @@ governed by the Data Layer permissions of the ctrlX user, not by this app.
 The app brings a widget for the ctrlX home screen. ctrlX OS puts it on the home screen of every user
 who may see it right after the install; otherwise **Home → edit (pencil) → add widget → "AMR Fleet"**
 (category AMR). It lists the AMRs with name, state and battery, shows whether the data is live, and *Open* starts
-the full view in a new tab. It needs `ctrlx-amr-fleet.web.all.r` or `.rw` (others don't see it in the
-catalog).
+the full view in a new tab. It needs one of the app's three scopes (others don't see it in the catalog).
 
 * Manifest `uiExtensions.dashboard`: `src` `/ctrlx-amr-fleet/widgets.js`, `tag`
   `ctrlx-amr-fleet-widget`, catalog image `/ctrlx-amr-fleet/widget.svg`, size 4×3 (3×2 … 8×8).
@@ -314,12 +322,13 @@ APP_DEV_HTTP_HOST=0.0.0.0 ./run-local.sh        # the same, reachable through th
 UI check in headless Chromium (one-time setup: `../../tools/setup-ui-test.sh`): `tests/ui_scenario.py`
 switches on the simulation, then checks and screenshots the detail tile, crosshair and lock (heading-up,
 drag ends it), the styling preview (Revert and closing drop it) and the widget on its own page. As a
-reader it checks that there are no settings (button, `#settings`, API 403). `--device` opens the
+reader and as operator it checks that there are no settings (button, `#settings`, API 403). `--device` opens the
 installed app through the reverse proxy and changes nothing there.
 
 ```bash
 python3 ../../tools/ui_check.py . --narrow          # admin; screenshots in .ui-check/ - look at them
-python3 ../../tools/ui_check.py . --role reader     # read-only user
+python3 ../../tools/ui_check.py . --role reader     # view user
+python3 ../../tools/ui_check.py . --role operator   # operate user
 python3 ../../tools/ui_check.py . --device          # the app on the default device of devices.toml
 ```
 

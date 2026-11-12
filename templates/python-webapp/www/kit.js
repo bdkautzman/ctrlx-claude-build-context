@@ -11,13 +11,21 @@
 //                                     visibility; returns the status for the app's own fields
 //   Kit.can("operate"|"configure")    the user's role allows it (from the last /status)
 //   [data-role="operate"|"configure"] elements only users with that role see (hidden for the others)
-//   Kit.setupSettings({onSaved})      settings drawer: form generated from /settings/meta (configure role), closes
-//                                     after a successful Save; a rule's
+//   Kit.setupSettings({onSaved, field}) settings drawer: form generated from /settings/meta (configure role), closes
+//                                     after a successful Save; field(path, rule, def, id) -> {node, input, wide} | null
+//                                     lets the app build its own control for a setting (input: getValue/setValue
+//                                     when the value isn't input.value; call .preview() of the result when it changes
+//                                     colors); afterBuild(container, meta), onLoaded(settings), beforeSave(settings)
+//                                     (async, throws = not saved), onRevert(): the app's own parts of the drawer
+//                                     (the result also has fill(values), meta, loaded); rule enumLabels = texts of an enum,
+//                                     wide: true = the whole row (long texts); a rule's
 //                                     "help" becomes an info tooltip next to the label, format "color" a color picker
 //   Kit.applyStyle(style)             page colors (settings "style": accent, panel, text, panelDark, textDark) - done
-//                                     by Kit.refreshStatus for every role (GET /status "style"); kit.css derives the rest
+//                                     by Kit.refreshStatus for every role (GET /status "style"); kit.css derives the rest;
+//                                     the event "kit:style" on document (detail = style) lets an app use its own colors
 //   Kit.theme / Kit.setTheme("light"|"dark")   light/dark page; the top bar button #btn-theme switches it. Each
-//                                     browser keeps its choice (localStorage); first visit: the OS/browser setting
+//                                     browser keeps its choice (localStorage); first visit: the OS/browser setting;
+//                                     event "kit:theme" on document (charts and canvas drawings redraw on it)
 //   <span class="info" tabindex="0" data-tip="..."> an info icon with a tooltip, e.g. next to a card title (kit.css)
 //   Kit.switchInput(value, {id, labels, onChange})   a switch: the kit's control for every true/false choice
 //                                     -> {node, button, value}; button has role="switch" + aria-checked
@@ -82,6 +90,7 @@ window.Kit = (function () {
     upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
     moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
+    refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   };
   (function addIconSymbols() {
@@ -121,6 +130,7 @@ window.Kit = (function () {
     for (const [key, name] of Object.entries(STYLE_VARS)) if (HEX.test(style[key] || "")) root.setProperty("--" + name, style[key]);
     if (HEX.test(style.accent || "")) root.setProperty("--accent-ink", inkFor(style.accent));
     if (!preview) store(STYLE_KEY, JSON.stringify(style));
+    document.dispatchEvent(new CustomEvent("kit:style", { detail: style }));   // the app's own colors (map, charts)
   }
   try { applyStyle(JSON.parse(stored(STYLE_KEY) || "null"), true); } catch (e) { /* nothing kept yet */ }
 
@@ -135,6 +145,7 @@ window.Kit = (function () {
       btn.title = name === "dark" ? "Switch to light mode" : "Switch to dark mode";
       btn.replaceChildren(icon(name === "dark" ? "sun" : "moon"));
     }
+    document.dispatchEvent(new CustomEvent("kit:theme", { detail: name }));   // charts/canvas: redraw in the new colors
   }
   setTheme(themeOf(), false);
   darkQuery.addEventListener("change", () => { if (!stored(THEME_KEY)) setTheme(themeOf(), false); });
@@ -150,7 +161,7 @@ window.Kit = (function () {
     function set(v) { button.setAttribute("aria-checked", String(!!v)); state.textContent = v ? onText : offText; }
     const get = () => button.getAttribute("aria-checked") === "true";
     button.addEventListener("click", () => { set(!get()); if (opts.onChange) opts.onChange(get()); });
-    button.setSwitch = set;                   // for code that holds only the button (the settings form)
+    button.setValue = set; button.getValue = get;   // for code that holds only the button (the settings form)
     set(value);
     return { node: el("span", { class: "ctl-row" }, button, state), button, get value() { return get(); }, set value(v) { set(v); } };
   }
@@ -355,12 +366,16 @@ window.Kit = (function () {
         const id = "f-" + full.replace(/\./g, "-");
         const info = rule.help ? infoIcon(id, rule.help) : null;
         let input, control = null;
-        if (rule.format === "color" && typeof def === "string") {
+        const own = opts.field ? opts.field(full, rule, def, id) : null;   // the app's own control
+        if (own) {
+          input = own.input; control = own.node;
+        } else if (rule.format === "color" && typeof def === "string") {
           const c = colorInput(id);
           input = c.text; control = c.node;
         } else if (Array.isArray(rule.enum)) {
           input = el("select", { id });
-          for (const opt of rule.enum) input.append(el("option", { value: String(opt), text: String(opt) }));
+          const labels = rule.enumLabels || {};       // what the list shows; the value is stored
+          for (const opt of rule.enum) input.append(el("option", { value: String(opt), text: labels[opt] || String(opt) }));
         } else if (typeof def === "boolean") {
           const sw = switchInput(false, { id });
           input = sw.button; control = sw.node;
@@ -374,10 +389,10 @@ window.Kit = (function () {
             autocomplete: rule.secret ? "new-password" : "off" });
         }
         input.dataset.path = full;
-        input.dataset.kind = Array.isArray(def) ? "array" : typeof def;
+        input.dataset.kind = input.dataset.kind || (Array.isArray(def) ? "array" : typeof def);
         if (info) input.setAttribute("aria-describedby", info.id);
         // the info icon outside the <label>: a click on it would move the focus into the input (and hide the tip)
-        const field = el("div", { class: "field" },
+        const field = el("div", { class: "field" + ((own && own.wide) || rule.wide ? " field-wide" : "") },
           el("div", { class: "field-label" }, el("label", { for: id, text: label }), info), control || input);
         container.append(field);
       }
@@ -392,7 +407,7 @@ window.Kit = (function () {
     function fillForm(values) {
       for (const input of inputs()) {
         const v = getAt(values, input.dataset.path);
-        if (input.setSwitch) input.setSwitch(!!v);
+        if (input.setValue) input.setValue(input.dataset.kind === "boolean" ? !!v : v);
         else if (input.dataset.kind === "array") input.value = JSON.stringify(v ?? []);
         else input.value = v ?? "";
         if (input.syncColor) input.syncColor();
@@ -403,7 +418,7 @@ window.Kit = (function () {
       const result = JSON.parse(JSON.stringify(loaded)); // keeps unknown and hidden keys
       for (const input of inputs()) {
         let v;
-        if (input.setSwitch) v = input.getAttribute("aria-checked") === "true";
+        if (input.getValue) v = input.getValue();
         else if (input.dataset.kind === "number") v = input.value === "" ? NaN : Number(input.value);
         else if (input.dataset.kind === "array") { try { v = JSON.parse(input.value || "[]"); } catch (e) { v = input.value; } }
         else v = input.value;
@@ -426,11 +441,13 @@ window.Kit = (function () {
           meta = await api("GET", "/settings/meta");
           $("settings-fields").replaceChildren();
           buildFields($("settings-fields"), meta.defaults, "");
+          if (opts.afterBuild) opts.afterBuild($("settings-fields"), meta);   // the app's own parts of the form
         }
         loaded = await api("GET", "/settings");
         fillForm(loaded);
         applyStyle(loaded.style, true);
         showErrors([]);
+        if (opts.onLoaded) await opts.onLoaded(loaded);
       } catch (e) {
         meta = null;
         $("settings-fields").replaceChildren(el("p", { class: "error", text: "Cannot load settings: " + e.message }));
@@ -441,6 +458,7 @@ window.Kit = (function () {
       if (!loaded) return;
       $("save-state").textContent = "Saving…";
       try {
+        if (opts.beforeSave) await opts.beforeSave(readForm());   // the app's own parts first; throws -> not saved
         loaded = await api("PUT", "/settings", readForm());
         fillForm(loaded);
         applyStyle(loaded.style);
@@ -488,6 +506,7 @@ window.Kit = (function () {
     $("settings-form").onsubmit = save;
     $("btn-revert").onclick = () => {
       if (loaded) { fillForm(loaded); applyStyle(loaded.style, true); }
+      if (opts.onRevert) opts.onRevert();
       showErrors([]); $("save-state").textContent = "";
     };
     $("btn-defaults").onclick = resetDefaults;
@@ -497,7 +516,8 @@ window.Kit = (function () {
     document.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape" && isOpen() && !document.querySelector("dialog[open]")) close();
     });
-    settings = { open, close, isOpen, reload: load };
+    settings = { open, close, isOpen, reload: load, preview, readForm: () => (loaded ? readForm() : null),
+      fill: (values) => fillForm(values), get meta() { return meta; }, get loaded() { return loaded; } };
     return settings;
   }
 
@@ -517,6 +537,8 @@ window.Kit = (function () {
       document.body.append(aboutDlg);
       $("about-close").onclick = () => aboutDlg.close();
       aboutDlg.addEventListener("click", (ev) => { if (ev.target === aboutDlg) aboutDlg.close(); });   // backdrop
+      // Esc closes it here, before a page's own key handler (e.g. a map's) can cancel the key
+      aboutDlg.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); aboutDlg.close(); } });
     }
     const author = a.url ? el("a", { href: a.url, target: "_blank", rel: "noopener noreferrer", text: a.author || a.url })
       : document.createTextNode(a.author || "–");
@@ -652,9 +674,13 @@ window.Kit = (function () {
     return { start, end, refresh: () => { if (tour) render(); }, handedOver };
   }
 
+  // About works on every page with #btn-about, also one with its own help menu (setupHelp wires it as well)
+  if ($("btn-about")) $("btn-about").onclick = showAbout;
+
   return {
-    PREFIX, API, token, $, el, icon, showBanner, fmtDuration, humanize, ready, poll,
+    PREFIX, API, token, $, el, icon, showBanner, fmtDuration, humanize, ready, poll, showAbout,
     api, download, upload, refreshStatus, can, get role() { return role; }, setupSettings, setupTabs, setupHelp,
     applyStyle, setTheme, get theme() { return document.documentElement.dataset.theme; }, switchInput,
+    get status() { return lastStatus; },
   };
 })();

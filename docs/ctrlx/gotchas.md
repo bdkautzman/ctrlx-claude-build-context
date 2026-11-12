@@ -594,6 +594,11 @@ App `ctrlx-core-connector` 0.2.0 (formerly `ctrlx-core-monitor`: Data Layer brow
     Layer root is gone, but **its folder in the active configuration (`<snap>/settings.json`) stays** - incl.
     plain-text passwords - and is saved with every configuration. Delete it in Settings → Manage app data, or
     `tools/ctrlx.py api DELETE /solutions/webdav/appdata/<snap>/` (204; the folder with its files).
+    Seen again 2026-11-12 on the X3, whose apps had been uninstalled since 2026-11-05: a fresh install **loaded the
+    old `settings.json` at once** (Barcode Reader on its simulated camera, Core Connector with its old connection) -
+    "installed fresh" does not mean default settings. What the snap keeps itself (`$SNAP_COMMON` / `$SNAP_DATA`, e.g.
+    the Network Scanner's scan history) was gone. The scopes granted to users stayed: the test users still had
+    `ctrlx-acme-template`'s three scopes when the template was installed again.
 86. **A ctrlX OS 3.6 CORE without `system/info/hostname`, `uptime`, `architecture` and `system/apps`** (seen
     2026-10-31 through a remote from the COREvirtual, 192.168.1.10): its `system/info` held only `ledDevice` and
     `setup-in-progress` (= false); `framework/metrics/system/*` and `scheduler/admin/state` were there. #44 saw

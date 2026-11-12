@@ -265,16 +265,16 @@ def _make_handler(store, datalayer, monitor, browser, kvd):
         # -- API ----------------------------------------------------------
         def _api(self, method, route):
             if route == "/appdata/save" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_save(self._read_body(), store)
                 return self._send_json(status, body)
             if route == "/appdata/load" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_load(self._read_body(), store)
                 return self._send_json(status, body)
 
             if route == "/status" and method == "GET":
-                scopes = auth.require(self.headers, write=False)
+                scopes = auth.require(self.headers, auth.VIEW)
                 return self._send_json(200, {
                     "app": config.SNAP_NAME,
                     "title": config.APP_TITLE,
@@ -282,14 +282,21 @@ def _make_handler(store, datalayer, monitor, browser, kvd):
                     "uptimeSeconds": int(time.monotonic() - _START_TIME),
                     "settings": store.status(),
                     "datalayer": datalayer.status(),
-                    "canWrite": auth.can_write(scopes),
+                    "user": auth.user_name(self.headers),
+                    "role": auth.role_of(scopes),           # view | operate | configure
+                    "canOperate": auth.allows(scopes, auth.OPERATE),
+                    "canConfigure": auth.allows(scopes, auth.CONFIGURE),
+                    "browserRefreshMs": store.get()["browser"]["refreshMs"],   # browse.html (settings: configure)
+                    "style": store.get().get("style"),      # page colors for every role (kit.js Kit.applyStyle)
+                    "about": {"author": config.APP_AUTHOR, "url": config.APP_URL,       # help menu -> About
+                              "license": config.APP_LICENSE, "ai": config.APP_AI_NOTE},
                 })
 
             if route == "/settings" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, store.get_redacted())
             if route == "/settings" and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 try:
                     store.update(self._read_json())
                 except SettingsError as exc:
@@ -297,20 +304,30 @@ def _make_handler(store, datalayer, monitor, browser, kvd):
                 log.info("Settings changed via web UI")
                 return self._send_json(200, store.get_redacted())
             if route == "/settings/meta" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, {"defaults": store.defaults(), "rules": store.rules(),
                                                  "types": store.types()})
             if route == "/settings/reset" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 store.reset_to_defaults(persist=True)
                 return self._send_json(200, store.get_redacted())
 
             if route == "/values" and method == "GET":
-                auth.require(self.headers, write=False)
-                return self._send_json(200, datalayer.registry.snapshot())
+                scopes = auth.require(self.headers, auth.VIEW)
+                values = {}
+                for name, entry in datalayer.registry.snapshot().items():
+                    if auth.allows(scopes, entry.pop("viewRole")):
+                        write_role = entry.pop("writeRole")
+                        entry["canWrite"] = entry["writable"] and auth.allows(scopes, write_role)
+                        values[name] = entry
+                return self._send_json(200, values)
             if route.startswith("/values/") and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.VIEW)
                 name = route[len("/values/"):]
+                spec = datalayer.registry.spec(name)
+                if spec is None:
+                    return self._problem(404, "Write rejected", "unknown node " + name)
+                auth.require(self.headers, spec.write_role)
                 body = self._read_json()
                 if not isinstance(body, dict) or "value" not in body:
                     return self._problem(400, "Body must be {\"value\": ...}")
@@ -322,15 +339,15 @@ def _make_handler(store, datalayer, monitor, browser, kvd):
                 return self._send_json(200, {"name": name, "value": value})
 
             if route == "/cores" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 return self._send_json(200, [monitor.local_status()] + monitor.snapshot())
             if route == "/cores" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = add_core(store, self._read_json())
                 return self._send_json(status, body)
             parts = route.strip("/").split("/")
             if len(parts) == 2 and parts[0] == "cores" and method == "DELETE":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 if parts[1] == config.LOCAL_ID:
                     return self._problem(400, "This device can't be removed")
                 status, body = delete_core(store, parts[1])
@@ -342,8 +359,14 @@ def _make_handler(store, datalayer, monitor, browser, kvd):
 
         def _core_api(self, method, core_id, rest):
             """Data Layer browser and KVD editor of one core."""
-            write = method in ("PUT", "DELETE") or (method == "POST" and rest != "values")
-            auth.require(self.headers, write=write)
+            # roles (user's split 2026-11-10): writing a value on a core = operate, KVD node add/delete = configure
+            if method == "PUT":
+                needed = auth.OPERATE
+            elif method == "DELETE" or (method == "POST" and rest != "values"):
+                needed = auth.CONFIGURE
+            else:
+                needed = auth.VIEW
+            auth.require(self.headers, needed)
             if core_id == config.LOCAL_ID:
                 base, core = "", None
             else:

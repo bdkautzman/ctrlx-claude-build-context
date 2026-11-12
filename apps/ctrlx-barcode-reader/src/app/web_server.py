@@ -274,16 +274,16 @@ def _make_handler(store, datalayer, reader):
         # -- API ----------------------------------------------------------
         def _api(self, method, route):
             if route == "/appdata/save" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_save(self._read_body(), store)
                 return self._send_json(status, body)
             if route == "/appdata/load" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 status, body = appdata_commands.handle_load(self._read_body(), store)
                 return self._send_json(status, body)
 
             if route == "/status" and method == "GET":
-                scopes = auth.require(self.headers, write=False)
+                scopes = auth.require(self.headers, auth.VIEW)
                 return self._send_json(200, {
                     "app": config.SNAP_NAME,
                     "title": config.APP_TITLE,
@@ -291,15 +291,21 @@ def _make_handler(store, datalayer, reader):
                     "uptimeSeconds": int(time.monotonic() - _START_TIME),
                     "settings": store.status(),
                     "datalayer": datalayer.status(),
-                    "canWrite": auth.can_write(scopes),
+                    "user": auth.user_name(self.headers),
+                    "role": auth.role_of(scopes),           # view | operate | configure
+                    "canOperate": auth.allows(scopes, auth.OPERATE),
+                    "canConfigure": auth.allows(scopes, auth.CONFIGURE),
+                    "style": store.get().get("style"),      # page colors for every role (kit.js Kit.applyStyle)
+                    "about": {"author": config.APP_AUTHOR, "url": config.APP_URL,       # help menu -> About
+                              "license": config.APP_LICENSE, "ai": config.APP_AI_NOTE},
                     "libraries": library_versions(),
                 })
 
             if route == "/settings" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, store.get_redacted())
             if route == "/settings" and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 try:
                     store.update(self._read_json())
                 except SettingsError as exc:
@@ -307,20 +313,30 @@ def _make_handler(store, datalayer, reader):
                 log.info("Settings changed via web UI")
                 return self._send_json(200, store.get_redacted())
             if route == "/settings/meta" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.CONFIGURE)
                 return self._send_json(200, {"defaults": store.defaults(), "rules": store.rules(),
                                                  "types": store.types()})
             if route == "/settings/reset" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 store.reset_to_defaults(persist=True)
                 return self._send_json(200, store.get_redacted())
 
             if route == "/values" and method == "GET":
-                auth.require(self.headers, write=False)
-                return self._send_json(200, datalayer.registry.snapshot())
+                scopes = auth.require(self.headers, auth.VIEW)
+                values = {}
+                for name, entry in datalayer.registry.snapshot().items():
+                    if auth.allows(scopes, entry.pop("viewRole")):
+                        write_role = entry.pop("writeRole")
+                        entry["canWrite"] = entry["writable"] and auth.allows(scopes, write_role)
+                        values[name] = entry
+                return self._send_json(200, values)
             if route.startswith("/values/") and method == "PUT":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.VIEW)
                 name = route[len("/values/"):]
+                spec = datalayer.registry.spec(name)
+                if spec is None:
+                    return self._problem(404, "Write rejected", "unknown node " + name)
+                auth.require(self.headers, spec.write_role)
                 body = self._read_json()
                 if not isinstance(body, dict) or "value" not in body:
                     return self._problem(400, "Body must be {\"value\": ...}")
@@ -338,11 +354,14 @@ def _make_handler(store, datalayer, reader):
         def _reader_api(self, method, route):
             """Barcode reader routes -> True if handled."""
             if route == "/reader" and method == "GET":
-                auth.require(self.headers, write=False)
-                self._send_json(200, reader.status())
+                auth.require(self.headers, auth.VIEW)
+                body = reader.status()
+                s = store.get()       # what the page needs from the settings (they are configure-only)
+                body["view"] = {"roi": s["decode"]["roi"], "liveIntervalMs": s["live"]["intervalMs"]}
+                self._send_json(200, body)
                 return True
             if route == "/read" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.OPERATE)
                 body = self._read_json() or {}
                 try:
                     req = reader.request_read("ui")
@@ -359,7 +378,7 @@ def _make_handler(store, datalayer, reader):
                 self._send_json(200, req.result)
                 return True
             if route == "/continuous" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.OPERATE)
                 body = self._read_json()
                 if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):
                     self._problem(400, "Body must be {\"enabled\": true|false}")
@@ -368,7 +387,7 @@ def _make_handler(store, datalayer, reader):
                 self._send_json(200, {"continuous": body["enabled"]})
                 return True
             if route == "/live" and method == "GET":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.OPERATE)
                 live = reader.touch_live()
                 after = self._query().get("after", "0")
                 if live is None or (after.isdigit() and live["seq"] <= int(after)):
@@ -382,12 +401,12 @@ def _make_handler(store, datalayer, reader):
                     "X-Image-X": str(live["origin"][0]), "X-Image-Y": str(live["origin"][1])})
                 return True
             if route == "/history" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 self._send_json(200, reader.history())
                 return True
             m = _IMAGE_ROUTE.fullmatch(route)
             if m and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 seq, kind = int(m.group(1)), m.group(2)
                 data = reader.image(seq, kind)
                 if data is None:
@@ -401,7 +420,7 @@ def _make_handler(store, datalayer, reader):
                     self._send_bytes(data, "image/jpeg")
                 return True
             if route == "/cameras/discover" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.CONFIGURE)
                 try:
                     found = reader.discover()
                 except Exception as exc:  # noqa: BLE001 - shown in the UI
@@ -410,17 +429,17 @@ def _make_handler(store, datalayer, reader):
                 self._send_json(200, found)
                 return True
             if route == "/camera/reconnect" and method == "POST":
-                auth.require(self.headers, write=True)
+                auth.require(self.headers, auth.OPERATE)
                 reader.reconnect()
                 self._send_json(202, {"reconnecting": True})
                 return True
             if route == "/media" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 media, error = storage.list_media(config.MEDIA_ROOT, config.MEDIA_REQUIRE_MOUNT)
                 self._send_json(200, {"root": config.MEDIA_ROOT, "media": media, "error": error})
                 return True
             if route == "/formats" and method == "GET":
-                auth.require(self.headers, write=False)
+                auth.require(self.headers, auth.VIEW)
                 self._send_json(200, [{"name": n, "label": v[1], "kind": v[2]} for n, v in decoder.FORMATS.items()])
                 return True
             return False

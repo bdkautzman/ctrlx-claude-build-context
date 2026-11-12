@@ -18,7 +18,7 @@ APP_TITLE = "Template App"
 APP_AUTHOR = "ACME Automation"
 APP_URL = "https://example.com"
 APP_LICENSE = "MIT"                       # SPDX identifier; the license text is in LICENSE
-APP_AI_NOTE = "This app was created with the help of AI (Claude Code by Anthropic)."
+APP_AI_NOTE = "This app was created with the help of AI."
 
 # URL prefix the reverse proxy forwards to us (package-manifest services.proxyMapping[].url)
 URL_PREFIX = "/" + SNAP_NAME

@@ -13,6 +13,7 @@ Supported rule keys:
   label:    human readable label for the web UI (optional)
   help:     help text for the web UI (optional)
   hidden:   true -> not shown in the web UI (value is preserved)
+  format:   "color" -> the web UI shows a color picker + hex field (pattern HEX_COLOR: the COLOR rule)
   items:    for arrays of objects: {"template": {...}, "rules": {field: rule}} - every element
             is normalized against the template (types, missing keys) and checked with the rules
   maxItems/minItems: maximum/minimum array length
@@ -57,6 +58,9 @@ LIST_ENTRY_RULES = {
     "note": {"maxLength": 120},
 }
 
+HEX_COLOR = r"#[0-9a-fA-F]{6}"
+COLOR = {"pattern": HEX_COLOR, "format": "color"}
+
 RULES = {
     # Format version of settings.json. Increase it (and migrate in settings_store) when you make
     # an incompatible change. Hidden in the UI.
@@ -78,8 +82,11 @@ RULES = {
         "help": "A scan whose targets cover more addresses is refused before it starts.",
     },
     "history.maxScans": {"label": "Keep at most [scans]", "min": 1, "max": 1000},
-    "history.maxMegabytes": {"label": "Keep at most [MB]", "min": 1, "max": 200},
+    "history.maxMegabytes": {"label": "Keep at most [MB]", "min": 1, "max": 200,
+                             "help": "History is kept on the device (not in app data); oldest scans are deleted first."},
+    "lists": {"hidden": True},      # edited on the page's Whitelist / Blacklist tab, not in the settings drawer
     "profiles": {
+        "hidden": True,             # edited on the page's Profiles tab, not in the settings drawer
         "label": "Scan profiles",
         "minItems": 1,
         "maxItems": 20,
@@ -96,6 +103,16 @@ RULES = {
         "maxItems": 500,
         "items": {"template": LIST_ENTRY_TEMPLATE, "rules": LIST_ENTRY_RULES},
     },
+    # Page colors for every user (GET /status "style" -> kit.js Kit.applyStyle); background, lines and secondary
+    # text are derived (kit.css). Light or dark: each browser's choice (top bar button).
+    "style": {"label": "Styling"},
+    "style.accent": dict(COLOR, label="Accent", help="Buttons, the brand mark, focus rings - in light and dark mode."),
+    "style.panel": dict(COLOR, label="Panels", help="Top bar, cards, settings. Page background, lines and secondary "
+                                                     "text are derived from Panels and Text."),
+    "style.text": dict(COLOR, label="Text"),
+    "style.panelDark": dict(COLOR, label="Panels (dark mode)",
+                            help="Panels while the page is in dark mode (the moon/sun button in the top bar)."),
+    "style.textDark": dict(COLOR, label="Text (dark mode)"),
 }
 
 

@@ -29,25 +29,53 @@ def make_token(scopes, exp_offset=3600):
     return "{}.{}.sig".format(b64({"alg": "none"}), b64({"scope": scopes, "exp": time.time() + exp_offset}))
 
 
-class AuthTest(unittest.TestCase):
-    def test_scopes(self):
-        headers = {"Authorization": "Bearer " + make_token([config.SCOPE_READ])}
-        self.assertTrue(auth.can_read(auth.scopes_from_headers(headers)))
-        self.assertFalse(auth.can_write(auth.scopes_from_headers(headers)))
-        with self.assertRaises(auth.AuthError) as ctx:
-            auth.require(headers, write=True)
-        self.assertEqual(ctx.exception.status, 403)
+def bearer(scopes):
+    return {"Authorization": "Bearer " + make_token(list(scopes))}
 
-    def test_admin_scope(self):
-        headers = {"Authorization": "Bearer " + make_token([config.SCOPE_ADMIN])}
-        self.assertTrue(auth.can_write(auth.require(headers, write=True)))
+
+class AuthTest(unittest.TestCase):
+    def test_roles(self):
+        """view < operate < configure; each scope gives its role and the ones below, nothing above."""
+        cases = [((config.SCOPE_VIEW,), auth.VIEW), ((config.SCOPE_OPERATE,), auth.OPERATE),
+                 ((config.SCOPE_CONFIGURE,), auth.CONFIGURE), ((config.SCOPE_ADMIN,), auth.CONFIGURE),
+                 ((config.SCOPE_VIEW, config.SCOPE_OPERATE), auth.OPERATE), (("other.app.r",), None)]
+        for scopes, role in cases:
+            self.assertEqual(auth.role_of(set(scopes)), role, scopes)
+            for needed in auth.ROLES:
+                allowed = role is not None and auth.ROLES.index(role) >= auth.ROLES.index(needed)
+                self.assertEqual(auth.allows(set(scopes), needed), allowed, (scopes, needed))
+                if allowed:
+                    auth.require(bearer(scopes), needed)
+                else:
+                    with self.assertRaises(auth.AuthError) as ctx:
+                        auth.require(bearer(scopes), needed)
+                    self.assertEqual(ctx.exception.status, 403)
+
+    def test_role_names_match_the_manifest(self):
+        with open(os.path.join(HERE, "..", "configs", "package-assets",
+                               config.SNAP_NAME + ".package-manifest.json"), encoding="utf-8") as f:
+            manifest = json.load(f)
+        declared = {s["identifier"] for d in manifest["scopes-declaration"] for s in d["scopes"]}
+        self.assertEqual(declared, set(auth.ROLE_SCOPES.values()))
+        for menu in manifest["menus"].values():       # every role must see the menu entries
+            for entry in menu:
+                self.assertEqual(set(entry["permissions"]), declared, entry["id"])
+
+    def test_unknown_role_is_a_bug(self):
+        with self.assertRaises(RuntimeError):
+            auth.require(bearer([config.SCOPE_ADMIN]), True)    # the old require(headers, write=True)
 
     def test_missing_expired_malformed(self):
         for headers in ({}, {"Authorization": "Bearer x.y"},
                         {"Authorization": "Bearer " + make_token([config.SCOPE_ADMIN], -10)}):
             with self.assertRaises(auth.AuthError) as ctx:
-                auth.require(headers, write=False)
+                auth.require(headers)
             self.assertEqual(ctx.exception.status, 401)
+
+    def test_user_name(self):
+        token = base64.urlsafe_b64encode(json.dumps({"name": "anna", "scope": []}).encode()).decode().rstrip("=")
+        self.assertEqual(auth.user_name({"Authorization": "Bearer a." + token + ".s"}), "anna")
+        self.assertEqual(auth.user_name({}), "")
 
 
 class NodeRegistryTest(unittest.TestCase):
@@ -113,7 +141,7 @@ class WebApiTest(unittest.TestCase):
         config.DEV_HTTP_PORT = cls._port
         cls.tmp.cleanup()
 
-    def req(self, method, path, body=None, scopes=(config.SCOPE_WRITE,)):
+    def req(self, method, path, body=None, scopes=(config.SCOPE_CONFIGURE,)):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         headers = {"Authorization": "Bearer " + make_token(list(scopes))} if scopes is not None else {}
         data = json.dumps(body) if body is not None else None
@@ -122,6 +150,19 @@ class WebApiTest(unittest.TestCase):
         raw = res.read()
         conn.close()
         return res.status, (json.loads(raw) if raw and res.getheader("Content-Type", "").startswith("application/json") else raw)
+
+
+    def test_role_split(self):
+        """The user's split 2026-11-10: a route refuses (403) the role just below the one it needs."""
+        below = {auth.OPERATE: (config.SCOPE_VIEW,), auth.CONFIGURE: (config.SCOPE_OPERATE,)}
+        routes = [("PUT", "/cores/_local/node?path=x", {"value": 1}, auth.OPERATE),
+              ("POST", "/cores", {}, auth.CONFIGURE), ("DELETE", "/cores/x", None, auth.CONFIGURE),
+              ("POST", "/cores/_local/kvd/nodes", {}, auth.CONFIGURE),
+              ("DELETE", "/cores/_local/kvd/nodes?address=x", None, auth.CONFIGURE),
+              ("PUT", "/settings", {}, auth.CONFIGURE)]
+        for method, path, body, needed in routes:
+            res = self.req(method, config.API_PREFIX + path, body, scopes=below[needed])
+            self.assertEqual(res[0], 403, (method, path, needed))
 
     def test_static_index_without_token(self):
         status, body = self.req("GET", config.URL_PREFIX + "/", scopes=None)
@@ -138,7 +179,7 @@ class WebApiTest(unittest.TestCase):
 
     def test_read_only_user_cannot_write(self):
         status, _ = self.req("PUT", config.API_PREFIX + "/settings", {"general": {"logLevel": "DEBUG"}},
-                             scopes=(config.SCOPE_READ,))
+                             scopes=(config.SCOPE_VIEW,))
         self.assertEqual(status, 403)
 
     def test_settings_roundtrip(self):
@@ -151,7 +192,7 @@ class WebApiTest(unittest.TestCase):
         self.assertTrue(body["errors"])
 
     def test_values(self):
-        status, body = self.req("GET", config.API_PREFIX + "/values", scopes=(config.SCOPE_READ,))
+        status, body = self.req("GET", config.API_PREFIX + "/values", scopes=(config.SCOPE_VIEW,))
         self.assertEqual(status, 200)
         self.assertIn("cores/summary", body)
         status, _ = self.req("PUT", config.API_PREFIX + "/values/status/heartbeat", {"value": 1})
@@ -161,7 +202,7 @@ class WebApiTest(unittest.TestCase):
         status, _ = self.req("POST", config.API_PREFIX + "/appdata/save", {"phase": "save", "id": "t"})
         self.assertEqual(status, 204)
         status, _ = self.req("POST", config.API_PREFIX + "/appdata/load", {"phase": "query", "id": "t"},
-                             scopes=(config.SCOPE_READ,))
+                             scopes=(config.SCOPE_VIEW,))
         self.assertEqual(status, 403)
         status, _ = self.req("POST", config.API_PREFIX + "/appdata/load", {"phase": "abort", "id": "t"})
         self.assertEqual(status, 204)
@@ -174,7 +215,7 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual(body["password"], "********")
         status, body = self.req("POST", config.API_PREFIX + "/cores", core)
         self.assertEqual(status, 409)
-        status, cores = self.req("GET", config.API_PREFIX + "/cores", scopes=(config.SCOPE_READ,))
+        status, cores = self.req("GET", config.API_PREFIX + "/cores", scopes=(config.SCOPE_VIEW,))
         self.assertEqual([c["name"] for c in cores], [config.LOCAL_ID, "web-1"])   # this device first
         self.assertTrue(cores[0]["local"])
         self.assertEqual(cores[1]["remote"], "devices/remotes/cm-web-1")
@@ -244,9 +285,9 @@ class WebApiTest(unittest.TestCase):
         self.assertTrue(any(e.startswith("password:") for e in body["errors"]))
         self.assertEqual(self.store.get()["cores"], [])
         good = {"name": "ro-test", "host": "10.0.0.1", "user": "u", "password": "p"}
-        status, _ = self.req("POST", config.API_PREFIX + "/cores", good, scopes=(config.SCOPE_READ,))
+        status, _ = self.req("POST", config.API_PREFIX + "/cores", good, scopes=(config.SCOPE_VIEW,))
         self.assertEqual(status, 403)
-        status, _ = self.req("DELETE", config.API_PREFIX + "/cores/x", scopes=(config.SCOPE_READ,))
+        status, _ = self.req("DELETE", config.API_PREFIX + "/cores/x", scopes=(config.SCOPE_VIEW,))
         self.assertEqual(status, 403)
 
     def test_this_device_cannot_be_removed(self):
@@ -255,16 +296,16 @@ class WebApiTest(unittest.TestCase):
 
     def test_browser_endpoints(self):
         base = config.API_PREFIX + "/cores/" + config.LOCAL_ID
-        status, body = self.req("GET", base + "/children?path=", scopes=(config.SCOPE_READ,))
+        status, body = self.req("GET", base + "/children?path=", scopes=(config.SCOPE_VIEW,))
         self.assertEqual(status, 200, body)
         self.assertEqual([c["name"] for c in body["children"]], ["kvd", "line", "plant"])
-        status, body = self.req("GET", base + "/children?path=plant", scopes=(config.SCOPE_READ,))
+        status, body = self.req("GET", base + "/children?path=plant", scopes=(config.SCOPE_VIEW,))
         self.assertEqual([(c["name"], c["value"]) for c in body["children"]], [("speed", 1.5), ("temp", 20.0)])
-        status, body = self.req("GET", base + "/node?path=plant%2Fspeed", scopes=(config.SCOPE_READ,))
+        status, body = self.req("GET", base + "/node?path=plant%2Fspeed", scopes=(config.SCOPE_VIEW,))
         self.assertEqual((status, body["value"], body["metadata"]["operations"]["write"]), (200, 1.5, True))
-        status, body = self.req("POST", base + "/values", {"paths": ["plant/temp"]}, scopes=(config.SCOPE_READ,))
+        status, body = self.req("POST", base + "/values", {"paths": ["plant/temp"]}, scopes=(config.SCOPE_VIEW,))
         self.assertEqual((status, body[0]["value"]), (200, 20.0))   # a read, allowed for readers
-        status, _ = self.req("PUT", base + "/node?path=plant/speed", {"value": "2.5"}, scopes=(config.SCOPE_READ,))
+        status, _ = self.req("PUT", base + "/node?path=plant/speed", {"value": "2.5"}, scopes=(config.SCOPE_VIEW,))
         self.assertEqual(status, 403)
         status, body = self.req("PUT", base + "/node?path=plant/speed", {"value": "2.5"})
         self.assertEqual((status, body["value"]), (200, 2.5))
@@ -287,10 +328,10 @@ class WebApiTest(unittest.TestCase):
 
     def test_kvd_endpoints(self):
         base = config.API_PREFIX + "/cores/" + config.LOCAL_ID
-        status, body = self.req("GET", base + "/kvd", scopes=(config.SCOPE_READ,))
+        status, body = self.req("GET", base + "/kvd", scopes=(config.SCOPE_VIEW,))
         self.assertEqual((status, body["available"], body["nodes"]), (200, True, ["line/count"]))
         node = {"address": "line/setpoint", "nodeClass": "Variable", "type": "int16", "value": "-3", "unit": "mm"}
-        status, _ = self.req("POST", base + "/kvd/nodes", node, scopes=(config.SCOPE_READ,))
+        status, _ = self.req("POST", base + "/kvd/nodes", node, scopes=(config.SCOPE_VIEW,))
         self.assertEqual(status, 403)
         status, body = self.req("POST", base + "/kvd/nodes", dict(node, value="x"))
         self.assertEqual((status, body["errors"][0].split(":")[0]), (400, "value"))
@@ -300,7 +341,7 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual([c["name"] for c in body["children"]], ["count", "setpoint"])
         status, body = self.req("POST", base + "/kvd/nodes", node)
         self.assertEqual(status, 409)
-        status, _ = self.req("DELETE", base + "/kvd/nodes?address=line/setpoint", scopes=(config.SCOPE_READ,))
+        status, _ = self.req("DELETE", base + "/kvd/nodes?address=line/setpoint", scopes=(config.SCOPE_VIEW,))
         self.assertEqual(status, 403)
         status, body = self.req("DELETE", base + "/kvd/nodes?address=line%2Fsetpoint")
         self.assertEqual((status, body["gone"]), (200, True))

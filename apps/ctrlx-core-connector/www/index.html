@@ -5,21 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Core Connector</title>
   <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="kit.css">
   <link rel="stylesheet" href="style.css">
   <link rel="icon" href="data:,">
 </head>
 <!-- data-ui-ready: app.js sets "true" when the cores are shown; tools/ui_check.py waits for it -->
 <body data-ui-ready="false">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
-    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
-    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
     <symbol id="i-tree" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="10" width="7" height="5" rx="1"/><rect x="14" y="17" width="7" height="5" rx="1"/><path d="M6.5 8v11.5H14M6.5 12.5H14"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
-    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><path d="M12 17.3h.01"/></symbol>
-    <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z"/></symbol>
-    <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
-    <symbol id="i-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
   </svg>
 
   <header class="topbar">
@@ -29,10 +23,14 @@
       <span id="app-version" class="muted"></span>
     </div>
     <div class="topbar-right">
+      <!-- only shown to users who may not do everything ("View only", "Operator") -->
+      <span id="role" class="pill pill-role" hidden></span>
       <span id="conn" class="pill pill-unknown" title="Data Layer connection of this app">Data Layer: …</span>
       <!-- hidden until /status says the user may change settings (read-only users never see it) -->
-      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" hidden title="Settings"
+      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" data-role="configure" hidden title="Settings"
               aria-label="Settings" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-sliders"/></svg><span class="btn-label">Settings</span></button>
+      <button type="button" id="btn-theme" class="btn btn-small btn-theme" title="Switch to dark mode"
+              aria-label="Dark mode" aria-pressed="false"><svg class="ic"><use href="#i-moon"/></svg></button>
       <div class="menu-wrap">
         <button type="button" id="btn-help" class="btn btn-small btn-help" title="Help" aria-label="Help"
                 aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu"><svg class="ic"><use href="#i-help"/></svg></button>
@@ -40,6 +38,7 @@
           <a role="menuitem" id="help-github" href="https://github.com/bdkautzman/ctrlx-claude-build-context/tree/main/apps/ctrlx-core-connector"
              target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-external"/></svg>App page on GitHub</a>
           <button type="button" role="menuitem" id="btn-tutorial"><svg class="ic"><use href="#i-play"/></svg>Tutorial</button>
+          <button type="button" role="menuitem" id="btn-about"><svg class="ic"><use href="#i-info"/></svg>About</button>
         </div>
       </div>
     </div>
@@ -54,9 +53,8 @@
         <h2 id="cores-h">Cores <span id="cores-count" class="muted"></span>
           <span class="info" tabindex="0" role="img" aria-label="About connections"
                 data-tip="Connections are ctrlX Data Layer remote connections (devices/remotes/cm-<name>) and are stored in the app data of this device."></span></h2>
-        <button type="button" id="btn-add" class="btn btn-primary" title="Add a connection to another ctrlX CORE">+ Add core</button>
+        <button type="button" id="btn-add" class="btn btn-primary" data-role="configure" hidden title="Add a connection to another ctrlX CORE">+ Add core</button>
       </div>
-      <p class="muted small hint">Click a core to browse its Data Layer. Its name opens its ctrlX web UI in a new tab.</p>
       <div id="cores" class="cores"><p class="muted">Loading…</p></div>
     </section>
   </main>
@@ -99,9 +97,11 @@
             <span class="info info-end" tabindex="0" role="img" aria-label="Password storage"
                   data-tip="The password is stored in this device's app data (settings.json) and is never shown again."></span></label>
           <input id="a-password" name="password" type="password" required autocomplete="new-password"></div>
-        <div class="field field-wide"><label class="checkbox" for="a-skipCertificateCheck">
-          <input id="a-skipCertificateCheck" name="skipCertificateCheck" type="checkbox" checked>
-          Skip certificate check</label></div>
+        <!-- true/false: the kit's switch (app.js puts it into #a-skip-slot) -->
+        <div class="field field-wide"><div class="field-label"><label for="a-skipCertificateCheck">Skip certificate check</label>
+            <span class="info" tabindex="0" role="img" aria-label="Certificate check"
+                  data-tip="ctrlX COREs come with a self-signed certificate: keep this on unless the core has a certificate this device trusts."></span></div>
+          <span id="a-skip-slot"></span></div>
       </div>
       <ul id="add-errors" class="error-list" hidden></ul>
       <div class="actions">
@@ -111,6 +111,7 @@
     </form>
   </dialog>
 
+  <script src="kit.js"></script>
   <script src="common.js"></script>
   <script src="app.js"></script>
 </body>

@@ -1,78 +1,13 @@
-// Network Scanner web UI - plain JS, no build step, no CDN (devices are often offline).
-//
-// Auth: the ctrlX menu opens "/<snap>/?token=${bearertoken}". We move the token from the URL
-// into sessionStorage (so it is not left in history/bookmarks) and send it as
-// "Authorization: Bearer" on every API call. The reverse proxy validates it because
-// "/<snap>/api" is listed as restricted in the package manifest. Downloads (PDF/CSV/JSON) go
-// through fetch() with the header too - a plain <a href> could not send it.
+// Network Scanner web UI - this app's page. Plain JS, no build step, no CDN (devices are often offline).
+// The shared parts (token + API calls, downloads, roles, settings drawer, tabs, help menu + tutorial, About,
+// light/dark) are in kit.js - see the list at its top. Roles (user's split 2026-11-10): view = scans and reports,
+// operate = start / abort / delete scans, configure = profiles, whitelist / blacklist and settings.
 "use strict";
 
 (function () {
-  const PREFIX = "/" + location.pathname.split("/").filter(Boolean)[0]; // "/<snap-name>"
-  const API = PREFIX + "/api/v1";
-  const TOKEN_KEY = PREFIX.slice(1) + ".token";
-
-  // ---- token / API -----------------------------------------------------------
-  function captureToken() {
-    const url = new URL(location.href);
-    const fromUrl = url.searchParams.get("token") || url.searchParams.get("access_token");
-    if (fromUrl) {
-      try { sessionStorage.setItem(TOKEN_KEY, fromUrl); } catch (e) { /* storage blocked */ }
-      url.searchParams.delete("token");
-      url.searchParams.delete("access_token");
-      history.replaceState(null, "", url.pathname + url.search + url.hash);
-      return fromUrl;
-    }
-    try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
-  }
-  const token = captureToken();
-
-  function headers(extra) {
-    const h = Object.assign({ "Accept": "application/json" }, extra || {});
-    if (token) h["Authorization"] = "Bearer " + token;
-    return h;
-  }
-
-  async function api(method, path, body) {
-    const res = await fetch(API + path, {
-      method, headers: headers(body === undefined ? {} : { "Content-Type": "application/json" }),
-      body: body === undefined ? undefined : JSON.stringify(body), credentials: "same-origin", cache: "no-store",
-    });
-    let data = null;
-    const text = await res.text();
-    if (text) { try { data = JSON.parse(text); } catch (e) { data = { title: text }; } }
-    if (res.status === 401) showBanner("Session expired or no token - please reopen this app from the ctrlX menu.");
-    if (!res.ok) {
-      const err = new Error((data && (data.detail || data.title)) || res.statusText);
-      err.status = res.status; err.data = data; throw err;
-    }
-    return data;
-  }
-
-  async function download(path, fallbackName) {
-    const res = await fetch(API + path, { headers: headers(), credentials: "same-origin", cache: "no-store" });
-    if (!res.ok) { alert("Download failed: " + res.status + " " + res.statusText); return; }
-    const disp = res.headers.get("Content-Disposition") || "";
-    const m = /filename="([^"]+)"/.exec(disp);
-    const url = URL.createObjectURL(await res.blob());
-    const a = el("a", { href: url, download: m ? m[1] : fallbackName });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
-
-  // ---- helpers ------------------------------------------------------------------
-  const $ = (id) => document.getElementById(id);
-  function el(tag, attrs, ...children) {
-    const node = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs || {})) {
-      if (k === "class") node.className = v;
-      else if (k === "text") node.textContent = v;
-      else if (k.startsWith("on") && typeof v === "function") node[k] = v;
-      else if (v === true) node.setAttribute(k, "");
-      else if (v !== false && v !== null && v !== undefined) node.setAttribute(k, v);
-    }
-    for (const c of children) if (c !== null && c !== undefined && c !== false) node.append(c);
-    return node;
+  const { $, el, api, can, showBanner } = Kit;
+  async function download(path, fallbackName) {   // PDF / CSV / JSON with the token (kit.js)
+    try { await Kit.download(path, fallbackName); } catch (e) { alert("Download failed: " + e.message); }
   }
   const SVG_NS = "http://www.w3.org/2000/svg";
   function svg(tag, attrs) {
@@ -80,7 +15,6 @@
     for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
     return n;
   }
-  function showBanner(msg) { const b = $("banner"); b.textContent = msg; b.hidden = !msg; }
   function fmtTime(iso) {
     if (!iso) return "–";
     const d = new Date(iso);
@@ -131,38 +65,44 @@
 
   // ---- state ----------------------------------------------------------------------
   const S = {
-    status: null, settings: null, canWrite: false, network: null, history: [], usage: null,
+    status: null, settings: null, network: null, history: [], usage: null,
     result: null, resultId: null, filter: "all", search: "", openHosts: new Set(),
     profileIdx: 0, profileDraft: null, profileDirty: false, listsDraft: null, listsDirty: false,
-    setDirty: false, wasRunning: false, tab: "overview",
+    wasRunning: false, tab: "overview",
   };
 
-  // ---- tabs -------------------------------------------------------------------------
-  const TABS = ["overview", "results", "history", "profiles", "lists", "settings"];
-  function showTab(name, push) {
-    if (!TABS.includes(name)) name = "overview";
+  // ---- Overview: equally high cards per row; a card with much more content than the others spans two rows ----
+  function balanceOverview() {
+    const page = $("tab-overview");
+    if (page.hidden || getComputedStyle(page).gridTemplateColumns.split(" ").length < 2) {
+      for (const c of page.children) c.classList.remove("tall");
+      return;
+    }
+    page.classList.add("measuring");                        // the natural height of every card
+    const cards = [...page.children].filter((c) => c.classList.contains("card") && !c.hidden);
+    const heights = cards.map((c) => c.offsetHeight);
+    page.classList.remove("measuring");
+    const sorted = heights.slice().sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)] || 0;
+    cards.forEach((c, i) => c.classList.toggle("tall", heights[i] > 1.75 * median));
+  }
+  window.addEventListener("resize", () => { clearTimeout(balanceOverview.t); balanceOverview.t = setTimeout(balanceOverview, 150); });
+
+  // ---- pages: tabs under the top bar (kit.js Kit.setupTabs, started in init) ----------------------------------
+  function onPage(name) {
     S.tab = name;
-    for (const t of document.querySelectorAll(".tab")) t.setAttribute("aria-selected", String(t.dataset.tab === name));
-    for (const n of TABS) $("tab-" + n).hidden = n !== name;
-    if (push !== false && location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
-    if (name === "settings") refreshValues();
+    if (name === "overview") requestAnimationFrame(balanceOverview);
+    if (name === "datalayer") refreshValues();
     if (name === "history") renderChart();
     if (name === "results" && !S.result && S.history.length) loadScan(S.history[0].id);
   }
-  for (const t of document.querySelectorAll(".tab")) t.onclick = () => showTab(t.dataset.tab);
+  const showTab = (name) => { location.hash = "#" + name; };   // kit.js shows the page (hashchange)
 
   // ---- status / overview --------------------------------------------------------------
   async function refreshStatus() {
-    let s;
-    try { s = await api("GET", "/status"); } catch (e) { if (e.status !== 401) showBanner("Cannot reach the app: " + e.message); return; }
-    showBanner("");
+    const s = await Kit.refreshStatus();   // title, version, Data Layer pill, role pill, [data-role] elements, colors
+    if (!s) return;
     S.status = s;
-    S.canWrite = !!s.canWrite;
-    $("readonly-note").hidden = S.canWrite;
-    $("app-version").textContent = /^\d/.test(s.version) ? "v" + s.version : s.version;
-    const conn = $("conn");
-    if (s.datalayer.connected) { conn.className = "pill pill-ok"; conn.textContent = "Data Layer: connected"; }
-    else { conn.className = "pill pill-warn"; conn.textContent = s.datalayer.enabled ? "Data Layer: connecting…" : "Data Layer: off"; }
     renderScanState(s.scan);
     renderLast(s.last);
     renderSchedules();
@@ -180,6 +120,7 @@
       if (s.last && (S.tab === "results" || !S.result || S.resultId === null)) await loadScan(s.last.id);
     }
     S.wasRunning = running;
+    if (S.tab === "overview") balanceOverview();
   }
 
   function renderScanState(scan) {
@@ -199,7 +140,7 @@
       $("pg-probes").textContent = p.probes;
       $("pg-elapsed").textContent = fmtDur(p.elapsedS) + " · " + plural(p.targets, "address");
       $("btn-start").hidden = true;
-      $("btn-abort").hidden = !S.canWrite;
+      $("btn-abort").hidden = !can("operate");
       $("btn-abort").disabled = !!scan.aborting;
       refreshLive();
     } else {
@@ -208,7 +149,7 @@
       pill.textContent = last && last.summary.rating && last.summary.rating.forbidden
         ? last.summary.rating.forbidden + " forbidden finding" + (last.summary.rating.forbidden > 1 ? "s" : "") : "Idle";
       box.hidden = true;
-      $("btn-start").hidden = false;
+      $("btn-start").hidden = !can("operate");
       $("btn-abort").hidden = true;
     }
     const queued = scan && scan.queued && scan.queued.length ? "Queued: " + scan.queued.join(", ") : "";
@@ -248,7 +189,7 @@
     $("last-when").textContent = last.profileName + " · " + fmtTime(last.finishedAt) + (last.status !== "completed" ? " · " + last.status : "");
     $("last-tiles").replaceChildren(...summaryTiles(last.summary, last.changes));
     const forbidden = (last.summary.rating || {}).forbidden || 0;
-    const tab = document.querySelector('.tab[data-tab="results"]');
+    const tab = document.querySelector('#tabs a[href="#results"]');
     tab.replaceChildren(document.createTextNode("Results"));
     if (forbidden) tab.append(el("span", { class: "count", text: String(forbidden), title: "forbidden findings in the last scan" }));
   }
@@ -277,6 +218,7 @@
         el("td", { class: "mono", text: a }), el("td", { class: "mono", text: i.networks[k] || "" }))));
     }
     $("net-body").replaceChildren(...(rows.length ? rows : [el("tr", {}, el("td", { colspan: "3", class: "muted", text: S.network.error || "No IPv4 networks." }))]));
+    if (S.tab === "overview") balanceOverview();
     $("net-gw").textContent = S.network.gateways.length ? "Default gateway: " + S.network.gateways.map((g) => g.ip + " (" + g.interface + ")").join(", ") : "No default gateway.";
     renderTargetChips();
   }
@@ -352,7 +294,7 @@
       open.onclick = () => { loadScan(h.id); showTab("results"); };
       const pdf = el("button", { type: "button", class: "btn btn-small", text: "PDF" });
       pdf.onclick = () => download("/scans/" + h.id + "/report.pdf", h.id + ".pdf");
-      const del = el("button", { type: "button", class: "btn btn-small btn-ghost btn-danger-text", text: "Delete", disabled: !S.canWrite });
+      const del = el("button", { type: "button", class: "btn btn-small btn-ghost btn-danger-text", text: "Delete", hidden: !can("operate") });
       del.onclick = async () => {
         if (!confirm("Delete scan " + fmtTime(h.startedAt) + " (" + h.profileName + ")?")) return;
         try { await api("DELETE", "/scans/" + h.id); } catch (e) { alert(e.message); }
@@ -388,7 +330,7 @@
     const bw = Math.max(2, Math.min(24, slot - 2));
     const s = svg("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img",
       "aria-label": "Hosts up per scan, last " + data.length + " scans" });
-    s.append(svg("line", { x1: 0, x2: W, y1: base + 0.5, y2: base + 0.5, stroke: "#e1e4e8", "stroke-width": 1 }));
+    s.append(svg("line", { x1: 0, x2: W, y1: base + 0.5, y2: base + 0.5, style: "stroke: var(--line)", "stroke-width": 1 }));   // theme colors (light/dark)
     const tip = el("div", { class: "chart-tip", hidden: true });
     data.forEach((d, i) => {
       const x = i * slot + (slot - bw) / 2;
@@ -396,9 +338,9 @@
       const y = base - h, r = Math.min(4, bw / 2, h);
       const path = "M" + x + "," + base + " V" + (y + r) + " Q" + x + "," + y + " " + (x + r) + "," + y +
         " H" + (x + bw - r) + " Q" + (x + bw) + "," + y + " " + (x + bw) + "," + (y + r) + " V" + base + " Z";
-      s.append(svg("path", { d: path, fill: "#007bc0" }));
+      s.append(svg("path", { d: path, style: "fill: var(--accent)" }));
       if (d.alarmsAtScan) {
-        s.append(svg("circle", { cx: x + bw / 2, cy: Math.max(5, y - 6), r: 4, fill: "#c8102e", stroke: "#fff", "stroke-width": 2 }));
+        s.append(svg("circle", { cx: x + bw / 2, cy: Math.max(5, y - 6), r: 4, style: "fill: var(--err); stroke: var(--card)", "stroke-width": 2 }));
       }
       const hit = svg("rect", { x: i * slot, y: 0, width: slot, height: H, fill: "transparent" });
       hit.addEventListener("mouseenter", () => {
@@ -527,7 +469,7 @@
     add("Rating", RATING_LABEL[h.rating] + (h.ratingNote ? " - " + h.ratingNote : ""));
     add("Not open", "TCP closed: " + h.tcpClosed + ", no answer: " + h.tcpFiltered + ((h.udpOpenFiltered || []).length ? " · UDP without answer: " + h.udpOpenFiltered.join(", ") : ""));
     const box = el("div", {}, dl);
-    if (S.canWrite) {
+    if (can("configure")) {          // the lists are settings
       const name = hostNames(h)[0] || h.vendor || "";
       const acts = el("div", { class: "detail-actions" });
       const b = (text, fn, cls) => { const x = el("button", { type: "button", class: "btn btn-small " + (cls || ""), text }); x.onclick = (ev) => { ev.stopPropagation(); fn(); }; return x; };
@@ -541,7 +483,7 @@
     if (ports.length) {
       const rows = ports.map((p) => {
         const act = el("td", { class: "act" });
-        if (S.canWrite) {
+        if (can("configure")) {
           const ok = el("button", { type: "button", class: "btn btn-small", text: "Expected", title: "Add " + portLabel(p) + " on " + h.ip + " to the whitelist" });
           ok.onclick = (ev) => { ev.stopPropagation(); addToList("whitelist", { hosts: h.ip, ports: portLabel(p), note: hostNames(h)[0] || "" }); };
           const no = el("button", { type: "button", class: "btn btn-small btn-danger-text", text: "Forbidden", title: "Add " + portLabel(p) + " on " + h.ip + " to the blacklist" });
@@ -593,7 +535,11 @@
 
   // ---- settings (whole document) ------------------------------------------------------------
   async function loadSettings() {
-    try { S.settings = await api("GET", "/settings"); } catch (e) { showBanner("Cannot load settings: " + e.message); return; }
+    try {   // the settings are configure-only; the run card needs the profiles (GET /profiles, view)
+      S.settings = can("configure") ? await api("GET", "/settings")
+        : { profiles: await api("GET", "/profiles"), lists: { whitelist: [], blacklist: [] },
+          scan: { maxAddresses: (S.status && S.status.maxAddresses) || 65536 } };
+    } catch (e) { showBanner("Cannot load settings: " + e.message); return; }
     afterSettings();
   }
   async function saveSettings(next) {
@@ -606,16 +552,14 @@
     renderProfileList();
     if (!S.profileDirty) editProfile(Math.min(S.profileIdx, S.settings.profiles.length - 1), true);
     if (!S.listsDirty) { S.listsDraft = clone(S.settings.lists); renderLists(); }
-    if (!S.setDirty) fillSettingsForm();
     applyPermissions();
   }
 
   function applyPermissions() {
-    const ro = !S.canWrite;
+    const ro = !can("configure");      // profiles and lists are settings
     for (const n of document.querySelectorAll("#prof-form input, #prof-form select, #prof-form textarea, #prof-form button, #btn-prof-new, " +
-      "#tab-lists input, #tab-lists button, #set-form input, #set-form select, #set-form button, .chip")) n.disabled = ro;
-    $("btn-start").disabled = ro;
-    $("btn-start").title = ro ? "Needs the permission Manage Network Scanner" : "";
+      "#tab-lists input, #tab-lists button, .chip")) n.disabled = ro;
+    $("run-note").hidden = can("operate");
     $("btn-prof-del").disabled = ro || !!S.profileNew || !S.settings || S.settings.profiles.length < 2;
   }
 
@@ -839,36 +783,43 @@
   };
   $("btn-lists-revert").onclick = () => { S.listsDirty = false; S.listsDraft = clone(S.settings.lists); renderLists(); $("lists-state").textContent = ""; $("lists-errors").hidden = true; };
 
-  // ---- settings form ----------------------------------------------------------------------------------
-  const getAt = (o, path) => path.split(".").reduce((x, k) => (x == null ? undefined : x[k]), o);
-  const setAt = (o, path, v) => { const ks = path.split("."); let x = o; for (const k of ks.slice(0, -1)) x = x[k]; x[ks[ks.length - 1]] = v; };
-  function fillSettingsForm() {
-    for (const n of document.querySelectorAll("#set-form [data-s]")) {
-      n.value = getAt(S.settings, n.dataset.s) ?? "";
-      n.closest(".field").classList.remove("invalid");
-      n.oninput = () => { S.setDirty = true; $("set-state").textContent = "unsaved changes"; };
-    }
-  }
-  $("set-form").onsubmit = async (ev) => {
-    ev.preventDefault();
-    const next = clone(S.settings);
-    for (const n of document.querySelectorAll("#set-form [data-s]")) setAt(next, n.dataset.s, n.type === "number" ? (n.value === "" ? NaN : Number(n.value)) : n.value);
-    try {
-      S.setDirty = false;
-      await saveSettings(next);
-      $("set-errors").hidden = true;
-      $("set-state").textContent = "Saved " + new Date().toLocaleTimeString();
-      refreshStatus();
-    } catch (e) {
-      S.setDirty = true;
-      const errors = (e.data && e.data.errors) || [e.message];
-      $("set-errors").replaceChildren(...errors.map((m) => el("li", { text: m })));
-      $("set-errors").hidden = false;
-      for (const n of document.querySelectorAll("#set-form [data-s]")) n.closest(".field").classList.toggle("invalid", errors.some((m) => m.startsWith(n.dataset.s + ":")));
-      $("set-state").textContent = "Not saved";
-    }
-  };
-  $("btn-set-revert").onclick = () => { S.setDirty = false; fillSettingsForm(); $("set-errors").hidden = true; $("set-state").textContent = ""; };
+  // ---- settings drawer (kit.js): general, scans, history, styling; profiles and lists have pages of their own ----
+  const settings = Kit.setupSettings({ onSaved: async () => { await loadSettings(); refreshStatus(); } });
+
+  // ---- help menu, tutorial ----------------------------------------------------------------------------
+  Kit.setupHelp([
+    { title: "Welcome",
+      text: "This tour shows the Network Scanner: which devices answer on this device's networks, with which services, " +
+        "rated against a whitelist and a blacklist. Step through it with the arrows (or the ← → keys)." },
+    { title: "Run a scan", page: "overview", target: () => $("run-h").closest(".card"),
+      text: () => can("operate") ? "Pick a profile and start. The profile sets the targets, ports and load limits; the " +
+        "estimate shows how long it will take." : "Users with the operate permission can start scans here." },
+    { title: "Last scan", page: "overview", target: () => $("last-h").closest(".card"),
+      text: "The newest scan in short: hosts, open ports, forbidden findings. Show its results or download the PDF report." },
+    { title: "Pages", target: () => $("tabs"),
+      text: "Results of a scan, the history of all scans" + (Kit.can("configure") ? ", the profiles and the whitelist / blacklist" : "") +
+        " and the Data Layer nodes. Each page has its own address (…/#results)." },
+    { title: "Results", page: "results", target: () => $("tab-results").querySelector(".card"),
+      text: "Every host of a scan with its rating, open ports and what the services told. Filter by rating or search." },
+    { title: "History", page: "history", target: () => $("tab-history").querySelector(".card"),
+      text: () => "All stored scans; open one or download its report." + (can("operate") ? " You may also delete scans." : "") },
+    { title: "Profiles", when: () => can("configure"), page: "profiles", target: () => $("tab-profiles"),
+      text: "What a scan covers: targets, ports, discovery, load limits and its schedule." },
+    { title: "Whitelist / Blacklist", when: () => can("configure"), page: "lists", target: () => $("tab-lists"),
+      text: "Hosts and ports you expect (whitelist) or forbid (blacklist). Results are rated against them." },
+    { title: "Data Layer", page: "datalayer", target: () => $("tab-datalayer").querySelector(".card"),
+      text: "A PLC can start a scan and read the results through these nodes." },
+    { title: "Settings", when: () => can("configure"), target: () => $("btn-settings"),
+      text: "General, scan size and history limits, colors. Stored in the ctrlX app data, so they are saved and loaded with " +
+        "configurations.", act: () => settings.open() },
+    { title: "Your permission", when: () => !can("configure"), target: () => $("role"),
+      text: () => can("operate") ? "Operator: you may start, abort and delete scans, but not change profiles, lists or settings."
+        : "View only: you see the scans and download reports, but can't start any. Ask an administrator for more." },
+    { title: "Light or dark", target: () => $("btn-theme"),
+      text: "Switches the page between light and dark mode. Each browser keeps its own choice." },
+    { title: "Help", target: () => $("btn-help"),
+      text: "Start this tour again, open the app's page, or see About: version, author, license." },
+  ]);
 
   async function refreshValues() {
     let values;
@@ -879,7 +830,7 @@
         el("td", { text: v.type }), el("td", { class: "mono", text: full.length > 120 ? full.slice(0, 117) + "…" : full, title: full.length > 120 ? full.slice(0, 2000) : "" }));
     });
     $("values-body").replaceChildren(...rows);
-    $("dl-start").textContent = PREFIX.slice(1) + "/scan/start";
+    $("dl-start").textContent = Kit.PREFIX.slice(1) + "/scan/start";
   }
 
   // ---- polling --------------------------------------------------------------------------------------
@@ -888,14 +839,13 @@
     clearTimeout(pollTimer);
     pollTimer = setTimeout(async () => {
       await refreshStatus();
-      if (S.tab === "settings") refreshValues();
+      if (S.tab === "datalayer") refreshValues();
       const running = S.status && S.status.scan && S.status.scan.running;
       schedulePoll(document.hidden ? 15000 : (running ? 2000 : 5000));
     }, ms);
   }
 
   (async function init() {
-    showTab((location.hash || "#overview").slice(1), false);
     await refreshStatus();
     await loadSettings();
     renderSchedules();
@@ -903,8 +853,9 @@
     await loadHistory();
     S.wasRunning = !!(S.status && S.status.scan && S.status.scan.running);
     if (S.history.length) await loadScan(S.history[0].id);
-    if (S.tab === "settings") await refreshValues();
-    document.body.dataset.uiReady = "true";  // for tools/ui_check.py (screenshots wait for it)
+    Kit.setupTabs({ onShow: onPage });             // the page from the hash (#results, ...)
+    if (location.hash === "#settings") settings.open();
+    Kit.ready();                                   // for tools/ui_check.py (screenshots wait for it)
     schedulePoll(S.wasRunning ? 2000 : 5000);
     window.addEventListener("resize", () => { if (S.tab === "history") renderChart(); });
   })();

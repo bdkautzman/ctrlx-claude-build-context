@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>System Analyzer</title>
-  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy.
+       kit.css / kit.js: the kit's shared UI parts (from the template, don't edit them here); style.css / app.js: this app. -->
+  <link rel="stylesheet" href="kit.css">
   <link rel="stylesheet" href="vendor/uPlot.min.css">
   <link rel="stylesheet" href="style.css">
   <link rel="icon" href="data:,">
@@ -17,12 +19,35 @@
       <h1 id="app-title">System Analyzer</h1>
       <span id="app-version" class="muted"></span>
     </div>
-    <div class="pills">
+    <div class="topbar-right">
+      <!-- only shown to users who may not do everything ("View only", "Operator") -->
+      <span id="role" class="pill pill-role" hidden></span>
       <span id="pill-sampling" class="pill pill-unknown" title="Sampling of /proc and the analyzer's own CPU load">Sampling: …</span>
       <span id="pill-medium" class="pill pill-unknown" title="Long-term recording on an external medium">Medium: …</span>
       <span id="conn" class="pill pill-unknown" title="Data Layer connection">Data Layer: …</span>
+      <!-- data-role="configure": only users who may change settings see it (kit.js) -->
+      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" data-role="configure" hidden
+              title="Settings" aria-label="Settings" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-sliders"/></svg><span class="btn-label">Settings</span></button>
+      <button type="button" id="btn-theme" class="btn btn-small btn-theme" title="Switch to dark mode"
+              aria-label="Dark mode" aria-pressed="false"><svg class="ic"><use href="#i-moon"/></svg></button>
+      <div class="menu-wrap">
+        <button type="button" id="btn-help" class="btn btn-small btn-help" title="Help" aria-label="Help"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu"><svg class="ic"><use href="#i-help"/></svg></button>
+        <div id="help-menu" class="menu" role="menu" aria-label="Help" hidden>
+          <a role="menuitem" id="help-page" href="https://github.com/bdkautzman" target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-external"/></svg>App page</a>
+          <button type="button" role="menuitem" id="btn-tutorial"><svg class="ic"><use href="#i-play"/></svg>Tutorial</button>
+          <button type="button" role="menuitem" id="btn-about"><svg class="ic"><use href="#i-info"/></svg>About</button>
+        </div>
+      </div>
     </div>
   </header>
+  <!-- pages: tabs under the top bar (kit.js Kit.setupTabs); the hash names the page (#overview, #apps, ...) -->
+  <nav class="tabs" id="tabs" aria-label="Pages">
+    <a href="#overview">Overview</a>
+    <a href="#apps">Apps</a>
+    <a href="#leaks">Leaks</a>
+    <a href="#events">Events</a>
+  </nav>
 
   <div id="banner" class="banner" hidden></div>
 
@@ -55,17 +80,10 @@
     <button type="button" id="btn-export" class="btn">Download</button>
   </nav>
 
-  <nav class="tabs" role="tablist">
-    <button type="button" role="tab" class="tab" data-tab="overview" aria-selected="true">Overview</button>
-    <button type="button" role="tab" class="tab" data-tab="apps" aria-selected="false">Apps</button>
-    <button type="button" role="tab" class="tab" data-tab="leaks" aria-selected="false">Leaks</button>
-    <button type="button" role="tab" class="tab" data-tab="events" aria-selected="false">Events</button>
-    <button type="button" role="tab" class="tab" data-tab="settings" aria-selected="false">Settings</button>
-  </nav>
 
   <main>
     <!-- Overview -->
-    <section id="tab-overview" class="tabpanel" role="tabpanel">
+    <section id="tab-overview" class="tabpanel page" data-page="overview">
       <div class="tiles" id="tiles"></div>
       <div class="grid2">
         <div class="card"><h2>CPU load</h2><p class="sub">% per core and in total</p><div class="chart" id="ch-sys-cpu"></div></div>
@@ -74,16 +92,23 @@
         <div class="card"><h2>CPU of the busiest apps</h2><p class="sub">% of one core</p><div class="chart" id="ch-top-cpu"></div></div>
         <div class="card"><h2>Pressure stall</h2><p class="sub">% of time tasks waited for CPU, memory or I/O (avg10)</p><div class="chart" id="ch-sys-psi"></div></div>
         <div class="card"><h2>Growing memory</h2><p class="sub" id="sub-growing">Over the selected range</p><div id="growing-list" class="growing"></div></div>
+        <div class="card" id="analyzer-card">
+          <h2>Analyzer</h2>
+          <p class="sub">The analyzer itself and its recording on an external medium (Settings → External medium)</p>
+          <dl class="kv" id="status-list"></dl>
+          <dl class="kv" id="rec-status"></dl>
+          <p id="st-error" class="error" hidden></p>
+        </div>
       </div>
     </section>
 
     <!-- Apps -->
-    <section id="tab-apps" class="tabpanel" role="tabpanel" hidden>
+    <section id="tab-apps" class="tabpanel page" data-page="apps" hidden>
       <div class="card">
         <div class="card-head"><h2>Apps</h2><span class="muted small">CPU in % of one core · memory in MB · click an app for details</span></div>
         <div class="table-wrap"><table class="data" id="apps-table">
           <thead><tr>
-            <th data-sort="name">App</th><th data-sort="kind">Kind</th><th data-sort="processes" class="num">Proc.</th>
+            <th data-sort="name" data-text="1">App</th><th data-sort="kind" data-text="1">Kind</th><th data-sort="processes" class="num">Proc.</th>
             <th data-sort="threads" class="num">Threads</th><th data-sort="cpu" class="num">CPU %</th>
             <th data-sort="anonMb" class="num">Anon</th><th data-sort="rssMb" class="num">RSS</th>
             <th data-sort="pssMb" class="num">PSS</th><th data-sort="swapMb" class="num">Swap</th>
@@ -128,7 +153,7 @@
     </section>
 
     <!-- Leaks -->
-    <section id="tab-leaks" class="tabpanel" role="tabpanel" hidden>
+    <section id="tab-leaks" class="tabpanel page" data-page="leaks" hidden>
       <div class="card">
         <div class="card-head">
           <h2>Memory growth</h2>
@@ -138,9 +163,12 @@
         </div>
         <p class="muted small" id="leak-explain">The line is fitted through the lowest values of the range, so a garbage collector's ups and downs don't count; growth is in MB per hour, fit 1 = perfectly steady.</p>
         <div class="table-wrap"><table class="data" id="leak-table">
-          <thead><tr><th>Verdict</th><th>App</th><th>Process</th><th class="num">Now</th><th class="num">Start → end</th>
-            <th class="num">Growth MB/h</th><th class="num">Fit</th><th class="num">Span</th><th class="num">Full in</th>
-            <th class="num">Threads/h</th><th class="num">Restarts</th></tr></thead>
+          <thead><tr><th data-sort="verdict">Verdict</th><th data-sort="name" data-text="1">App</th>
+            <th data-sort="process" data-text="1">Process</th><th class="num" data-sort="currentMb">Now</th>
+            <th class="num" data-sort="change">Start → end</th><th class="num" data-sort="growthMbPerHour">Growth MB/h</th>
+            <th class="num" data-sort="fit">Fit</th><th class="num" data-sort="spanMinutes">Span</th>
+            <th class="num" data-sort="hoursUntilFull">Full in</th><th class="num" data-sort="threadsPerHour">Threads/h</th>
+            <th class="num" data-sort="restarts">Restarts</th></tr></thead>
           <tbody><tr><td colspan="11" class="muted">Loading…</td></tr></tbody>
         </table></div>
       </div>
@@ -151,10 +179,11 @@
     </section>
 
     <!-- Events -->
-    <section id="tab-events" class="tabpanel" role="tabpanel" hidden>
+    <section id="tab-events" class="tabpanel page" data-page="events" hidden>
       <div class="card">
         <div class="card-head"><h2>Events</h2><span class="muted small">restarts, updates and markers in the selected range - also shown as lines in the charts</span></div>
-        <form id="marker-form" class="actions">
+        <!-- data-role="operate": adding a marker needs the operate permission (kit.js) -->
+        <form id="marker-form" class="actions" data-role="operate" hidden>
           <input type="text" id="marker-text" maxlength="200" placeholder="Marker text, e.g. test started" aria-label="Marker text">
           <button type="submit" id="btn-marker" class="btn btn-primary">Add marker</button>
           <span id="marker-state" class="muted small" aria-live="polite"></span>
@@ -166,52 +195,30 @@
       </div>
     </section>
 
-    <!-- Settings -->
-    <section id="tab-settings" class="tabpanel" role="tabpanel" hidden>
-      <div class="grid2">
-        <div class="card" id="recording">
-          <h2>Recording on an external medium</h2>
-          <p class="muted small">Writes one CSV row per app (and process) and minute to
-            <span class="mono">&lt;medium&gt;/ctrlx-system-analyzer/</span> - for ranges longer than the RAM history,
-            restarts and reboots. Nothing is written to the internal flash. Unmount the medium in
-            Settings → Storage before you remove it.</p>
-          <div class="fields">
-            <div class="field"><label for="rec-medium">Medium</label><select id="rec-medium"><option value="">Off</option></select></div>
-            <div class="field"><label class="checkbox" for="rec-threads"><input type="checkbox" id="rec-threads">Record threads too</label></div>
-          </div>
-          <div class="actions">
-            <button type="button" id="btn-rec-save" class="btn btn-primary">Save</button>
-            <button type="button" id="btn-rec-refresh" class="btn">Look for media</button>
-            <span id="rec-state" class="muted small" aria-live="polite"></span>
-          </div>
-          <dl class="kv" id="rec-status"></dl>
-        </div>
-        <div class="card">
-          <h2>Status</h2>
-          <dl class="kv" id="status-list"></dl>
-          <p id="st-error" class="error" hidden></p>
-        </div>
-      </div>
-      <div class="card" id="settings">
-        <div class="card-head">
-          <h2>Settings</h2>
-          <span class="muted">Stored in ctrlX app data · saved and loaded with configurations</span>
-        </div>
-        <form id="settings-form" novalidate>
-          <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
-          <ul id="settings-errors" class="error-list" hidden></ul>
-          <div class="actions">
-            <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
-            <button type="button" id="btn-revert" class="btn">Revert</button>
-            <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
-            <span id="save-state" class="muted" aria-live="polite"></span>
-          </div>
-        </form>
-      </div>
-    </section>
   </main>
 
+  <!-- settings: slide in from the right; only for the configure role (kit.js Kit.setupSettings) -->
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+  <aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="settings-h" aria-hidden="true" inert>
+    <div class="card-head drawer-head">
+      <h2 id="settings-h">Settings</h2>
+      <button type="button" id="btn-close-settings" class="tool tool-bare" title="Close" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="muted drawer-note">Stored in ctrlX app data · saved and loaded with configurations</p>
+    <form id="settings-form" novalidate>
+      <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
+      <ul id="settings-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+        <button type="button" id="btn-revert" class="btn">Revert</button>
+        <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
+        <span id="save-state" class="muted" aria-live="polite"></span>
+      </div>
+    </form>
+  </aside>
+
   <script src="vendor/uPlot.iife.min.js"></script>
+  <script src="kit.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

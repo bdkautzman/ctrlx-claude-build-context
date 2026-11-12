@@ -3,6 +3,25 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## 0.6.0 - 2026-11-12
+
+From moving the five apps onto `kit.js` / `kit.css` (2026-11-10/11, user's request). Built for arm64 + amd64
+2026-11-12 for the X3 test of all apps.
+- `Kit.setupSettings` hooks for an app's own parts of the drawer: `field(path, rule, def, id)` returns the app's own
+  control for a setting (`{node, input, wide}`; `input.getValue/setValue` when the value isn't `input.value`),
+  `afterBuild(container, meta)`, `onLoaded(settings)`, `beforeSave(settings)` (async; throwing = not saved),
+  `onRevert()`; the result also has `preview()`, `readForm()`, `fill(values)`, `meta`, `loaded`.
+- Settings rules: `enumLabels` (the texts an enum shows; the value is stored) and `wide: true` (the field takes the
+  whole row; `.field-wide`).
+- Events on `document`: `kit:style` (detail = the style; an app's own colors, e.g. a map) and `kit:theme` (charts and
+  canvas drawings redraw).
+- Switches: the button has `setValue` / `getValue` (was `setSwitch`).
+- About works on every page with `#btn-about` (also one with its own help menu); Esc closes it before a page's own
+  key handler sees the key. AI note: "This app was created with the help of AI."
+- Info icon: its middle at the middle of the letters for any font size; the label and its icon stay in one line
+  also over an app's own `.field label`; `.info-down` shows the tooltip below the icon (top of a dialog).
+- Icon `refresh` (circle arrow).
+
 ## 0.5.0
 
 - **Help texts as info tooltips** (2026-11-09, user's request, the pattern of ctrlx-core-connector): a settings rule's

@@ -1,30 +1,15 @@
-/* Neutral styling close to the ctrlX OS look. No external fonts/CDNs: the device may be offline.
-   Colors: the base tokens below are the defaults of the settings "style" (app.js applyStyle() sets
-   them from /view-config); everything else is derived from them, so a dark palette works too. */
+/* Styles of the AMR Fleet View page. The shared ones (page colors light/dark, top bar, buttons, forms, settings
+   drawer, info tooltips, dialogs) are in kit.css, which index.html loads first; kit.js sets the page colors of the
+   settings "style". The map colors below are set by app.js applyStyle() (/view-config, kit:style). This page keeps
+   its own tutorial styles (the card sits on the map). */
 :root {
-  /* base - set from the styling settings */
-  --accent: #007bc0;
-  --accent-ink: #ffffff;
-  --card: #ffffff;          /* panels: top bar, list, tools, settings */
-  --text: #1f2328;
   --map-bg: #dde2e8;
   --map-floor: #ffffff;
   --map-wall: #333d4a;
   --map-grid: #e9ecef;
   --amr-stale: #9aa3ad;
-  /* derived */
-  --bg: color-mix(in srgb, var(--card) 94%, var(--text));
-  --muted: color-mix(in srgb, var(--text) 62%, var(--card));
-  --line: color-mix(in srgb, var(--text) 13%, var(--card));
-  --line-strong: color-mix(in srgb, var(--text) 26%, var(--card));
-  --hover: color-mix(in srgb, var(--text) 5%, var(--card));
-  --field: color-mix(in srgb, var(--text) 2%, var(--card));
   --selected: color-mix(in srgb, var(--accent) 10%, var(--card));
-  --ok: #00884a;
-  --warn: #c76b00;
-  --err: #c8102e;
-  --radius: 6px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 1px 2px rgba(0, 0, 0, .08);
+  --map-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 1px 2px rgba(0, 0, 0, .08);   /* tools and cards on the map */
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -99,7 +84,7 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
 
 .tools { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; }
 .tool-group { display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line);
-  border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  border-radius: var(--radius); box-shadow: var(--map-shadow); overflow: hidden; }
 .tool { width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 0; background: none;
   color: var(--text); font: 600 20px/1 system-ui, sans-serif; cursor: pointer; }
 .tool-group .tool + .tool { border-top: 1px solid var(--line); }
@@ -114,14 +99,14 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
 
 .followbar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center;
   gap: 10px; padding: 6px 8px 6px 12px; background: var(--card); border: 1px solid var(--line);
-  border-left: 3px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); white-space: nowrap;
+  border-left: 3px solid var(--accent); border-radius: var(--radius); box-shadow: var(--map-shadow); white-space: nowrap;
   max-width: calc(100% - 80px); }
 .followbar .ic { color: var(--accent); flex: none; }
-.checkbox-inline { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.followbar-switch { display: flex; align-items: center; gap: 8px; font-size: 13px; }   /* "Rotate map with AMR" */
 
 .map-msg { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 100px);
   padding: 8px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--err) 8%, var(--card));
-  border: 1px solid color-mix(in srgb, var(--err) 35%, var(--card)); color: var(--err); box-shadow: var(--shadow); }
+  border: 1px solid color-mix(in srgb, var(--err) 35%, var(--card)); color: var(--err); box-shadow: var(--map-shadow); }
 .map-msg.info { background: var(--card); border-color: var(--line); color: var(--muted); }
 
 .hud { position: absolute; left: 12px; bottom: 12px; padding: 6px 10px; border-radius: var(--radius);
@@ -132,15 +117,10 @@ h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
 #cursor-pos:empty { display: none; }
 
 .minimap { position: absolute; right: 12px; bottom: 12px; border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--card); box-shadow: var(--shadow); cursor: crosshair; touch-action: none; }
+  background: var(--card); box-shadow: var(--map-shadow); cursor: crosshair; touch-action: none; }
 
-/* ---- settings drawer ---- */
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(600px, 100%); z-index: 20; overflow-y: auto;
-  background: var(--card); border-left: 1px solid var(--line); box-shadow: -4px 0 16px rgba(0, 0, 0, .12); padding: 12px 20px 24px; }
-.drawer-head { align-items: center; }
-.drawer-head h2 { margin: 0; }
-.drawer-note { margin: 0 0 16px; font-size: 12px; }
-.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+/* ---- settings drawer (kit.css): this app's parts ---- */
+.drawer { width: min(600px, 100%); }
 
 .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 20px; }
 fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px 12px; margin: 0; grid-column: 1 / -1; }
@@ -169,7 +149,11 @@ input:disabled, select:disabled { background: var(--bg); color: var(--muted); }
 .color-item { display: inline-flex; align-items: center; gap: 2px; }
 .color-item .btn-icon { width: 24px; height: 24px; }
 
-/* AMR list (per-AMR input modes): ids as chips, scrolls with many */
+/* AMR list (per-AMR input modes): one line + "Edit…" in the drawer, the editor in a dialog */
+.amr-list-line { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+.amr-list-line > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dialog-wide { width: min(640px, calc(100% - 32px)); }
+#amr-list-dialog .amr-ids { max-height: 50vh; }
 .amr-ids { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; max-height: 150px; overflow-y: auto;
   padding: 6px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--field); min-height: 36px; }
 .amr-id { display: inline-flex; align-items: center; gap: 2px; padding: 1px 1px 1px 8px; border-radius: 999px;
@@ -243,7 +227,7 @@ input:disabled, select:disabled { background: var(--bg); color: var(--muted); }
 
 /* narrow screens: the list floats over the map */
 @media (max-width: 760px) {
-  .panel { position: absolute; z-index: 5; top: 0; bottom: 0; left: 0; width: min(310px, 85%); box-shadow: var(--shadow); }
+  .panel { position: absolute; z-index: 5; top: 0; bottom: 0; left: 0; width: min(310px, 85%); box-shadow: var(--map-shadow); }
   #app-version, #conn { display: none; }
   .followbar { top: 8px; left: 8px; right: 54px; transform: none; max-width: none; flex-wrap: wrap;
     white-space: normal; gap: 6px 10px; }

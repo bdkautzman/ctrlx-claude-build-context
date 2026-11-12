@@ -11,7 +11,8 @@ this document. **"Not recorded" means the records don't say** - it may have been
 
 ## Test setup
 
-All recorded tests are from 2026-10-25, with 0.1.0 (the only version).
+The scan tests are from 2026-10-25, with 0.1.0. 0.2.0 (kit UI, roles) is on the COREvirtual since 2026-11-12, without a
+scan ("Not tested yet"); the real CORE (X3) 0.2.0 since 2026-11-12, also without a scan.
 
 | Device | Facts as recorded |
 |---|---|
@@ -156,6 +157,15 @@ recorded in these sources.
 
 ## Not tested yet
 
+* **0.2.0 on a device** (kit UI, three roles): **amd64 done on the COREvirtual 2026-11-12**: settings and plugs unchanged by the update, Data
+  Layer and log clean, 40.8 MB a few minutes after start; roles through the API with kit-view / kit-operate /
+  kit-configure (settings 403/403/200, profiles and scans 200 for all, abort 403/409/409 - no scan was running;
+  `canWrite` scan/start and scan/abort for operate and configure only); `ui_check --device virtual` as admin and the
+  three test users OK. No scan was started on the device with 0.2.0. **arm64 on the real CORE X3 2026-11-12**: the X3 had none of the apps any more (installed fresh, `--service`, about
+  200 s each; the app data of 2026-11-05 was still there and loaded); plugs connected by the installer, Data Layer and
+  log clean, the same role checks through the API as on the COREvirtual all as expected, `ui_check --device x3` as admin
+  and the three test users OK. 39.2 MB a few minutes after the start; the scan history was gone (it is snap data, not app data:
+  removed with the uninstall), no scan was started with 0.2.0. Networks shown: XF10 192.168.1.7/24, eoe0 172.31.254.254/24.
 * **Real CORE: only "Quick inventory"** of the LAN /24 is recorded. *Automation devices* and *Deep* there: not recorded.
 * **Real CORE: Data Layer start/abort and schedules**: recorded on the COREvirtual only.
 * **A real PLC** writing `scan/start` or `scan/abort` (recorded: REST).

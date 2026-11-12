@@ -2,8 +2,27 @@
 
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 
-## Unreleased
+## 0.6.0
 
+- **Kit UI** (template 0.5.0, user's request 2026-11-10): the page runs on the kit's `www/kit.js` / `kit.css`
+  (API calls, roles, settings drawer, help menu, About, light/dark) instead of its own copies; app code stays in
+  `app.js` / `style.css`. The app keeps its own help menu entries and map tutorial.
+  - **Three roles** view / operate / configure (new scope `ctrlx-amr-fleet.web.operate.x`; manifest, menus and
+    widget list all three). Configure: settings, map uploads, AMR list. Operate: writes of the app's writable Data
+    Layer values through the web API (`PUT /values/<node>`, `NodeSpec.write_role`). View: map, list, details,
+    `GET /values` (without `settings/active`, `NodeSpec.view_role`). `/status` answers `role`, `canOperate`,
+    `canConfigure`, `style`, `about`.
+  - **Settings drawer**: help texts as ⓘ tooltips next to the labels, true/false as switches, *Save* closes the
+    drawer; *Input* takes the whole row (`wide`); the AMR list is one line with *Edit…* (dialog to add, remove,
+    upload and download ids).
+  - **Light / dark** button in the top bar (per browser) with new settings `style.panelDark` / `style.textDark`;
+    the map colors stay as set.
+  - **About** in the help menu: name, version, author, license (MIT), AI note (`GET /status` `about`;
+    `config.py` `APP_AUTHOR`, `APP_URL`, `APP_LICENSE`, `APP_AI_NOTE`; `snapcraft.yaml` `license: MIT`).
+  - *Rotate map with AMR* is a switch; map keys are ignored while the drawer or a dialog is open (Esc closes
+    About again).
+- Manifest: scope names and descriptions for the three roles.
+- Tests: `tests/test_about.py`, role split in `tests/test_web_and_nodes.py`, UI scenario for reader and operator.
 - **UI feedback overlay, dev only** (2026-11-09, from the kit template, user's request): `./run-local.sh` sets
   `APP_DEV_FEEDBACK` to the kit's `tools/ui-feedback/overlay.js`; the dev server (`src/app/dev_feedback.py`, hooks in
   `web_server.py` and `config.py`) adds it to the HTML pages and keeps the notes in `.dev/feedback.json`. Alt+click an

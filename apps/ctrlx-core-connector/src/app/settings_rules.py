@@ -32,6 +32,9 @@ CORE_TEMPLATE = {
     "skipCertificateCheck": True,
 }
 
+HEX_COLOR = r"#[0-9a-fA-F]{6}"
+COLOR = {"pattern": HEX_COLOR, "format": "color"}
+
 RULES = {
     # Format version of settings.json. Increase it (and migrate in settings_store) when you make
     # an incompatible change. Hidden in the UI.
@@ -77,4 +80,14 @@ RULES = {
             },
         },
     },
+    # Page colors for every user (GET /status "style" -> kit.js Kit.applyStyle); background, lines and secondary
+    # text are derived (kit.css). Light or dark: each browser's choice (top bar button).
+    "style": {"label": "Styling"},
+    "style.accent": dict(COLOR, label="Accent", help="Buttons, the brand mark, focus rings - in light and dark mode."),
+    "style.panel": dict(COLOR, label="Panels", help="Top bar, cards, settings. Page background, lines and secondary "
+                                                     "text are derived from Panels and Text."),
+    "style.text": dict(COLOR, label="Text"),
+    "style.panelDark": dict(COLOR, label="Panels (dark mode)",
+                            help="Panels while the page is in dark mode (the moon/sun button in the top bar)."),
+    "style.textDark": dict(COLOR, label="Text (dark mode)"),
 }

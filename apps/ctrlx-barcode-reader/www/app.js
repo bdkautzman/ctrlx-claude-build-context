@@ -1,56 +1,18 @@
-// Barcode Reader web UI - plain JS, no build step, no CDN (devices are often offline).
-//
-// Auth: the ctrlX menu opens "/<snap>/?token=${bearertoken}". We move the token from the URL
-// into sessionStorage (so it is not left in history/bookmarks) and send it as
-// "Authorization: Bearer" on every API call. The reverse proxy validates it because
-// "/<snap>/api" is listed as restricted in the package manifest. Images are API data too:
-// they are fetched with the token and shown through object URLs.
+// Barcode Reader web UI - this app's page. Plain JS, no build step, no CDN (devices are often offline).
+// The shared parts (token + API calls, roles, settings drawer, help menu + tutorial, About, light/dark) are in
+// kit.js - see the list at its top. Roles: view < operate < configure (GET /status says which one the user has).
+// Images are API data too: they are fetched with the token (apiBlob) and shown through object URLs.
 "use strict";
 
 (function () {
-  const PREFIX = "/" + location.pathname.split("/").filter(Boolean)[0]; // "/<snap-name>"
-  const API = PREFIX + "/api/v1";
-  const TOKEN_KEY = PREFIX.slice(1) + ".token";
+  const { $, el, api, can, showBanner } = Kit;
   const SVG_NS = "http://www.w3.org/2000/svg";
-
-  // ---- token ---------------------------------------------------------------
-  function captureToken() {
-    const url = new URL(location.href);
-    const fromUrl = url.searchParams.get("token") || url.searchParams.get("access_token");
-    if (fromUrl) {
-      try { sessionStorage.setItem(TOKEN_KEY, fromUrl); } catch (e) { /* storage blocked */ }
-      url.searchParams.delete("token");
-      url.searchParams.delete("access_token");
-      history.replaceState(null, "", url.pathname + url.search + url.hash);
-      return fromUrl;
-    }
-    try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
-  }
-  const token = captureToken();
-
-  function authHeaders(extra) {
-    const headers = Object.assign({ "Accept": "application/json" }, extra || {});
-    if (token) headers["Authorization"] = "Bearer " + token;
-    return headers;
-  }
-
-  async function api(method, path, body) {
-    const headers = authHeaders(body === undefined ? {} : { "Content-Type": "application/json" });
-    const res = await fetch(API + path, {
-      method, headers, body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: "same-origin", cache: "no-store",
-    });
-    let data = null;
-    const text = await res.text();
-    if (text) { try { data = JSON.parse(text); } catch (e) { data = { title: text }; } }
-    if (res.status === 401) showBanner("Session expired or no token - please reopen this app from the ctrlX menu.");
-    if (!res.ok) { const err = new Error((data && (data.detail || data.title)) || res.statusText); err.status = res.status; err.data = data; throw err; }
-    return data;
-  }
 
   // binary data (images) -> {status, blob, headers}; 204 -> blob null
   async function apiBlob(path) {
-    const res = await fetch(API + path, { headers: authHeaders({ "Accept": "image/*" }), credentials: "same-origin", cache: "no-store" });
+    const headers = { "Accept": "image/*" };
+    if (Kit.token) headers["Authorization"] = "Bearer " + Kit.token;
+    const res = await fetch(Kit.API + path, { headers, credentials: "same-origin", cache: "no-store" });
     if (res.status === 401) showBanner("Session expired or no token - please reopen this app from the ctrlX menu.");
     if (res.status === 204) return { status: 204, blob: null, headers: res.headers };
     if (!res.ok) { const err = new Error(res.statusText); err.status = res.status; throw err; }
@@ -58,26 +20,12 @@
   }
 
   // ---- helpers -------------------------------------------------------------
-  const $ = (id) => document.getElementById(id);
-  function el(tag, attrs, ...children) {
-    const node = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs || {})) {
-      if (k === "class") node.className = v;
-      else if (k === "text") node.textContent = v;
-      else if (v === true) node.setAttribute(k, "");
-      else if (v !== false && v !== null && v !== undefined) node.setAttribute(k, v);
-    }
-    for (const c of children) if (c) node.append(c);
-    return node;
-  }
   function svg(tag, attrs, text) {
     const node = document.createElementNS(SVG_NS, tag);
     for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, v);
     if (text !== undefined) node.textContent = text;
     return node;
   }
-  function showBanner(msg) { const b = $("banner"); b.textContent = msg; b.hidden = !msg; }
-  function humanize(key) { return key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()); }
   // the device's own time (ISO 8601 with its offset), like the Data Layer node and a PLC log - not the browser's zone
   function fmtTime(iso) {
     if (!iso) return "–";
@@ -89,9 +37,7 @@
   function sourceText(r) { return (SOURCES[r.source] || r.source) + (r.requestId ? " #" + r.requestId : ""); }
   function resultState(r) { return r.error ? "error" : (r.ok ? "ok" : "noread"); }
 
-  let canWrite = false;
   let formats = [];               // [{name, label, kind}]
-  let settingsNow = null;         // settings as last read (region drawing, live interval)
   let reader = null;              // last /reader answer
   let shown = null;               // {kind: "result"|"live", result?, width, height}
   let viewSeq = 0;                // sequence pinned from the history (0 = follow the newest)
@@ -99,41 +45,25 @@
 
   // ---- status / permissions ---------------------------------------------------
   async function refreshStatus() {
-    try {
-      const s = await api("GET", "/status");
-      const before = canWrite;
-      canWrite = !!s.canWrite;
-      document.title = s.title;
-      $("app-title").textContent = s.title;
-      $("app-version").textContent = /^\d/.test(s.version) ? "v" + s.version : s.version;
-      const conn = $("conn");
-      if (s.datalayer.connected) { conn.className = "pill pill-ok"; conn.textContent = "Data Layer: connected"; }
-      else { conn.className = "pill pill-warn"; conn.textContent = s.datalayer.enabled ? "Data Layer: connecting…" : "Data Layer: off"; }
-      const libs = s.libraries || {};
-      conn.title = "Data Layer connection of this app · " + Object.entries(libs).map(([k, v]) => k + " " + v).join(", ");
-      for (const b of document.querySelectorAll("[data-write]")) if (b.id !== "btn-region-clear") b.hidden = !canWrite;
-      $("btn-settings").hidden = !canWrite;
-      if (!canWrite && $("drawer").classList.contains("open")) closeSettings();
-      if (before !== canWrite) updateRegionButtons();
-      showBanner("");
-    } catch (e) {
-      if (e.status !== 401) showBanner("Cannot reach the app: " + e.message);
-    }
-  }
-
-  async function refreshSettingsNow() {
-    try { settingsNow = await api("GET", "/settings"); } catch (e) { /* shown elsewhere */ }
+    const s = await Kit.refreshStatus();   // title, version, Data Layer pill, role pill, [data-role] elements, colors
+    if (!s) return;
+    const libs = s.libraries || {};
+    $("conn").title = "Data Layer connection of this app · " + Object.entries(libs).map(([k, v]) => k + " " + v).join(", ");
     updateRegionButtons();
   }
+
+  // what the page needs from the settings comes with GET /reader ("view": decode region, live interval) - the
+  // settings themselves are for the configure role only
+  const view = () => (reader && reader.view) || {};
   function currentRoi() {
-    const r = settingsNow && settingsNow.decode && settingsNow.decode.roi;
+    const r = view().roi;
     return r && r.enabled ? [r.x, r.y, r.width, r.height] : null;
   }
   function cameraRegionOn() {
-    const r = settingsNow && settingsNow.decode && settingsNow.decode.roi;
+    const r = view().roi;
     return !!(r && r.enabled && r.onCamera);
   }
-  function updateRegionButtons() { $("btn-region-clear").hidden = !canWrite || !currentRoi(); }
+  function updateRegionButtons() { $("btn-region-clear").hidden = !can("configure") || !currentRoi(); }
 
   // ---- reader state -------------------------------------------------------------
   const CAM_STATES = { connected: ["pill-ok", "connected"], connecting: ["pill-unknown", "connecting…"],
@@ -141,7 +71,9 @@
   async function refreshReader() {
     let r;
     try { r = await api("GET", "/reader"); } catch (e) { return; }
+    const roiBefore = JSON.stringify(view().roi);
     reader = r;
+    if (JSON.stringify(view().roi) !== roiBefore) { updateRegionButtons(); drawOverlay(); }
     const cam = r.camera || {};
     const info = cam.info || {};
     const [cls, word] = CAM_STATES[cam.state] || ["pill-unknown", cam.state || "?"];
@@ -169,6 +101,7 @@
     if (info.model) rows.push(["Model", [info.vendor, info.model].filter(Boolean).join(" ")]);
     if (info.serial) rows.push(["Serial", info.serial + (info.firmware ? " · fw " + info.firmware : "")]);
     if (info.address) rows.push(["Address", info.address + (info.interface ? " (via " + info.interface + ")" : "")]);
+    if (info.width && info.height) $("stage").style.setProperty("--img-ratio", info.width + " / " + info.height);   // empty stage
     if (info.width) rows.push(["Image", info.width + " × " + info.height + " · " + (info.pixelFormat || "?") +
       (info.cameraRegion ? " · camera region at " + info.cameraRegion[0] + ", " + info.cameraRegion[1] : "")]);
     if (info.exposureUs !== undefined && info.exposureUs !== null) rows.push(["Exposure / gain", Math.round(info.exposureUs) + " µs · " + info.gain]);
@@ -201,7 +134,8 @@
     const url = URL.createObjectURL(blob);
     const img = $("img");
     return new Promise((resolve) => {
-      img.onload = () => { if (imgUrl) URL.revokeObjectURL(imgUrl); imgUrl = url; img.hidden = false; $("placeholder").hidden = true; placeOverlay(); resolve(); };
+      img.onload = () => { if (imgUrl) URL.revokeObjectURL(imgUrl); imgUrl = url; img.hidden = false; $("placeholder").hidden = true;
+        $("stage").classList.remove("empty"); placeOverlay(); resolve(); };
       img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
       img.src = url;
     });
@@ -338,7 +272,7 @@
   }
   async function liveTick() {
     if (!liveOn) return;
-    const interval = Math.max(150, ((settingsNow && settingsNow.live && settingsNow.live.intervalMs) || 500) / 2);
+    const interval = Math.max(150, (view().liveIntervalMs || 500) / 2);
     try {
       const res = await apiBlob("/live?after=" + liveSeq);
       if (res.blob && liveOn) {
@@ -393,12 +327,13 @@
     await saveRegion({ enabled: true, x: rect[0], y: rect[1], width: rect[2], height: rect[3] });
     toggleRegion();
   }
-  async function saveRegion(roi) {
+  async function saveRegion(roi) {     // configure role: the region is a setting
     try {
       const s = await api("GET", "/settings");
       s.decode.roi = Object.assign({}, s.decode.roi, roi);
-      settingsNow = await api("PUT", "/settings", s);
-      if (loaded) { loaded = settingsNow; fillForm(loaded); }
+      await api("PUT", "/settings", s);
+      if (settings.isOpen()) settings.reload();
+      await refreshReader();
     } catch (e) {
       showBanner("Region not saved: " + ((e.data && e.data.errors && e.data.errors.join("; ")) || e.message));
     }
@@ -414,6 +349,7 @@
     try { list = await api("GET", "/history"); } catch (e) { return; }
     historySeq = list.length ? list[0].sequence : 0;
     $("history-count").textContent = list.length ? "(" + list.length + ")" : "";
+    $("history-tab-count").textContent = list.length ? String(list.length) : "";
     const keep = new Set(list.map((r) => r.sequence));
     for (const [seq, url] of thumbs) if (!keep.has(seq)) { URL.revokeObjectURL(url); thumbs.delete(seq); }
     const body = $("history-body");
@@ -456,6 +392,7 @@
     if (liveOn) stopLive();
     viewSeq = r.sequence;
     showResult(r);
+    location.hash = "#reader";                     // the image is on the Reader page
     for (const tr of $("history-body").children) tr.classList.toggle("selected", tr.firstChild && tr.firstChild.textContent === String(r.sequence));
   }
 
@@ -473,24 +410,14 @@
     }
   }
 
-  // ---- settings form (generated from defaults + rules) ---------------------
-  let meta = null;
-  let loaded = null;
-
-  function enumText(full, opt) {
-    if (opt === "" && full === "camera.pixelFormat") return "(keep the camera's format)";
-    return String(opt);
-  }
-
-  function formatsField(full, label, rule) {
-    const box = el("div", { class: "formats", id: "f-decode-formats" });
-    box.dataset.path = full;
-    box.dataset.kind = "formats";
+  // ---- settings drawer (kit.js) with this app's own fields: formats, camera address + Discover, medium ---------
+  function formatsField(id) {
+    const box = el("div", { class: "formats", id });
     for (const kind of ["1D", "2D"]) {
       box.append(el("h4", { text: kind === "1D" ? "1D (linear)" : "2D (matrix, stacked)" }));
       for (const f of formats.filter((x) => x.kind === kind)) {
-        const id = "f-fmt-" + f.name;
-        box.append(el("label", { class: "checkbox", for: id }, el("input", { id, type: "checkbox", value: f.name }), document.createTextNode(f.label)));
+        const cid = "f-fmt-" + f.name;
+        box.append(el("label", { class: "checkbox", for: cid }, el("input", { id: cid, type: "checkbox", value: f.name }), document.createTextNode(f.label)));
       }
     }
     const all = el("button", { type: "button", class: "btn btn-small", text: "All" });
@@ -498,12 +425,13 @@
     all.onclick = () => box.querySelectorAll("input").forEach((i) => { i.checked = true; });
     none.onclick = () => box.querySelectorAll("input").forEach((i) => { i.checked = false; });
     box.append(el("div", { class: "formats-actions" }, all, none));
-    const field = el("div", { class: "field field-wide" }, el("label", { text: label }), box);
-    if (rule.help) field.append(el("div", { class: "help", text: rule.help }));
-    return field;
+    box.getValue = () => [...box.querySelectorAll("input:checked")].map((cb) => cb.value);
+    box.setValue = (v) => { for (const cb of box.querySelectorAll("input")) cb.checked = (v || []).includes(cb.value); };
+    return { node: box, input: box, wide: true };
   }
 
-  function addressField(id, input, label, rule) {
+  function addressField(id) {
+    const input = el("input", { id, type: "text", spellcheck: "false", autocomplete: "off" });
     const btn = el("button", { type: "button", class: "btn btn-small btn-with-icon", title: "Look for GigE Vision cameras" });
     btn.append(svg("svg", { class: "ic" }), document.createTextNode("Discover"));
     btn.firstChild.append(svg("use", { href: "#i-search" }));
@@ -524,13 +452,10 @@
       }
       btn.disabled = false;
     };
-    const field = el("div", { class: "field field-wide" }, el("label", { for: id, text: label }), el("div", { class: "with-button" }, input, btn), found);
-    if (rule.help) field.append(el("div", { class: "help", text: rule.help }));
-    return field;
+    return { node: el("div", {}, el("div", { class: "with-button" }, input, btn), found), input, wide: true };
   }
 
-  async function fillMedia(select) {
-    const current = (loaded && loaded.storage && loaded.storage.medium) || "";
+  async function fillMedia(select, current) {
     // the current value right away: a Save before the list arrives must not clear it
     select.replaceChildren(el("option", { value: "", text: "(none)" }), el("option", { value: current, text: current || "…" }));
     select.value = current;
@@ -544,167 +469,59 @@
     select.replaceChildren(...opts);
     select.value = current;
   }
-
-  function buildFields(container, defaults, path) {
-    for (const [key, def] of Object.entries(defaults)) {
-      const full = path ? path + "." + key : key;
-      const rule = (meta.rules && meta.rules[full]) || {};
-      const label = rule.label || humanize(key);
-      if (rule.hidden) continue; // value is kept unchanged (readForm starts from the loaded settings)
-      if (full === "decode.formats") { container.append(formatsField(full, label, rule)); continue; }
-      if (def !== null && typeof def === "object" && !Array.isArray(def)) {
-        const inner = el("div", { class: "fields" });
-        container.append(el("fieldset", {}, el("legend", { text: rule.label || humanize(key) }), inner));
-        buildFields(inner, def, full);
-        continue;
-      }
-      const id = "f-" + full.replace(/\./g, "-");
-      let input;
-      if (Array.isArray(rule.enum)) {
-        input = el("select", { id });
-        for (const opt of rule.enum) input.append(el("option", { value: String(opt), text: enumText(full, opt) }));
-      } else if (full === "storage.medium") {
-        input = el("select", { id });
-      } else if (typeof def === "boolean") {
-        input = el("input", { id, type: "checkbox" });
-      } else if (typeof def === "number") {
-        const isInt = (meta.types || {})[full] === "integer";
-        input = el("input", { id, type: "number", step: isInt ? "1" : "any", min: rule.min, max: rule.max });
-      } else if (Array.isArray(def)) {
-        input = el("input", { id, type: "text", placeholder: "JSON array" });
-      } else {
-        input = el("input", { id, type: "text", maxlength: rule.maxLength, spellcheck: "false" });
-      }
-      input.dataset.path = full;
-      input.dataset.kind = Array.isArray(def) ? "array" : typeof def;
-      if (full === "camera.address") { container.append(addressField(id, input, label, rule)); continue; }
-      const field = typeof def === "boolean"
-        ? el("div", { class: "field" }, el("label", { class: "checkbox", for: id }, input, document.createTextNode(label)))
-        : el("div", { class: "field" }, el("label", { for: id, text: label }), input);
-      if (rule.help) field.append(el("div", { class: "help", text: rule.help }));
-      container.append(field);
-    }
+  function mediumField(id) {
+    const select = el("select", { id });
+    select.setValue = (v) => fillMedia(select, v || "");
+    select.getValue = () => select.value;
+    return { node: select, input: select };
   }
 
-  function getAt(obj, path) { return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj); }
-  function setAt(obj, path, value) {
-    const parts = path.split("."); let o = obj;
-    for (const p of parts.slice(0, -1)) { if (typeof o[p] !== "object" || o[p] === null) o[p] = {}; o = o[p]; }
-    o[parts[parts.length - 1]] = value;
-  }
+  const settings = Kit.setupSettings({
+    field: (path, rule, def, id) => (path === "decode.formats" ? formatsField(id)
+      : path === "camera.address" ? addressField(id) : path === "storage.medium" ? mediumField(id) : null),
+    onSaved: async () => { await refreshReader(); updateRegionButtons(); drawOverlay(); },
+  });
 
-  function fillForm(settings) {
-    for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      const v = getAt(settings, input.dataset.path);
-      if (input.dataset.kind === "formats") {
-        for (const cb of input.querySelectorAll("input")) { cb.checked = (v || []).includes(cb.value); cb.disabled = !canWrite; }
-      } else if (input.type === "checkbox") input.checked = !!v;
-      else if (input.dataset.kind === "array") input.value = JSON.stringify(v ?? []);
-      else if (input.dataset.path === "storage.medium") fillMedia(input);
-      else input.value = v ?? "";
-      input.disabled = !canWrite;
-      input.closest(".field").classList.remove("invalid");
-    }
-    for (const id of ["btn-save", "btn-revert", "btn-defaults"]) $(id).disabled = !canWrite;
-  }
-
-  function readForm() {
-    const result = JSON.parse(JSON.stringify(loaded)); // keeps unknown keys
-    for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      let v;
-      if (input.dataset.kind === "formats") v = [...input.querySelectorAll("input:checked")].map((cb) => cb.value);
-      else if (input.type === "checkbox") v = input.checked;
-      else if (input.dataset.kind === "number") v = input.value === "" ? NaN : Number(input.value);
-      else if (input.dataset.kind === "array") { try { v = JSON.parse(input.value || "[]"); } catch (e) { v = input.value; } }
-      else v = input.value;
-      setAt(result, input.dataset.path, v);
-    }
-    return result;
-  }
-
-  function showErrors(errors) {
-    const list = $("settings-errors");
-    list.replaceChildren(...(errors || []).map((m) => el("li", { text: m })));
-    list.hidden = !errors || !errors.length;
-    for (const input of document.querySelectorAll("#settings-fields [data-path]")) {
-      const bad = (errors || []).some((m) => m.startsWith(input.dataset.path + ":") || m.startsWith(input.dataset.path + " "));
-      input.closest(".field").classList.toggle("invalid", bad);
-    }
-  }
-
-  async function loadSettings() {
-    try {
-      if (!meta) {
-        meta = await api("GET", "/settings/meta");
-        const container = $("settings-fields");
-        container.replaceChildren();
-        buildFields(container, meta.defaults, "");
-      }
-      loaded = await api("GET", "/settings");
-      fillForm(loaded);
-      showErrors([]);
-    } catch (e) {
-      $("settings-fields").replaceChildren(el("p", { class: "error", text: "Cannot load settings: " + e.message }));
-    }
-  }
-
-  async function saveSettings(ev) {
-    ev.preventDefault();
-    $("save-state").textContent = "Saving…";
-    try {
-      loaded = await api("PUT", "/settings", readForm());
-      settingsNow = loaded;
-      fillForm(loaded);
-      showErrors([]);
-      $("save-state").textContent = "Saved " + new Date().toLocaleTimeString();
-    } catch (e) {
-      showErrors((e.data && e.data.errors) || [e.message]);
-      $("save-state").textContent = "Not saved";
-    }
-    updateRegionButtons();
-    drawOverlay();
-    refreshReader();
-  }
-
-  async function resetDefaults() {
-    if (!confirm("Reset all settings to their defaults?")) return;
-    try { loaded = await api("POST", "/settings/reset"); settingsNow = loaded; fillForm(loaded); showErrors([]); $("save-state").textContent = "Defaults restored"; }
-    catch (e) { showErrors([e.message]); }
-    updateRegionButtons();
-  }
-
-  const drawer = $("drawer");
-  function openSettings() {
-    if (!canWrite) return;   // read-only users: no settings (the API answers 403 anyway)
-    drawer.classList.add("open");
-    drawer.removeAttribute("inert");
-    drawer.setAttribute("aria-hidden", "false");
-    $("drawer-backdrop").hidden = false;
-    $("btn-settings").setAttribute("aria-expanded", "true");
-    $("save-state").textContent = "";
-    loadSettings();
-    $("btn-close-settings").focus({ preventScroll: true });
-  }
-  function closeSettings() {
-    drawer.classList.remove("open");
-    drawer.setAttribute("inert", "");
-    drawer.setAttribute("aria-hidden", "true");
-    $("drawer-backdrop").hidden = true;
-    $("btn-settings").setAttribute("aria-expanded", "false");
-    $("btn-settings").focus({ preventScroll: true });
-  }
+  // ---- help menu, tutorial ----------------------------------------------------------
+  Kit.setupHelp([
+    { title: "Welcome",
+      text: "This tour shows the controls of the Barcode Reader. Step through it with the arrows (or the ← → keys); " +
+        "the control of each step blinks. Everything stays usable while the tour is open." },
+    { page: "reader", title: "Read", when: () => can("operate"), target: () => $("btn-read"),
+      text: "Takes one image and decodes it. A PLC can trigger reads too, through the Data Layer (trigger / request)." },
+    { page: "reader", title: "Live picture", when: () => can("operate"), target: () => $("btn-live"),
+      text: "A live picture for setting up focus, exposure and the region - it is not decoded." },
+    { page: "reader", title: "Continuous", when: () => can("operate"), target: () => $("btn-continuous"),
+      text: "Reads again and again (the interval is in the settings) until you switch it off." },
+    { page: "reader", title: "Decode region", when: () => can("configure"), target: () => $("btn-region"),
+      text: "Draw the part of the image that is decoded; a smaller region decodes faster. It is stored in the settings." },
+    { title: "Pages", target: () => $("tabs"),
+      text: "The reader with the image and the result, and the history of the last reads. Each page has its own address." },
+    { title: "Image", page: "reader", target: () => $("stage"),
+      text: "The newest image with the codes found (green) and the decode region (yellow, dashed)." },
+    { page: "reader", title: "Result", target: () => $("result-h").closest(".card"),
+      text: "The codes of the shown read, where the read came from, and how long it took." },
+    { page: "reader", title: "Camera", target: () => $("camera-h").closest(".card"),
+      text: () => "The camera and its state." + (can("operate") ? " Reconnect closes and opens it again." : "") },
+    { title: "History", page: "history", target: () => $("history-h").closest(".card"),
+      text: "The last reads (kept in RAM). Click a row to show its image on the Reader page." },
+    { title: "Settings", when: () => can("configure"), target: () => $("btn-settings"),
+      text: "Camera, decoding, live picture and storage. Stored in the ctrlX app data, so they are saved and loaded with " +
+        "configurations.", act: () => settings.open() },
+    { title: "Your permission", when: () => !can("configure"), target: () => $("role"),
+      text: () => can("operate") ? "Operator: you may read codes and run the camera, but not change the settings or the region."
+        : "View only: you see the reads, but can't start any. Ask an administrator for more." },
+    { title: "Data Layer", target: () => $("conn"), text: "The connection of this app to the ctrlX Data Layer." },
+    { title: "Light or dark", target: () => $("btn-theme"),
+      text: "Switches the page between light and dark mode. Each browser keeps its own choice." },
+    { title: "Help", target: () => $("btn-help"),
+      text: "Start this tour again, open the app's page, or see About: version, author, license." },
+  ]);
 
   // ---- start ---------------------------------------------------------------
   // one handler per element (onclick/onsubmit): see docs/ctrlx/gotchas.md #35
-  $("settings-form").onsubmit = saveSettings;
-  $("btn-revert").onclick = () => { fillForm(loaded); showErrors([]); $("save-state").textContent = ""; };
-  $("btn-defaults").onclick = resetDefaults;
-  $("btn-settings").onclick = openSettings;
-  $("btn-close-settings").onclick = closeSettings;
-  $("drawer-backdrop").onclick = closeSettings;
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && drawer.classList.contains("open")) closeSettings();
-    else if (ev.key === "Escape" && drawing) toggleRegion();
+    if (ev.key === "Escape" && drawing && !settings.isOpen()) toggleRegion();
   });
   $("btn-read").onclick = doRead;
   $("btn-continuous").onclick = toggleContinuous;
@@ -723,14 +540,14 @@
 
   (async function init() {
     await refreshStatus();
+    Kit.setupTabs({ onShow: (page) => { if (page === "reader") placeOverlay(); } });   // the overlay needs the shown image
     try { formats = await api("GET", "/formats"); } catch (e) { formats = []; }
-    await refreshSettingsNow();
     await refreshReader();
     await refreshHistory();
-    if (reader && !reader.last) $("placeholder").textContent = canWrite ? "No image yet - press Read." : "No image yet.";
-    document.body.dataset.uiReady = "true";  // for tools/ui_check.py (screenshots wait for it)
+    if (reader && !reader.last) $("placeholder").textContent = can("operate") ? "No image yet - press Read." : "No image yet.";
+    Kit.ready();                                   // for tools/ui_check.py (screenshots wait for it)
+    if (location.hash === "#settings") settings.open();
     setInterval(refreshStatus, 5000);
-    setInterval(refreshSettingsNow, 15000);
     (function poll() {
       refreshReader().finally(() => setTimeout(poll, reader && reader.continuous ? 400 : 1000));
     })();

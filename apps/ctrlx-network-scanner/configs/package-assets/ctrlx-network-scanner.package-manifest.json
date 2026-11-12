@@ -10,13 +10,18 @@
       "scopes": [
         {
           "identifier": "ctrlx-network-scanner.web.all.r",
-          "name": "View network scans",
-          "description": "View scan results, history and profiles of the Network Scanner, download reports"
+          "name": "View Network Scanner",
+          "description": "View: scan results and history of the Network Scanner, download reports"
+        },
+        {
+          "identifier": "ctrlx-network-scanner.web.operate.x",
+          "name": "Operate Network Scanner",
+          "description": "View and operate: also start, abort and delete scans (no profiles, lists or settings)"
         },
         {
           "identifier": "ctrlx-network-scanner.web.all.rw",
-          "name": "Manage Network Scanner",
-          "description": "Start and abort network scans, change scan profiles, whitelist/blacklist and settings, delete scans"
+          "name": "Configure Network Scanner",
+          "description": "View, operate and configure: also change scan profiles, whitelist/blacklist and settings of the Network Scanner"
         }
       ]
     }
@@ -43,6 +48,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-network-scanner.web.all.r",
+          "ctrlx-network-scanner.web.operate.x",
           "ctrlx-network-scanner.web.all.rw"
         ],
         "items": []
@@ -58,6 +64,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-network-scanner.web.all.r",
+          "ctrlx-network-scanner.web.operate.x",
           "ctrlx-network-scanner.web.all.rw"
         ],
         "items": []

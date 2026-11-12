@@ -11,12 +11,17 @@
         {
           "identifier": "ctrlx-core-connector.web.all.r",
           "name": "View Core Connector",
-          "description": "View the connected ctrlX COREs, browse their Data Layer and see the app settings"
+          "description": "View: the connected ctrlX COREs and their Data Layer"
+        },
+        {
+          "identifier": "ctrlx-core-connector.web.operate.x",
+          "name": "Operate Core Connector",
+          "description": "View and operate: also write values on the connected cores (no connections, KVD nodes or settings)"
         },
         {
           "identifier": "ctrlx-core-connector.web.all.rw",
-          "name": "Manage Core Connector",
-          "description": "Add and remove core connections, change the app settings, write Data Layer values and add/delete Key Value Database nodes on the connected cores (with the rights of each connection's user)"
+          "name": "Configure Core Connector",
+          "description": "View, operate and configure: also add and remove core connections and Key Value Database nodes, change the settings (with the rights of each connection's user)"
         }
       ]
     }
@@ -43,6 +48,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-core-connector.web.all.r",
+          "ctrlx-core-connector.web.operate.x",
           "ctrlx-core-connector.web.all.rw"
         ],
         "items": []
@@ -58,6 +64,7 @@
         "target": "_blank",
         "permissions": [
           "ctrlx-core-connector.web.all.r",
+          "ctrlx-core-connector.web.operate.x",
           "ctrlx-core-connector.web.all.rw"
         ],
         "items": []
@@ -119,6 +126,7 @@
         },
         "permissions": [
           "ctrlx-core-connector.web.all.r",
+          "ctrlx-core-connector.web.operate.x",
           "ctrlx-core-connector.web.all.rw"
         ],
         "categories": [

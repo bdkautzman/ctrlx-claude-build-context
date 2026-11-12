@@ -147,7 +147,14 @@ Since 2026-11-09 (user's request):
 * An app keeps its own code in `app.js` / `style.css` and leaves `kit.js` / `kit.css` as they came from the
   template, so a newer version can be copied over. Something every app needs → change it in the template.
 * `index.html` holds the markup kit.js works with (top bar buttons, help menu, drawer); its comments name the ids.
-* Apps made before 0.2.0 have their own copies of these parts (`www/app.js`, core-connector `www/common.js`).
+* An app needs its own control in the drawer (a list editor, a file upload, a "Discover" button): `Kit.setupSettings`
+  `field(path, rule, def, id)` returns it for one setting, `afterBuild` / `onLoaded` / `beforeSave` / `onRevert` add
+  and save the parts that are not one setting (AMR Fleet's AMR list, Barcode Reader's camera address). Long entries:
+  rule `wide: true`. Own colors (a map, charts): listen to `kit:style` / `kit:theme`.
+* Since 2026-11-11 all five apps run on `kit.js` / `kit.css` with the three roles (AMR Fleet 0.6.0, Barcode Reader
+  0.3.0, Core Connector 0.3.0, Network Scanner 0.2.0, System Analyzer 0.2.0); a newer kit.js is copied into each
+  `www/`. Core Connector's `www/common.js` only maps its old names to `Kit`; AMR Fleet keeps its own help menu
+  entries and map tutorial.
 
 ## Home screen widgets (`uiExtensions.dashboard`) - verified on ctrlX OS 4.6 (COREvirtual, 2026-10-23), see `apps/ctrlx-amr-fleet`
 

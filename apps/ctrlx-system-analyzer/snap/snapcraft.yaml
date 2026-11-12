@@ -12,7 +12,8 @@
 
 name: ctrlx-system-analyzer
 title: System Analyzer
-version: 0.1.1
+version: 0.2.0
+license: MIT          # SPDX id - the same as APP_LICENSE in src/app/config.py and the LICENSE file (tests/test_about.py)
 summary: CPU and memory of every ctrlX app, process and thread over time
 description: |
   <!--

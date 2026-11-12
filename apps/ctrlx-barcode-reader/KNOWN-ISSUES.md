@@ -10,6 +10,8 @@ Test setup of all findings below (2026-11-03): camera **Omron Sentech STC-MCS500
 camera's network, MTU 1500; since 2026-11-04 named `x3`, a plain CORE X3); **ctrlX COREvirtual** in ctrlX WORKS with port
 forwarding (amd64, QEMU NAT 10.0.2.15). Since 2026-11-04 also **ctrlX COREplus X7** `x7` (amd64, i7-1185GRE, XF10, MTU 1500);
 app 0.1.0 with Aravis 0.8.30 (Ubuntu 24.04), PyGObject 3.48.2, OpenCV 4.14.0.94, numpy 2.3.5, zxing-cpp 3.1.1.
+Installed now (last recorded): 0.3.0 on the COREvirtual since 2026-11-12 (simulated camera; 19 "Not tested yet");
+X3: 0.3.0 since 2026-11-12 (simulated; the real camera for one test); X7: 0.2.0, holds the camera.
 
 ## Overview
 
@@ -229,6 +231,20 @@ user first; candidate: extend `tools/foss_from_prime.py` with wheel license file
 
 Updated 2026-11-05; results in 24, 28 and 29.
 
+* **0.3.0 on a device** (kit UI, three roles): **amd64 done on the COREvirtual 2026-11-12** (simulated camera): settings and plugs unchanged by the
+  update, Data Layer and log clean, 73.8 MB a few minutes after start; roles through the API with kit-view / kit-operate /
+  kit-configure (settings 403/403/200, Read 403/200/200 - both reads decoded 3 and 4 codes, Discover 403/403/200;
+  `canWrite` trigger / request-id / continuous for operate and configure only); `ui_check --device virtual` as admin
+  and the three test users OK. **arm64 on the real CORE X3 2026-11-12**: the X3 had none of the apps any more (installed fresh, `--service`, about
+  200 s each; the app data of 2026-11-05 was still there and loaded); plugs connected by the installer, Data Layer and
+  log clean, the same role checks through the API as on the COREvirtual all as expected, `ui_check --device x3` as admin
+  and the three test users OK. 72.3 MB at the start (simulated camera, as the X3's settings had it). **Real camera** (powered
+  again that day; the X7's app stopped for the test with `snap stop` and started again afterwards): `camera.source` =
+  `gige`, STC-MCS500POE 21DC415 connected at once, 40 µs packet delay (automatic), 5 reads from the API: every 2448 x
+  2048 Mono8 image complete (5 completed, 0 failures, 0 missing packets), grab 784 ms at the X3's 600 ms exposure,
+  decode 452 ms; whether codes decode was not judged (lighting and focus not set up, the user's note); 99.3 MB with the
+  real frames in the history. `ui_check --device x3` ran with the real camera. Afterwards back to `simulated` (the file
+  now also has the new `style` defaults), the X7 holds the camera again (`camera/state` connected).
 * Real camera: only one symbology (Code 128 label X004WHVORB); all others only with simulated images.
 * The settings drawer, the Region button and the region drawing on a device (locally in headless Chromium; on a device the
   automatic check only opens the page, the settings were changed through the API). The user still clicks through once.

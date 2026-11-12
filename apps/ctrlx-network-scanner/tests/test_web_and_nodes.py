@@ -19,32 +19,62 @@ from app.web_server import WebServer
 from tests.helpers import DEFAULTS_FILE, FakeEnv, TcpServer, load_defaults, profile
 
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
 def make_token(scopes, exp_offset=3600, name="tester"):
     def b64(obj):
         return base64.urlsafe_b64encode(json.dumps(obj).encode()).rstrip(b"=").decode()
     return "{}.{}.sig".format(b64({"alg": "none"}), b64({"scope": scopes, "exp": time.time() + exp_offset, "name": name}))
 
 
-class AuthTest(unittest.TestCase):
-    def test_scopes(self):
-        headers = {"Authorization": "Bearer " + make_token([config.SCOPE_READ])}
-        self.assertTrue(auth.can_read(auth.scopes_from_headers(headers)))
-        self.assertFalse(auth.can_write(auth.scopes_from_headers(headers)))
-        with self.assertRaises(auth.AuthError) as ctx:
-            auth.require(headers, write=True)
-        self.assertEqual(ctx.exception.status, 403)
-        self.assertEqual(auth.user_name(headers), "tester")
+def bearer(scopes):
+    return {"Authorization": "Bearer " + make_token(list(scopes))}
 
-    def test_admin_scope(self):
-        headers = {"Authorization": "Bearer " + make_token([config.SCOPE_ADMIN])}
-        self.assertTrue(auth.can_write(auth.require(headers, write=True)))
+
+class AuthTest(unittest.TestCase):
+    def test_roles(self):
+        """view < operate < configure; each scope gives its role and the ones below, nothing above."""
+        cases = [((config.SCOPE_VIEW,), auth.VIEW), ((config.SCOPE_OPERATE,), auth.OPERATE),
+                 ((config.SCOPE_CONFIGURE,), auth.CONFIGURE), ((config.SCOPE_ADMIN,), auth.CONFIGURE),
+                 ((config.SCOPE_VIEW, config.SCOPE_OPERATE), auth.OPERATE), (("other.app.r",), None)]
+        for scopes, role in cases:
+            self.assertEqual(auth.role_of(set(scopes)), role, scopes)
+            for needed in auth.ROLES:
+                allowed = role is not None and auth.ROLES.index(role) >= auth.ROLES.index(needed)
+                self.assertEqual(auth.allows(set(scopes), needed), allowed, (scopes, needed))
+                if allowed:
+                    auth.require(bearer(scopes), needed)
+                else:
+                    with self.assertRaises(auth.AuthError) as ctx:
+                        auth.require(bearer(scopes), needed)
+                    self.assertEqual(ctx.exception.status, 403)
+
+    def test_role_names_match_the_manifest(self):
+        with open(os.path.join(HERE, "..", "configs", "package-assets",
+                               config.SNAP_NAME + ".package-manifest.json"), encoding="utf-8") as f:
+            manifest = json.load(f)
+        declared = {s["identifier"] for d in manifest["scopes-declaration"] for s in d["scopes"]}
+        self.assertEqual(declared, set(auth.ROLE_SCOPES.values()))
+        for menu in manifest["menus"].values():       # every role must see the menu entries
+            for entry in menu:
+                self.assertEqual(set(entry["permissions"]), declared, entry["id"])
+
+    def test_unknown_role_is_a_bug(self):
+        with self.assertRaises(RuntimeError):
+            auth.require(bearer([config.SCOPE_ADMIN]), True)    # the old require(headers, write=True)
 
     def test_missing_expired_malformed(self):
         for headers in ({}, {"Authorization": "Bearer x.y"},
                         {"Authorization": "Bearer " + make_token([config.SCOPE_ADMIN], -10)}):
             with self.assertRaises(auth.AuthError) as ctx:
-                auth.require(headers, write=False)
+                auth.require(headers)
             self.assertEqual(ctx.exception.status, 401)
+
+    def test_user_name(self):
+        token = base64.urlsafe_b64encode(json.dumps({"name": "anna", "scope": []}).encode()).decode().rstrip("=")
+        self.assertEqual(auth.user_name({"Authorization": "Bearer a." + token + ".s"}), "anna")
+        self.assertEqual(auth.user_name({}), "")
 
 
 class NodeRegistryTest(unittest.TestCase):
@@ -208,7 +238,7 @@ class WebApiTest(unittest.TestCase):
         cls.server.close()
         cls.f.close()
 
-    def req(self, method, path, body=None, scopes=(config.SCOPE_WRITE,)):
+    def req(self, method, path, body=None, scopes=(config.SCOPE_CONFIGURE,)):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         headers = {"Authorization": "Bearer " + make_token(list(scopes))} if scopes is not None else {}
         data = json.dumps(body) if body is not None else None
@@ -225,6 +255,20 @@ class WebApiTest(unittest.TestCase):
         self.f.manager.wait(30)
         return body["id"]
 
+
+    def test_role_split(self):
+        """The user's split 2026-11-10: a route refuses (403) the role just below the one it needs."""
+        below = {auth.OPERATE: (config.SCOPE_VIEW,), auth.CONFIGURE: (config.SCOPE_OPERATE,)}
+        routes = [("POST", "/scans", {"profile": "x"}, auth.OPERATE), ("POST", "/scans/current/abort", None, auth.OPERATE),
+              ("DELETE", "/scans/x", None, auth.OPERATE), ("PUT", "/settings", {}, auth.CONFIGURE),
+              ("GET", "/settings", None, auth.CONFIGURE)]
+        for method, path, body, needed in routes:
+            res = self.req(method, config.API_PREFIX + path, body, scopes=below[needed])
+            self.assertEqual(res[0], 403, (method, path, needed))
+        res = self.req("GET", config.API_PREFIX + "/profiles", None, scopes=(config.SCOPE_VIEW,))   # the run card
+        self.assertEqual(res[0], 200)
+        self.assertTrue(res[1] and "id" in res[1][0])
+
     def test_static_index_without_token(self):
         status, body, _ = self.req("GET", config.URL_PREFIX + "/", scopes=None)
         self.assertEqual(status, 200)
@@ -237,29 +281,29 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual(self.req("GET", config.API_PREFIX + "/scans", scopes=None)[0], 401)
         for method, path, body in (("POST", "/scans", {"profile": "test"}), ("POST", "/scans/current/abort", None),
                                    ("DELETE", "/scans/x", None), ("PUT", "/settings", {})):
-            self.assertEqual(self.req(method, config.API_PREFIX + path, body, scopes=(config.SCOPE_READ,))[0], 403, path)
+            self.assertEqual(self.req(method, config.API_PREFIX + path, body, scopes=(config.SCOPE_VIEW,))[0], 403, path)
 
     def test_scan_lifecycle_and_downloads(self):
         scan_id = self.run_scan()
-        status, body, _ = self.req("GET", config.API_PREFIX + "/scans", scopes=(config.SCOPE_READ,))
+        status, body, _ = self.req("GET", config.API_PREFIX + "/scans", scopes=(config.SCOPE_VIEW,))
         self.assertIn(scan_id, [s["id"] for s in body["scans"]])
-        status, body, _ = self.req("GET", config.API_PREFIX + "/scans/" + scan_id, scopes=(config.SCOPE_READ,))
+        status, body, _ = self.req("GET", config.API_PREFIX + "/scans/" + scan_id, scopes=(config.SCOPE_VIEW,))
         self.assertEqual(body["hosts"][0]["ports"][0]["service"], "ssh")
         self.assertEqual(body["user"], "tester")
         self.assertEqual(body["ratedWith"], "current lists")
-        status, data, res = self.req("GET", config.API_PREFIX + "/scans/{}/report.pdf".format(scan_id), scopes=(config.SCOPE_READ,))
+        status, data, res = self.req("GET", config.API_PREFIX + "/scans/{}/report.pdf".format(scan_id), scopes=(config.SCOPE_VIEW,))
         self.assertEqual((status, res.getheader("Content-Type")), (200, "application/pdf"))
         self.assertTrue(data.startswith(b"%PDF-"))
         self.assertIn(scan_id, res.getheader("Content-Disposition"))
-        status, data, _ = self.req("GET", config.API_PREFIX + "/scans/{}/export.csv".format(scan_id), scopes=(config.SCOPE_READ,))
+        status, data, _ = self.req("GET", config.API_PREFIX + "/scans/{}/export.csv".format(scan_id), scopes=(config.SCOPE_VIEW,))
         lines = data.decode("utf-8-sig").splitlines()
         self.assertTrue(lines[0].startswith("scan,ip,mac"))
         self.assertIn("127.0.0.1", lines[1])
-        status, data, _ = self.req("GET", config.API_PREFIX + "/scans/{}/export.json".format(scan_id), scopes=(config.SCOPE_READ,))
+        status, data, _ = self.req("GET", config.API_PREFIX + "/scans/{}/export.json".format(scan_id), scopes=(config.SCOPE_VIEW,))
         self.assertEqual(data["id"], scan_id)   # req() already parsed the JSON download
-        status, body, _ = self.req("GET", config.API_PREFIX + "/status", scopes=(config.SCOPE_READ,))
+        status, body, _ = self.req("GET", config.API_PREFIX + "/status", scopes=(config.SCOPE_VIEW,))
         self.assertEqual(body["last"]["id"], scan_id)
-        self.assertFalse(body["canWrite"])
+        self.assertFalse(body["canOperate"])
         self.assertEqual(self.req("DELETE", config.API_PREFIX + "/scans/" + scan_id)[0], 200)
         self.assertEqual(self.req("GET", config.API_PREFIX + "/scans/" + scan_id)[0], 404)
         self.assertEqual(self.req("GET", config.API_PREFIX + "/scans/" + scan_id + "/x.pdf")[0], 404)
@@ -268,17 +312,17 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual(self.req("POST", config.API_PREFIX + "/scans", {"profile": "nope"})[0], 404)
         self.assertEqual(self.req("POST", config.API_PREFIX + "/scans", {"x": 1})[0], 400)
         self.assertEqual(self.req("POST", config.API_PREFIX + "/scans/current/abort")[0], 409)
-        status, body, _ = self.req("GET", config.API_PREFIX + "/scans/current?hosts=1", scopes=(config.SCOPE_READ,))
+        status, body, _ = self.req("GET", config.API_PREFIX + "/scans/current?hosts=1", scopes=(config.SCOPE_VIEW,))
         self.assertEqual(body["running"], False)
 
     def test_estimate_and_network(self):
         status, body, _ = self.req("POST", config.API_PREFIX + "/estimate",
                                    {"targets": "10.0.0.0/24, 10.0.1.5", "exclude": "", "tcpPorts": "common", "udpPorts": "x"},
-                                   scopes=(config.SCOPE_READ,))
+                                   scopes=(config.SCOPE_VIEW,))
         self.assertEqual(body["addresses"], 255)
         self.assertGreater(body["tcpPorts"], 50)
         self.assertTrue(any(e.startswith("udpPorts") for e in body["errors"]))
-        status, body, _ = self.req("GET", config.API_PREFIX + "/network", scopes=(config.SCOPE_READ,))
+        status, body, _ = self.req("GET", config.API_PREFIX + "/network", scopes=(config.SCOPE_VIEW,))
         self.assertIn("interfaces", body)
 
     def test_settings_validation_errors(self):
@@ -289,14 +333,14 @@ class WebApiTest(unittest.TestCase):
         self.assertTrue(any(e.startswith("profiles[0].targets") for e in body["errors"]))
 
     def test_values_include_scan_nodes(self):
-        status, body, _ = self.req("GET", config.API_PREFIX + "/values", scopes=(config.SCOPE_READ,))
+        status, body, _ = self.req("GET", config.API_PREFIX + "/values", scopes=(config.SCOPE_VIEW,))
         self.assertIn("scan/start", body)
         self.assertTrue(body["scan/start"]["writable"])
 
     def test_appdata_endpoints(self):
         self.assertEqual(self.req("POST", config.API_PREFIX + "/appdata/save", {"phase": "save", "id": "t"})[0], 204)
         self.assertEqual(self.req("POST", config.API_PREFIX + "/appdata/load", {"phase": "query", "id": "t"},
-                                  scopes=(config.SCOPE_READ,))[0], 403)
+                                  scopes=(config.SCOPE_VIEW,))[0], 403)
         self.assertEqual(self.req("POST", config.API_PREFIX + "/appdata/load", {"phase": "abort", "id": "t"})[0], 204)
 
 

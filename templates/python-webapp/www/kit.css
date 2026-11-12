@@ -107,9 +107,10 @@ fieldset > .fields { margin-top: 4px; }
 legend { font-weight: 600; padding: 0 6px; }
 .field { position: relative; }       /* the info tooltip of a field spans the field (stays inside the drawer) */
 .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-.field-label { display: flex; align-items: center; min-height: 18px; margin-bottom: 4px; }
-.field-label label { margin-bottom: 0; }
+.field-label { min-height: 18px; margin-bottom: 4px; }        /* the label and its info icon in one line of text */
+.field .field-label label { display: inline; margin-bottom: 0; }   /* also over an app's own ".field label" */
 .field .help { font-size: 12px; color: var(--muted); margin-top: 3px; }   /* help text an app puts under a field */
+.field-wide { grid-column: 1 / -1; }   /* an app's own control that needs the whole row (field() -> wide: true) */
 .field.invalid input, .field.invalid select { border-color: var(--err); }
 input[type=text], input[type=number], input[type=password], select {
   width: 100%; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 4px; font: inherit;
@@ -143,7 +144,8 @@ input:disabled, select:disabled { background: var(--hover); color: var(--muted);
    .field the tip spans the field; elsewhere it is centered above the icon (.info-end: ends at the icon). ---- */
 :root { --info-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M8 0a8 8 0 1 0 0 16A8 8 0 1 0 8 0zM8 3a1.35 1.35 0 1 0 0 2.7A1.35 1.35 0 1 0 8 3zM6.1 6.7h3v4.75h.9v1.45H6.05v-1.45h.95V8.1h-.9z'/%3E%3C/svg%3E"); }
 .info { display: inline-block; position: relative; flex: none; width: 13px; height: 13px; margin-left: 5px;
-  border-radius: 50%; color: var(--muted); cursor: help; vertical-align: -2px; }
+  border-radius: 50%; color: var(--muted); cursor: help;
+  vertical-align: calc(.33em - 6.5px); }   /* its middle at the middle of the letters, for any font size (user's note) */
 .info::before { content: ""; display: block; width: 100%; height: 100%; background: currentColor;
   -webkit-mask: var(--info-icon) center / contain no-repeat; mask: var(--info-icon) center / contain no-repeat; }
 .info:hover, .info:focus { color: var(--text); outline: none; }
@@ -154,6 +156,7 @@ input:disabled, select:disabled { background: var(--hover); color: var(--muted);
   opacity: 0; visibility: hidden; transition: opacity .12s; z-index: 10; pointer-events: none; }
 .info:hover::after, .info:focus::after { opacity: 1; visibility: visible; }
 .info-end::after { left: auto; right: -6px; transform: none; }
+.info-down::after { bottom: auto; top: calc(100% + 6px); left: -6px; transform: none; }   /* below and to the right of the icon (top of a dialog) */
 .field .info { position: static; }   /* the tip below the label row, as wide as the field */
 .field .info::after { left: 0; right: 0; top: 22px; bottom: auto; transform: none; width: auto; max-width: none; }
 @media (prefers-reduced-motion: reduce) { .info::after { transition: none; } }

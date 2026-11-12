@@ -23,11 +23,11 @@ Last recorded state of the devices. The state today was not checked.
 
 | Device | App | Settings | Recorded |
 |---|---|---|---|
-| COREvirtual | 0.5.0 | Warehouse map, `fleet.input` = `amr-fields` (set through the web UI 2026-11-01 14:33 CST, presumably by the user), simulation with 4 AMRs. `Large_Warehouse_Map.txt` in the app data | 2026-11-02 |
-| Real CORE | 0.4.0 (0.5.0 on the COREvirtual only: the user's choice) | `HMI_Map.txt`, simulation off. `Warehouse_Map.txt` in the app data | 2026-11-01, still 0.4.0 on 2026-11-02 |
+| COREvirtual | 0.6.0 (amd64, installed 2026-11-11) | unchanged by the update: `Large_Warehouse_Map.txt`, `fleet.input` = `amr-fields`, simulation with 4 AMRs. Test users kit-view / kit-operate / kit-configure have the app's three scopes | 2026-11-11 |
+| Real CORE | 0.6.0 (arm64, installed fresh 2026-11-12 - the X3 had none of the apps any more; 0.5.0 was on the COREvirtual only: the user's choice) | `HMI_Map.txt`, simulation off. `Warehouse_Map.txt` in the app data | 2026-11-01, still 0.4.0 on 2026-11-02 |
 
 Versions on devices: 0.1.0, 0.2.0, 0.2.1 on the COREvirtual; 0.2.2, 0.2.3/0.2.4, 0.3.0, 0.4.0 on both; 0.5.0 on the
-COREvirtual. **0.2.5 and 0.3.1 went to no device as such** (recorded as "built, not installed" and "built; devices
+COREvirtual, 0.6.0 on the COREvirtual. **0.2.5 and 0.3.1 went to no device as such** (recorded as "built, not installed" and "built; devices
 still run 0.3.0"): their changes reached the devices with the next installed version.
 
 ## Overview
@@ -61,6 +61,7 @@ still run 0.3.0"): their changes reached the devices with the next installed ver
 | 25 | The 208 x 356 m map and its generator are not in the repo | maintenance caveat | copy in `.dev/maps/` (git-ignored) |
 | 26 | Parts of the README performance section predate later versions | documentation caveat | see below |
 | 27 | Not tested yet (list below) | open | - |
+| 28 | Web API `GET /values` reports `fleet/amrs` as writable (`canWrite`) for operate also in the per-AMR modes, where a write is rejected | caveat (0.6.0, seen on the COREvirtual) | the write answers 400 "read-only in input mode ..."; nothing changes |
 
 ## Details
 
@@ -226,6 +227,14 @@ git-ignored, so a clone of the repo does not have it. It was also uploaded to th
   measured and fixed that (see 11).
 * The tables' "real ctrlX CORE (ARM, 2 cores)": 2 cores for apps, 4 in total [#73].
 
+### 28. `canWrite` of `fleet/amrs` in the per-AMR modes (2026-11-11, 0.6.0, COREvirtual)
+
+`GET /values` sets `canWrite` from the node's static `writable` flag and the user's role. `fleet/amrs` is writable
+in `fleet-json` only; in `amr-json` / `amr-fields` `amr_inputs.py` rejects the write. Seen with the test users on
+the COREvirtual (`fleet.input` = `amr-fields`): kit-view gets 403 "Missing permission: operate", kit-operate gets
+400 "fleet/amrs is read-only in input mode amr-fields - write fleet/amr/<id>"; the fleet stays as it was. The page
+has no value editor, so only API users see the flag. Open: let `canWrite` follow the input mode (not asked for).
+
 ### Other gotchas from this app
 
 * **Widget login** [#53, #57]: not in the SDK docs. The ctrlX UI (rexroth-deviceadmin 4.6) keeps the token in
@@ -241,10 +250,17 @@ git-ignored, so a clone of the repo does not have it. It was also uploaded to th
 * **More than 200 AMRs**, up to the 1000 the app accepts.
 * **A browser on a PC or an HMI**: every recorded fps number comes from the emulated VM; `--narrow` runs locally only.
 * **0.3.1's list change on a device**: included since 0.4.0, no device measurement recorded.
-* **`ui_check --device` on 0.4.0 and 0.5.0**: not recorded (last recorded: 0.3.0 on the COREvirtual). For 0.5.0 the map
-  upload with the button through the reverse proxy is recorded.
-* **`ui_check --device` and the home screen widget on the real CORE**: recorded for the COREvirtual only (widget: 0.2.0).
-* **Read-only user on a device**: `ui_check --role reader` is recorded locally.
+* **`ui_check --device` on 0.4.0 and 0.5.0**: not recorded (last recorded before 0.6.0: 0.3.0 on the COREvirtual). For
+  0.5.0 the map upload with the button through the reverse proxy is recorded. **0.6.0: done on the COREvirtual**
+  2026-11-11 as admin and as kit-view / kit-operate / kit-configure (all OK, screenshots looked at).
+* **0.6.0 on the real CORE (arm64)**: done on the X3 2026-11-12 with the app data of 2026-11-05 (`HMI_Map.txt`, simulation
+  off, no AMRs): Data Layer and log clean, 36.7 MB; roles through the API as on the COREvirtual (settings, AMR list, maps
+  403 for view and operate; `fleet/amrs` `canWrite` for operate and configure); `ui_check --device x3` as admin and the
+  three test users OK. The 208 x 356 m map and the load tests were not repeated on the X3.
+* **The home screen widget on a real home screen**: `ui_check --device` (COREvirtual 0.6.0, X3 0.6.0) shows the widget's
+  test page only.
+* **Read-only user on a device**: done with 0.6.0 on the COREvirtual and the X3 (kit-view: no Settings, settings/maps/AMR-list
+  API 403).
 * **Long runs** (hours/days): memory growth, the path history at its 200,000-point cap.
 * **Save/load of a ctrlX configuration** with the AMR list and large map files (size, time): not recorded.
 * **Wildcard node**: whether `/**` alone covers the parent address [#88].

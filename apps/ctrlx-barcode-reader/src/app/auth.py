@@ -9,6 +9,13 @@ Security model (see docs/ctrlx/web-ui-and-reverse-proxy.md):
     signature here: we only read the scopes of an already-validated token.
   * Static files (HTML/JS/CSS) are NOT restricted and must never contain data.
 
+Roles (each includes the ones before it; the scopes are declared in the package manifest):
+  view       <snap>.web.all.r       status, values, results
+  operate    <snap>.web.operate.x   + write runtime values, start/stop/trigger actions
+  configure  <snap>.web.all.rw      + settings (and the ctrlX admin scope rexroth-device.all.rwx)
+Every API route calls require(headers, <role>). Writes through the Data Layer itself are not
+affected: there the ctrlX user's Data Layer permissions apply.
+
 If you ever add a path outside <prefix>/api that returns data, add it to "restricted".
 """
 
@@ -17,6 +24,10 @@ import json
 import time
 
 from app import config
+
+VIEW, OPERATE, CONFIGURE = "view", "operate", "configure"
+ROLES = (VIEW, OPERATE, CONFIGURE)   # lowest first
+ROLE_SCOPES = {VIEW: config.SCOPE_VIEW, OPERATE: config.SCOPE_OPERATE, CONFIGURE: config.SCOPE_CONFIGURE}
 
 
 class AuthError(Exception):
@@ -48,10 +59,8 @@ def scopes_from_payload(payload):
     return set()
 
 
-def scopes_from_headers(headers):
-    """Return the set of scopes of the caller. Raises AuthError(401) without a usable token."""
-    if config.DEV_NO_AUTH:
-        return {config.SCOPE_ADMIN}
+def _payload(headers):
+    """The JWT payload of the request. Raises AuthError(401) without a usable token."""
     auth = headers.get("Authorization", "")
     if not auth.lower().startswith("bearer "):
         raise AuthError(401, "Missing bearer token")
@@ -61,21 +70,53 @@ def scopes_from_headers(headers):
     exp = payload.get("exp")
     if isinstance(exp, (int, float)) and exp < time.time():
         raise AuthError(401, "Token expired - reopen the app from the ctrlX menu")
-    return scopes_from_payload(payload)
+    return payload
 
 
-def can_read(scopes):
-    return bool(scopes & {config.SCOPE_ADMIN, config.SCOPE_WRITE, config.SCOPE_READ})
+def scopes_from_headers(headers):
+    """Return the set of scopes of the caller. Raises AuthError(401) without a usable token."""
+    if config.DEV_NO_AUTH:
+        return {config.SCOPE_ADMIN}
+    return scopes_from_payload(_payload(headers))
 
 
-def can_write(scopes):
-    return bool(scopes & {config.SCOPE_ADMIN, config.SCOPE_WRITE})
+def user_name(headers):
+    """Login name of the caller (ctrlX tokens carry the claim "name") for log lines - "" if unknown."""
+    if config.DEV_NO_AUTH:
+        return "dev"
+    try:
+        payload = _payload(headers)
+    except AuthError:
+        return ""
+    for key in ("name", "preferred_username", "sub"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value[:64]
+    return ""
 
 
-def require(headers, write):
-    """Return scopes or raise AuthError(401/403)."""
+def role_of(scopes):
+    """The highest role the scopes give (VIEW / OPERATE / CONFIGURE), or None for no access."""
+    if scopes & {config.SCOPE_ADMIN, config.SCOPE_CONFIGURE}:
+        return CONFIGURE
+    if config.SCOPE_OPERATE in scopes:
+        return OPERATE
+    if config.SCOPE_VIEW in scopes:
+        return VIEW
+    return None
+
+
+def allows(scopes, role):
+    """True when the scopes give `role` or a higher one."""
+    have = role_of(scopes)
+    return have is not None and ROLES.index(have) >= ROLES.index(role)
+
+
+def require(headers, role=VIEW):
+    """Return the caller's scopes or raise AuthError(401 no/invalid token, 403 role missing)."""
+    if role not in ROLES:   # a bug in the route, not a bad request: 500 + log
+        raise RuntimeError("unknown role " + repr(role))
     scopes = scopes_from_headers(headers)
-    allowed = can_write(scopes) if write else can_read(scopes)
-    if not allowed:
-        raise AuthError(403, "Missing permission " + (config.SCOPE_WRITE if write else config.SCOPE_READ))
+    if not allows(scopes, role):
+        raise AuthError(403, "Missing permission: {} ({})".format(role, ROLE_SCOPES[role]))
     return scopes
