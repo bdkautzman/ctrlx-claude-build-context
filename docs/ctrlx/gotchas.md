@@ -24,7 +24,7 @@ An entry can be under more than one topic. Kit parts still unverified on a devic
   #33 slow checks after a build · #36 arm64 cross-build · #47 builds take ~20 min · #48 `.app` format · #49 one `.app`
   for two architectures · #63 new top-level folder not in the snap · #70 JavaScript library without Node.js · #94 Ubuntu
   packages with Python modules · #95 auto mode blocks downloaded wheels · #96 OpenCV size · #98 numpy 2.4 on the
-  COREvirtual · #99 arm64 snap with amd64 packages
+  COREvirtual · #99 arm64 snap with amd64 packages · #113 ENV-DATALAYER-DEB after `sudo snapcraft`
 - **Device, install, `tools/ctrlx.py`**: #21 build VM proxy, device time-outs · #22 install needs SERVICE · #23 HTTP 502
   right after an install · #26 Logbook text search answers 204 · #27 package version field · #37 real CORE vs
   COREvirtual · #38 every URL shows the ctrlX UI (no proxy route) · #45 the COREvirtual from the LAN · #46 install
@@ -34,7 +34,7 @@ An entry can be under more than one topic. Kit parts still unverified on a devic
   route · #53 widget authentication · #55 read-only users and settings · #57 widget created at install · #91 big
   uploads, drain a rejected body · #102 HTTP 502 for many parallel requests
 - **UI tests (Playwright)**: #51 no browser in the build VM · #52 headless Chromium setup · #54 second page in one tab ·
-  #56 time-out during a build · #60 page speed in the VM
+  #56 time-out during a build · #60 page speed in the VM · #114 setup stops on a fresh VM
 - **Settings, app data, Solutions**: #7 hard-coded solutions path · #18 app data mounted after the start · #24 load
   refused by Motion · #25 no abort after a refused query · #42 credentials in settings · #82 "Permission denied" at
   the first start · #85 app data kept after uninstall · #89 `PUT /settings` replaces all · #107 copy right after a
@@ -99,7 +99,8 @@ An entry can be under more than one topic. Kit parts still unverified on a devic
     (forum thread) → build in the ctrlX App Build Environment with the matching SDK version and
     `ctrlx-datalayer` .deb; don't mix SDK/deb/base versions.
 17. **`apt` can't find `ctrlx-datalayer` during the snap build** → the local apt repo from the
-    SDK .deb is not set up: `install-ctrlx-datalayer.sh <dir-with-deb>`. [ENV-DATALAYER-DEB]
+    SDK .deb is not set up: `install-ctrlx-datalayer.sh <dir-with-deb>`. [ENV-DATALAYER-DEB] Installed but still reported:
+    #113 (apt cache written by `sudo snapcraft`).
 18. **App starts before app data is mounted** → `$SNAP_COMMON/solutions/activeConfiguration`
     may not exist yet; wait/poll, never crash (template handles it).
 19. **SDK sample bugs to not copy**: `samples-python/logbook/snap/snapcraft.yaml` has a list of
@@ -784,3 +785,29 @@ App `ctrlx-barcode-reader` (GigE Vision camera, Aravis + OpenCV + zxing-cpp), 20
     at start); `MALLOC_ARENA_MAX=2` no change; the `DataLayerClient` +0.16 MB. Not tried: a dict instead of
     mimetypes (~0.5 MB), a plain class instead of dataclasses (<= 1 MB, if nothing else imports inspect). So ~31 MB
     is the price of Python + the Data Layer library; an app has ~40 MB RSS for its own work under the 75 MB target.
+
+Setting up a new App Build Environment VM (Ubuntu 24.04.5, amd64), 2026-11-23:
+
+113. **`ERROR ENV-DATALAYER-DEB apt cannot find 'ctrlx-datalayer'` although `apt-cache policy ctrlx-datalayer` shows
+    3.5.2 installed** (App Build Environment, snapcraft 8.14.5, apt 2.8.4ubuntu0.1, 2026-11-23). Every build stopped
+    there: `build-snap.sh` runs `check.sh --pre-build` first. Cause: an SDK sample had been built with
+    **`sudo snapcraft`**. As root, snapcraft's bundled apt library (core24's libapt-pkg 2.8.3, python-apt 2.7.7)
+    rewrote `/var/cache/apt/pkgcache.bin` and `srcpkgcache.bin`; the VM's apt 2.8.4 hashes its own version into the
+    cache and rejected them (`apt-cache -o Debug::pkgCacheGen=1 policy ctrlx-datalayer` →
+    `Opened cache with hash 434663236, expecting 2738909408` ... `Do we have write-access to the cache files? NO`).
+    A non-root `apt-cache` then rebuilds the cache from ~430 MB of package lists (amd64 + arm64) in memory on every
+    call: ~30 s of CPU, more than the checker's 20 s timeout, which it reports as "not found". Fix: `sudo apt-get
+    update` once (rewrites the cache; `apt-cache policy` 1.4 s again, check `RESULT: OK`). Never run snapcraft with
+    sudo (also a hard rule in CLAUDE.md). Why it had been used: in host mode a non-root snapcraft cannot install
+    build packages (`Packages list not refreshed, not running as superuser` ... `E: Could not open lock file
+    /var/lib/dpkg/lock-frontend` ... `Cannot install all requested build packages: findutils, python3-dev,
+    python3-venv`) - install those with `sudo apt-get install` and run snapcraft as the user again. A root build
+    also leaves root-owned `parts/` and `.snap` files in the project. Not a checker change (user's choice): a
+    checker timeout still reads as "apt cannot find". Source: this VM, `~/.local/state/snapcraft/log/`,
+    `/var/log/apt/history.log`.
+114. **`tools/setup-ui-test.sh` stopped without a message after `== installing pypdfium2==5.14.0`** (fresh VM, 2026-11-23;
+    `--check` printed nothing either). Cause: the browser folder `~/.cache/ms-playwright/chromium_headless_shell-<rev>`
+    did not exist yet; `find` on it failed and `set -euo pipefail` ended the script inside `browser=$(find ... | head -1)`.
+    Earlier set-ups (#52) never hit it because the folder was already there. Fix: `|| true` on that line; then the
+    script downloaded Chrome Headless Shell 156.0.8078.4, printed the apt line (the same ten packages as #52 = 25
+    packages), and after that install ended with `READY`; `ui_check.py templates/python-webapp` → `UI CHECK: OK`.

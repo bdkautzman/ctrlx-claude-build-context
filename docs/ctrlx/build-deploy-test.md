@@ -20,6 +20,10 @@ sudo apt-get install -y python3-yaml python3-jsonschema squashfs-tools   # for t
 
 Verify: `apt-cache policy ctrlx-datalayer` shows a candidate; `snap list snapcraft` shows 8.x;
 `python3 tools/ctrlx_check.py templates/python-webapp --pre-build` has no `ENV-*` errors.
+Run snapcraft as the user, **never with sudo** - also not for the SDK samples: a root snapcraft writes apt's cache
+with its own apt version, after which every `apt-cache` call takes ~30 s and the check reports `ENV-DATALAYER-DEB`
+(fix: `sudo apt-get update`, gotchas #113). If snapcraft says "Cannot install all requested build packages", install
+those with `sudo apt-get install` and run snapcraft again as the user.
 Put the kit on the VM with git (preferred) or scp; keep LF line endings (see gotchas).
 
 Optional, for UI checks in a real browser (`tools/ui_check.py`, §1): `tools/setup-ui-test.sh`. It installs,

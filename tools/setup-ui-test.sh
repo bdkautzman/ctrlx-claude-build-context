@@ -55,7 +55,8 @@ fi
 location=$("$VENV/bin/playwright" install --dry-run --only-shell chromium 2>/dev/null \
   | awk '/Install location:/ && /chromium_headless_shell/ {print $3; exit}')
 [ -n "$location" ] || fail "cannot determine the browser location (playwright install --dry-run)"
-browser=$(find "$location" -name chrome-headless-shell -type f 2>/dev/null | head -1)
+# "|| true": on a fresh machine $location does not exist yet, find fails and pipefail would end the script silently
+browser=$(find "$location" -name chrome-headless-shell -type f 2>/dev/null | head -1 || true)
 if [ -z "$browser" ]; then
   [ "$CHECK" = 1 ] && fail "browser not downloaded - run tools/setup-ui-test.sh"
   echo "== downloading the headless browser (~110 MB) to $location"
