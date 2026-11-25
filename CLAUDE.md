@@ -19,7 +19,7 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 ## Layout
 - `apps/<snap-name>/` – the apps (create with `python3 tools/new_app.py ...`, never by hand-copying)
 - `templates/python-webapp/` – reference implementation; keep it working, don't put app code in it
-- `tools/` – `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `ui_check.py` (web UI in headless Chromium, screenshots; setup once: `setup-ui-test.sh`), `ui-feedback/overlay.js` (dev-only notes on the `run-local.sh` page, skill `/ui-feedback`), `pdf_check.py` (PDF pages → PNG), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
+- `tools/` – `kit_init.py` (setup check of the machine: run once after loading the kit, not in builds), `check.sh` (tests + compliance), `ctrlx_check.py`, `new_app.py`, `ctrlx.py` (device REST + SSH, devices from `devices.toml`), `build-snap.sh` (called by the apps' build scripts), `make-app.sh` (on demand: amd64 + arm64 snaps → one `.app`), `ui_check.py` (web UI in headless Chromium, screenshots; setup once: `setup-ui-test.sh`), `ui-feedback/overlay.js` (dev-only notes on the `run-local.sh` page, skill `/ui-feedback`), `pdf_check.py` (PDF pages → PNG), `foss_from_prime.py`, `fix-permissions.sh` (after Windows copies)
 - `docs/ctrlx/` – curated rules; start at `docs/ctrlx/README.md`; `upstream-sdk-4.6.0/` = verbatim SDK docs
 - `reference/` – read-only: Data Layer API source, SDK samples, REST specs, example apps, CORE hardware facts (see `reference/README.md`)
 
@@ -101,6 +101,7 @@ Current state of the kit and open items: `README.md` → "Status"; apps: `apps/R
 
 ## Commands
 ```bash
+python3 tools/kit_init.py [--json]                       # once after loading the kit: what is missing on this machine
 python3 tools/new_app.py --name <app> --title "<Title>"   # prefix, author, url, license (MIT) from kit.toml (else --author --url --license)
 tools/check.sh apps/<app> [--release] [--pre-build] [--snap file.snap]
 cd apps/<app> && ./run-local.sh                # http://127.0.0.1:8080/<snap>/  (no ctrlX needed)

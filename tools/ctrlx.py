@@ -194,10 +194,10 @@ class Device:
             # e.g. RemoteDisconnected while the reverse proxy reloads during an app install
             raise SystemExit("Connection to {} lost: {}".format(url, exc or type(exc).__name__))
 
-    def token(self):
+    def token(self, timeout=60):
         if self._token is None:
             _, _, body = self.request("POST", "/identity-manager/api/v2/auth/token",
-                                      {"name": self.user, "password": self.password}, auth=False)
+                                      {"name": self.user, "password": self.password}, auth=False, timeout=timeout)
             self._token = body["access_token"]
         return self._token
 

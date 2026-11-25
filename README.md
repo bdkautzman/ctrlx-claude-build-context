@@ -14,7 +14,7 @@ and a settings JSON in ctrlX app data.
 | `.claude/settings.json` | permissions (checks, tests, builds, UI checks, read-only device commands and installs allowed - also with `--device NAME`; Data Layer writes ask; reference read-only) + a hook that re-checks an app after edits to its snapcraft/manifest/validation files |
 | `docs/ctrlx/` | curated rules (start at `docs/ctrlx/README.md`), `decisions.md` (what was decided and why), `gotchas.md` (grows over time; read through its topic index), verbatim SDK 4.6.0 docs in `upstream-sdk-4.6.0/` |
 | `templates/python-webapp/` | known-good template app (web UI with three roles, settings drawer, help/tutorial and home screen widget + Data Layer provider with every PLC type + Data Layer client + app-data settings, dev-only UI feedback overlay on the `run-local.sh` page, 67 unit tests, fake Data Layer, UI scenario for `tools/ui_check.py`) |
-| `tools/` | `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/call app APIs/logs/ssh on a test device from `devices.toml`), `ui_check.py` + `setup-ui-test.sh` (web UI in headless Chromium with screenshots, locally or on a device), `ui-feedback/overlay.js` (dev-only: Alt+click an element on the `run-local.sh` page, leave a note; skill `/ui-feedback` fixes the notes), `pdf_check.py` (generated PDFs → PNG), `foss_from_prime.py` |
+| `tools/` | `kit_init.py` (setup check of the machine, once after loading the kit), `check.sh` / `ctrlx_check.py` (ctrlX compliance checker, 40+ rules, schema validation), `new_app.py`, `ctrlx.py` (install/read nodes/call app APIs/logs/ssh on a test device from `devices.toml`), `ui_check.py` + `setup-ui-test.sh` (web UI in headless Chromium with screenshots, locally or on a device), `ui-feedback/overlay.js` (dev-only: Alt+click an element on the `run-local.sh` page, leave a note; skill `/ui-feedback` fixes the notes), `pdf_check.py` (generated PDFs → PNG), `foss_from_prime.py` |
 | `reference/` | read-only: Python Data Layer API source 3.6.0, SDK 4.6.0 Python samples, ctrlX REST OpenAPI specs, example apps with notes |
 | `apps/` | your apps go here |
 
@@ -32,7 +32,10 @@ and a settings JSON in ctrlX app data.
 4. Optional: `cp kit.example.toml kit.toml` and put your author, URL and (if you want one) the company part of
    snap names in it - `tools/new_app.py` then needs only `--name <app> --title "..."`. New apps get the MIT license
    (`license` there or `--license` for another).
-5. Verify: `tools/check.sh templates/python-webapp --pre-build` → `RESULT: OK`
+5. Verify: `python3 tools/kit_init.py` checks the whole machine once (~1 min) and lists every component as OK,
+   MISSING (required) or OPTIONAL (missing, needed only for the feature it names), each with its fix and the apt
+   packages in one `sudo apt-get install` line → `RESULT: READY`. Then
+   `tools/check.sh templates/python-webapp --pre-build` → `RESULT: OK`
    and `python3 -m unittest discover -s tools/tests` → OK.
    Optional, so Claude can check web UIs in a real browser and look at screenshots: `tools/setup-ui-test.sh`
    (no root; prints one `sudo apt-get install` line for missing libraries/fonts, ~42 MB), then

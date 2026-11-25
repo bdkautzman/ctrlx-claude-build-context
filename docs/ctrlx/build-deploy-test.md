@@ -18,7 +18,13 @@ ctrlx-automation-sdk/scripts/install-ctrlx-datalayer.sh <folder containing that 
 sudo apt-get install -y python3-yaml python3-jsonschema squashfs-tools   # for tools/check.sh
 ```
 
-Verify: `apt-cache policy ctrlx-datalayer` shows a candidate; `snap list snapcraft` shows 8.x;
+Verify: `python3 tools/kit_init.py` (once after loading the kit, and after changing the setup; ~1 min in the VM)
+checks the kit files (executable bits, LF), Python and the tools' modules, the build host (Ubuntu 24.04, snapcraft 8.x,
+the SDK's `SNAPCRAFT_*` variables, the python plugin's build packages, the `ctrlx-datalayer` .deb, arm64 packages for
+cross builds), PyPI and the apt mirrors, the SDK clone, the UI test setup (with a browser start), `kit.toml` /
+`devices.toml` and a login on every test device. It changes nothing; it ends with `RESULT: READY` or `NOT READY` and
+prints the fixes and one `sudo apt-get install` line per level. `--json` for scripts. By hand:
+`apt-cache policy ctrlx-datalayer` shows a candidate; `snap list snapcraft` shows 8.x;
 `python3 tools/ctrlx_check.py templates/python-webapp --pre-build` has no `ENV-*` errors.
 Run snapcraft as the user, **never with sudo** - also not for the SDK samples: a root snapcraft writes apt's cache
 with its own apt version, after which every `apt-cache` call takes ~30 s and the check reports `ENV-DATALAYER-DEB`

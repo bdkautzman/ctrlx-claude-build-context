@@ -25,7 +25,8 @@ An entry can be under more than one topic. Kit parts still unverified on a devic
   for two architectures · #63 new top-level folder not in the snap · #70 JavaScript library without Node.js · #94 Ubuntu
   packages with Python modules · #95 auto mode blocks downloaded wheels · #96 OpenCV size · #98 numpy 2.4 on the
   COREvirtual · #99 arm64 snap with amd64 packages · #113 ENV-DATALAYER-DEB after `sudo snapcraft` · #118 unpinned
-  `ctrlx-fbs` (new release in a clean build) · #119 corporate VPN on the host: pip proxy 503, device time-outs
+  `ctrlx-fbs` (new release in a clean build) · #119 corporate VPN on the host: pip proxy 503, device time-outs ·
+  #120 `snapcraft --version` takes 48 s, HEAD requests through the build VM's proxy 6-22 s
 - **Device, install, `tools/ctrlx.py`**: #21 build VM proxy, device time-outs · #22 install needs SERVICE · #23 HTTP 502
   right after an install · #26 Logbook text search answers 204 · #27 package version field · #37 real CORE vs
   COREvirtual · #38 every URL shows the ctrlX UI (no proxy route) · #45 the COREvirtual from the LAN · #46 install
@@ -857,3 +858,10 @@ Setting up a new App Build Environment VM (Ubuntu 24.04.5, amd64), 2026-11-23:
     192.168.1.7 answered ping but its token request timed out now and then. Turn the VPN off for builds and device
     tests; then `curl -s -o /dev/null -w '%{http_code}' https://pypi.org/simple/setuptools/` gives 200 and the same
     build and device calls pass. Nothing in the app or the kit to change.
+120. **Two slow calls in the App Build Environment: `snapcraft --version` takes ~48 s, and an HTTP `HEAD` through the
+    VM's proxy 6-22 s where a `GET` of the same URL answers in 0.2 s** (found while writing `tools/kit_init.py`,
+    2026-11-25; snapcraft 8.14.5, proxy `10.0.2.2:3128` from #21). snapcraft is a large Python program and the VM runs
+    emulated (#47); `snap list snapcraft` gives version and channel at once. The proxy delays `HEAD` only:
+    `curl -I http://security.ubuntu.com/ubuntu/` 22.4 s, `curl http://security.ubuntu.com/ubuntu/` 0.19 s
+    (archive.ubuntu.com: 5.7 s vs 0.13 s), so a 15 s timeout reported a reachable mirror as down. Reachability
+    checks from the VM use `GET` and read one byte; version checks use `snap list`.
