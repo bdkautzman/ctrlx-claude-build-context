@@ -413,7 +413,7 @@ class NodeRegistry:
 
 
 def build_node_specs(settings, version, commands=None):
-    """The app's own nodes. The PLC variables (plc/<controller>/...) are not NodeSpecs: one wildcard provider node
+    """The app's own nodes. The PLC variables (connections/<controller>/...) are not NodeSpecs: one wildcard provider node
     serves them (plc_nodes.py, datalayer_service.py)."""
     return [
         NodeSpec("status/version", "string", version, description="Installed app version"),
@@ -428,6 +428,6 @@ def build_node_specs(settings, version, commands=None):
         NodeSpec("controllers/summary", "string", [], json=True,
                  description="JSON list: name, host, netId, state, systemStateName, plcStateName, nodes, nodesOk, "
                              "error"),
-        NodeSpec("nodes/configured", "uint32", 0, description="Data Layer nodes of PLC variables (plc/...)"),
+        NodeSpec("nodes/configured", "uint32", 0, description="Data Layer nodes of PLC variables (connections/...)"),
         NodeSpec("nodes/bad", "uint32", 0, description="Of those: nodes without a current value"),
     ]

@@ -34,5 +34,7 @@ window.ADS = (function () {
     return { cls: "pill pill-" + ({ connected: "ok", connecting: "unknown", disabled: "unknown" }[state] || "warn"),
       text: CTRL_STATE[state] || state };
   }
-  return { stateClass, f32, fmtScalar, fmtNodeValue, browseUrl, ctrlPill };
+  // the Data Layer folder of the PLC variables below the app's root (plc_nodes.BASE; "plc" up to 0.1.1)
+  const DL_BASE = "connections";
+  return { stateClass, f32, fmtScalar, fmtNodeValue, browseUrl, ctrlPill, DL_BASE };
 })();

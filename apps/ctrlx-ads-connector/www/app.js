@@ -242,6 +242,19 @@
     sel.replaceChildren(el("option", { value: "", text: "All controllers" }), ...names.map((n) => el("option", { value: n, text: n })));
     sel.value = names.includes(keep) ? keep : "";
   }
+  // the node list sorts by a click on a column title (Kit.setupSortable); unsorted = the order they were added
+  const nodesSort = { key: null, dir: 1 };
+  function nodeSortValue(n, key) {
+    if (key === "address") return ADS.DL_BASE + "/" + n.controller + "/" + n.address;
+    if (key === "access") return n.writable ? "read/write" : "read";
+    if (key !== "value") return n[key];
+    if (!n.ok || n.value === null || n.value === undefined) return null;   // no value: last
+    if (typeof n.value === "boolean") return n.value ? 1 : 0;
+    if (typeof n.value === "number") return n.value;
+    if (typeof n.value === "string" && /^-?\d+$/.test(n.value) && /int64/.test(n.type)) return Number(n.value);
+    return typeof n.value === "string" ? n.value : JSON.stringify(n.value);
+  }
+  const nodesTable = Kit.setupSortable("nodes-table", nodesSort, () => renderNodes());
   function renderNodes() {
     const text = $("nodes-filter").value.trim().toLowerCase();
     const ctrl = $("nodes-controller").value;
@@ -255,7 +268,8 @@
         text: nodes.length ? "No node matches the filter." : "No Data Layer nodes yet - add PLC variables in the PLC browser of a controller (“Browse PLC” on its tile)." })));
       return;
     }
-    const rows = shown.map((n) => {
+    const order = nodesTable.rows(shown, null, nodeSortValue);
+    const rows = order.map((n) => {
       const val = n.ok ? el("td", { class: "val", text: fmtNodeValue(n.value, n.type) + (n.unit ? " " + n.unit : "") })
         : el("td", { class: "val bad", text: n.error || "no value" });
       const act = el("td", { class: "act" });
@@ -266,7 +280,7 @@
         act.append(del);
       }
       return el("tr", { title: n.description || "" },
-        el("td", { class: "addr", text: "plc/" + n.controller + "/" + n.address }),
+        el("td", { class: "addr", text: ADS.DL_BASE + "/" + n.controller + "/" + n.address }),
         el("td", { class: "sym" }, el("a", { href: browseUrl(n.controller, n.symbol), text: n.symbol,
           title: "Show it in the PLC browser of " + n.controller })),
         el("td", { class: "type", text: n.type }), val,
@@ -280,7 +294,7 @@
     renderNodes();
   }
   async function removeNode(n) {
-    if (!confirm("Remove the Data Layer node plc/" + n.controller + "/" + n.address + "?\n\nThe PLC variable " + n.symbol +
+    if (!confirm("Remove the Data Layer node " + ADS.DL_BASE + "/" + n.controller + "/" + n.address + "?\n\nThe PLC variable " + n.symbol +
       " is not changed.")) return;
     try { await api("POST", "/nodes/delete", { controller: n.controller, addresses: [n.address] }); }
     catch (e) { alert("Cannot remove: " + e.message); }
@@ -331,7 +345,7 @@
         "controller's route table. Remove removes the controller and its Data Layer nodes from this app." },
     { title: "Data Layer nodes", target: () => $("nodes-card"), page: "nodes", act: show("nodes"),
       text: () => "The PLC variables in the ctrlX Data Layer of this device, below " + Kit.PREFIX.slice(1) +
-        "/plc/<controller>/. Each one has the type of its PLC variable (REAL = float32, INT = int16, ...) and is " +
+        "/" + ADS.DL_BASE + "/<controller>/. Each one has the type of its PLC variable (REAL = float32, INT = int16, ...) and is " +
         "read with the controller's poll interval; a writable one (read/write) writes straight into the PLC." +
         (can("configure") ? " The bin removes a node (not the PLC variable)." : "") },
     { title: "Filter", target: () => [$("nodes-filter"), $("nodes-controller")], page: "nodes",

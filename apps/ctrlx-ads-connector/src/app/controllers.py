@@ -429,6 +429,13 @@ class Controller:
             out.setdefault(e.symbol.lower(), []).append(e.address)
         return out
 
+    def _mapped_below(self, path):
+        """Addresses of the nodes of a variable and of everything below it (members, elements; a namespace: its
+        variables) - the details' Data Layer section."""
+        p = path.lower()
+        return [e.address for e in self.nodes.entries(self.name)
+                if not p or e.symbol.lower() == p or e.symbol.lower().startswith((p + ".", p + "["))]
+
     def _describe(self, res, mapped):
         t = res.type
         row = {"enum": [list(x) for x in t.enum]} if t.kind == "enum" else {}
@@ -503,7 +510,8 @@ class Controller:
             path = table.folder_path(path)
             children, _ = table.children(path)
             return {"path": path, "kind": "folder", "name": path.split(".")[-1] if path else "(root)",
-                    "childCount": len(children), "leafCount": _leaf_count(table, path)}
+                    "childCount": len(children), "leafCount": _leaf_count(table, path),
+                    "mapped": self._mapped_below(path)}
         try:
             res = table.resolve(path)
         except at.AdsTypeError as exc:
@@ -520,6 +528,8 @@ class Controller:
             d["elemType"] = t.elem.name if t.elem else None
         if t.kind == "struct":
             d["members"] = len(t.members)
+        if t.has_children:
+            d["mapped"] = self._mapped_below(res.path)     # the variable's own node + those of its members / elements
         if not d["dlType"]:
             d["leafCount"] = _leaf_count(table, res.path)
         if res.readable:

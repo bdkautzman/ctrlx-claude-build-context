@@ -3,6 +3,13 @@
 Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
 Every release needs a higher version than the previous one (ctrlX validation rule).
 
+## Unreleased
+
+- `Kit.setupSortable(table, sort, render)`: table columns sorted by a click on their title (`<th data-sort>`,
+  `data-text` for text columns): high → low, low → high, unsorted; arrow and bold title on the sorted column (from
+  the System Analyzer; first used by ctrlx-ads-connector's node list, 2026-11-25). Styles in `kit.css`. Apps keep
+  their copies of `kit.js` / `kit.css` until they need it.
+
 ## 0.6.0 - 2026-11-12
 
 From moving the five apps onto `kit.js` / `kit.css` (2026-11-10/11, user's request). Built for arm64 + amd64

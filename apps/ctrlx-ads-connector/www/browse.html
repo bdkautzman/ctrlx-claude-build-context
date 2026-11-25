@@ -61,8 +61,6 @@
         <input id="filter" type="search" placeholder="Filter loaded variables" aria-label="Filter loaded variables" autocomplete="off">
         <button type="button" id="btn-collapse" class="tool tool-bare" title="Collapse all" aria-label="Collapse all"><svg class="ic"><use href="#i-collapse"/></svg></button>
         <button type="button" id="btn-reload" class="tool tool-bare" title="Load the symbols again" aria-label="Reload the tree"><svg class="ic"><use href="#i-refresh"/></svg></button>
-        <button type="button" id="btn-add-node" class="btn btn-small btn-primary btn-with-icon" data-role="configure" hidden disabled
-                title="Select a variable, a struct or a namespace first"><svg class="ic"><use href="#i-plus"/></svg><span>Add to Data Layer</span></button>
       </div>
       <div id="tree" class="tree" role="tree" aria-label="PLC variables" tabindex="0"></div>
       <div id="tree-status" class="tree-status muted small" aria-live="polite"></div>
@@ -71,9 +69,8 @@
     <section class="detail-pane" aria-label="Selected variable">
       <form id="goto-form" class="goto" novalidate>
         <label for="goto" class="muted small">Variable</label>
-        <input id="goto" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. MAIN.fbAxis.fPosition or GVL.aValues[3]">
-        <button type="submit" class="btn btn-small">Go</button>
-        <button type="button" id="btn-copy" class="tool tool-bare" title="Copy the path" aria-label="Copy the path"><svg class="ic"><use href="#i-copy"/></svg></button>
+        <input id="goto" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. MAIN.fbAxis.fPosition or GVL.aValues[3], then Enter"
+               title="Type a TwinCAT path and press Enter">
       </form>
       <div id="detail" class="detail"><p class="muted">Select a variable in the tree.</p></div>
     </section>
@@ -87,7 +84,7 @@
       <div class="fields fields-dialog">
         <div class="field field-wide"><label for="n-address">Data Layer address
             <span class="info" tabindex="0" role="img" aria-label="Address format"
-                  data-tip="Below ctrlx-ads-connector/plc/<controller>/. Levels separated by '/', each of letters, digits, '_' and '-' (max. 64)."></span></label>
+                  data-tip="Below ctrlx-ads-connector/connections/<controller>/. Levels separated by '/', each of letters, digits, '_' and '-' (max. 64)."></span></label>
           <input id="n-address" name="address" type="text" spellcheck="false" autocomplete="off" maxlength="300"></div>
         <div class="field field-wide"><div class="field-label"><label for="n-writable">Writable</label>
             <span class="info" tabindex="0" role="img" aria-label="Writable"

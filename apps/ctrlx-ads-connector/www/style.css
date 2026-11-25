@@ -149,7 +149,13 @@ pre.value.error { color: var(--warn); }
 .write-form > .small { display: block; margin-top: 4px; }
 .meta { font-size: 13px; }
 .dl-actions { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 20px; }
-.dl-list { margin: 6px 0 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; }
+.dl-actions .kv { align-items: start; }
+.dl-actions .kv dt { padding-top: 7px; }
+.dl-addrs { display: flex; flex-direction: column; gap: 6px; }
+.dl-addrs-many { max-height: 220px; overflow-y: auto; padding-right: 4px; }
+.addr-row { display: flex; align-items: center; gap: 6px; }
+.addr-row .addr-field { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; }
+.dl-add { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 20px; }
 
 @media (prefers-reduced-motion: reduce) { .tour-ring.blink { animation: none; } }
 

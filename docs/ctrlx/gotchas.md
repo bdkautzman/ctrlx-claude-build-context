@@ -24,7 +24,8 @@ An entry can be under more than one topic. Kit parts still unverified on a devic
   #33 slow checks after a build · #36 arm64 cross-build · #47 builds take ~20 min · #48 `.app` format · #49 one `.app`
   for two architectures · #63 new top-level folder not in the snap · #70 JavaScript library without Node.js · #94 Ubuntu
   packages with Python modules · #95 auto mode blocks downloaded wheels · #96 OpenCV size · #98 numpy 2.4 on the
-  COREvirtual · #99 arm64 snap with amd64 packages · #113 ENV-DATALAYER-DEB after `sudo snapcraft`
+  COREvirtual · #99 arm64 snap with amd64 packages · #113 ENV-DATALAYER-DEB after `sudo snapcraft` · #118 unpinned
+  `ctrlx-fbs` (new release in a clean build) · #119 corporate VPN on the host: pip proxy 503, device time-outs
 - **Device, install, `tools/ctrlx.py`**: #21 build VM proxy, device time-outs · #22 install needs SERVICE · #23 HTTP 502
   right after an install · #26 Logbook text search answers 204 · #27 package version field · #37 real CORE vs
   COREvirtual · #38 every URL shows the ctrlX UI (no proxy route) · #45 the COREvirtual from the LAN · #46 install
@@ -840,3 +841,19 @@ Setting up a new App Build Environment VM (Ubuntu 24.04.5, amd64), 2026-11-23:
     So a connected controller can have no PLC to browse: ctrlx-ads-connector shows "PLC not running" with the
     TwinCAT state instead of a connection error. After the user started a PLC project: system and port 851 RUN
     (5), device info "Plc30 App" 3.1.1967.
+118. **A clean build takes the newest `ctrlx-fbs` from PyPI - the baseline doesn't pin it** (ctrlx-ads-connector
+    0.2.0, 2026-11-25). `ctrlx-fbs` 2.7.0 was published that day; the `--clean` builds took it instead of 2.5.1
+    (every earlier build of the kit's apps), the snap grew by ~1 MB (new flatbuffer types under
+    `comm/axisprofile`, `comm/datalayer`, ...). See it: `unsquashfs -l <snap> | grep -o 'ctrlx_fbs-[^/]*dist-info'`.
+    On the X7 and X3 the app ran with 2.7.0 as before (Data Layer provider with 11 registrations, reads, writes,
+    UI check; RSS 36.0 MB on the X3, 38.4 MB on the X7). Incremental builds keep the version they once installed, so two builds of the same
+    source can differ. The user's choice (2026-11-25): keep it unpinned. Pinning (`ctrlx-fbs==2.5.1` in
+    `src/pyproject.toml`) would be a baseline change (`docs/ctrlx/platform-baseline.md`).
+119. **A corporate VPN on the Windows host breaks the build VM's network: pip `ProxyError('Cannot connect to proxy.',
+    OSError('Tunnel connection failed: 503 ...'))` / `No matching distribution found for setuptools>=61.0`, and device
+    calls time out** (`Cannot reach https://<device>/identity-manager/api/v2/auth/token: timed out`) (2026-11-25,
+    the user's VPN was on). The VM goes out through the host (NAT, proxy `10.0.2.2:3128`, #21), so the VPN's routes
+    decide what it reaches: PyPI through the proxy failed (snapcraft's pip during a `--clean` build), the X3 at
+    192.168.1.7 answered ping but its token request timed out now and then. Turn the VPN off for builds and device
+    tests; then `curl -s -o /dev/null -w '%{http_code}' https://pypi.org/simple/setuptools/` gives 200 and the same
+    build and device calls pass. Nothing in the app or the kit to change.

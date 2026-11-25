@@ -39,6 +39,8 @@ measurements, error texts), what was tried and what is still open, so a later an
 | 12 | AdsLib wrote "Info: connection closed by remote" to the Logbook at every reconnect (every 10 s while a route was missing, X7) | fixed in the 2nd 0.1.0 build: AdsLib's log level follows the app's (INFO -> AdsLib warnings + errors), retries every 30 s after 6 failures | - |
 | 13 | Data Layer writes into the real CX from a CORE | **works** (X7, 2026-11-24, with the user's OK: bTest, sTest; restored) | - |
 | 14 | Read speed: the fastest poll interval is 20 ms (settings limit); every node of a controller is read in one ADS sum read per cycle | **measured** (0.1.1, X7 + X3, 2026-11-25): 20 ms holds on both, also with 98 nodes; see "Read speed" | slower interval / fewer nodes on an X3 with many nodes; every PLC value (10 ms task) only with ADS notifications or a buffer in the PLC (not in v0.1) |
+| 15 | PLC browser: a struct / array / namespace whose members were nodes showed "Not in the Data Layer" and "Add its N values" (adding failed: address already used) | fixed (2026-11-25, found while working through the user's UI notes): its details list the nodes below it, with "Remove", no "Add" | - |
+| 16 | Data Layer folder of the PLC variables renamed `plc/` -> `connections/` | changed in 0.2.0 (user's choice 2026-11-25); device results of 0.1.x below name the old addresses | clients of the old addresses: use `connections/...` |
 
 ## Details
 
@@ -158,6 +160,16 @@ the CX, X3 without route - the scenario allows the browser's 503 for a controlle
     above the read times measured; below 10 ms (the PLC task) no new values would come.
   - Not measured: write latency of Data Layer writes while polling at 20 ms (see 8); several controllers at 20 ms;
     the CX's own load (no access to its CPU figures; ADS reads only).
+
+* **0.2.0 (clean builds), 2026-11-25, X7 (amd64) and X3 (arm64)**: installed with `--service`, settings of 0.1.1 kept
+  (nodes now at `ctrlx-ads-connector/connections/CX-39A650/POU_Counter/...`, the old `plc/...` address answers
+  `DL_INVALID_ADDRESS`); Data Layer provider connected, 11 registrations. REST reads of `iCounter` / `bTest` / `sTest`
+  with the PLC types; Data Layer writes of `bTest` TRUE and `sTest` "ctrlX 0.2.0" reached the PLC (polled back), restored
+  to FALSE / `''` on both. `ui_check --device x3` and `--device x7` as admin: OK (browser title: the name only). RAM: X3
+  35.97 MB RSS / 17.1 MB anon, 1.4 % CPU (System Analyzer); X7 38.4 MB RSS / 17.5 MB anon (`/proc`). The builds
+  contain `ctrlx-fbs` 2.7.0 (released that day; 0.1.x had 2.5.1, gotchas #118). On the X3 the first write attempt
+  timed out at the token request (`identity-manager ... timed out`), the X3 answered ping; the same writes a few
+  minutes later worked. Cause: the user's corporate VPN on the host (also the first failed amd64 build; gotchas #119).
 
 ## Not tested yet
 

@@ -33,6 +33,13 @@
 //                                     the page -> {show(id), current}; without #tabs (one-page app) it does nothing
 //   Kit.setupHelp(steps)              help menu (app page, tutorial, About) and the step-by-step tutorial; About
 //                                     (#btn-about): a dialog with name, version, author, license, AI note (/status)
+//   Kit.setupSortable(table, sort, render)  table columns sorted by a click on their title (<th data-sort="key">,
+//                                     data-text on text columns): high -> low, low -> high, unsorted (text: A -> Z
+//                                     first); arrow + bold title on the sorted column, Enter/Space on a focused title.
+//                                     sort = {key, dir} (the app's state, may start sorted); render() draws the table
+//                                     and calls .rows(rows, tie, value) of the result: the rows in the chosen order
+//                                     (rows without a value last, numbers before texts; value(row, key) when a cell
+//                                     isn't row[key])
 //   Kit.ready(true|false)             <body data-ui-ready> for tools/ui_check.py
 //   Kit.poll(fn, ms)                  run fn every ms while the page is visible
 //   Kit.$, Kit.el, Kit.icon, Kit.showBanner, Kit.fmtDuration, Kit.humanize
@@ -674,13 +681,57 @@ window.Kit = (function () {
     return { start, end, refresh: () => { if (tour) render(); }, handedOver };
   }
 
+  // ---- sortable tables (from the System Analyzer, 2026-11-11; in the kit since 2026-11-25) ----------------------
+  function sortRows(rows, sort, tie, value) {
+    if (!sort.key) return rows;
+    const val = value ? (r) => value(r, sort.key) : (r) => r[sort.key];
+    return rows.slice().sort((x, y) => {
+      const a = val(x), b = val(y);
+      if (a === b) return tie ? tie(x, y) : 0;
+      if (a === null || a === undefined || a === "") return 1;
+      if (b === null || b === undefined || b === "") return -1;
+      const na = typeof a === "number", nb = typeof b === "number";
+      if (na !== nb) return na ? -1 : 1;       // a column with numbers and texts: the numbers first, either way
+      const cmp = na ? a - b : String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+      return (cmp || (tie ? tie(x, y) : 0)) * (cmp ? sort.dir : 1);
+    });
+  }
+  function setupSortable(table, sort, render) {
+    if (typeof table === "string") table = $(table);
+    const heads = [...table.querySelectorAll("th[data-sort]")];
+    const show = () => {
+      for (const th of heads) {
+        const on = th.dataset.sort === sort.key;
+        th.classList.toggle("sorted", on);
+        th.dataset.dir = on ? (sort.dir > 0 ? "up" : "down") : "";
+        th.setAttribute("aria-sort", on ? (sort.dir > 0 ? "ascending" : "descending") : "none");
+        th.title = on ? (sort.dir > 0 ? "Sorted low to high (A → Z)" : "Sorted high to low (Z → A)") + " - click to change"
+          : "Click to sort";
+      }
+    };
+    for (const th of heads) {
+      th.tabIndex = 0;
+      const step = () => {
+        const first = th.dataset.text !== undefined ? 1 : -1;
+        if (sort.key !== th.dataset.sort) { sort.key = th.dataset.sort; sort.dir = first; }
+        else if (sort.dir === first) sort.dir = -first;
+        else sort.key = null;
+        render();
+      };
+      th.addEventListener("click", step);
+      th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); step(); } });
+    }
+    show();
+    return { rows: (rows, tie, value) => { show(); return sortRows(rows, sort, tie, value); }, show };
+  }
+
   // About works on every page with #btn-about, also one with its own help menu (setupHelp wires it as well)
   if ($("btn-about")) $("btn-about").onclick = showAbout;
 
   return {
     PREFIX, API, token, $, el, icon, showBanner, fmtDuration, humanize, ready, poll, showAbout,
     api, download, upload, refreshStatus, can, get role() { return role; }, setupSettings, setupTabs, setupHelp,
-    applyStyle, setTheme, get theme() { return document.documentElement.dataset.theme; }, switchInput,
+    applyStyle, setTheme, get theme() { return document.documentElement.dataset.theme; }, switchInput, setupSortable,
     get status() { return lastStatus; },
   };
 })();

@@ -110,6 +110,22 @@ def run(ui):
         assert page.locator("#nodes-body tr").count() == 5
         page.fill("#nodes-filter", "")
         assert (page.locator("#nodes-body button[aria-label^='Remove']").count() > 0) == configure
+        # sortable columns: A -> Z, Z -> A, back to the order they were added
+        added = page.locator("#nodes-body td.addr").all_inner_texts()
+        head = page.locator("#nodes-table th[data-sort=address]")
+        head.click()
+        texts = page.locator("#nodes-body td.addr").all_inner_texts()
+        expected = page.evaluate("(a) => a.slice().sort((x, y) => x.localeCompare(y, undefined, "
+                                 "{numeric: true, sensitivity: 'base'}))", added)    # the browser's text order
+        assert texts == expected, "A -> Z: " + str(texts)
+        assert head.get_attribute("aria-sort") == "ascending"
+        head.click()
+        assert page.locator("#nodes-body td.addr").all_inner_texts() == texts[::-1], "Z -> A"
+        assert head.get_attribute("aria-sort") == "descending"
+        head.click()
+        assert page.locator("#nodes-body td.addr").all_inner_texts() == added, "unsorted again"
+        page.locator("#nodes-table th[data-sort=value]").click()        # numbers high -> low first
+        assert page.get_attribute("#nodes-table th[data-sort=value]", "data-dir") == "down"
     ui.wait_ready()
     ui.shot("nodes")
 
@@ -174,6 +190,10 @@ def browse(ui, operate, configure):
     row("GVL_Demo.stAxis").click()
     page.locator("#detail .detail-name", has_text="stAxis").wait_for()
     page.locator("#detail pre.value", has_text='"sName"').wait_for()
+    # its 5 members are nodes (prepare): the struct's Data Layer section lists them, no "Add"
+    page.locator("#detail .dl-actions dt", has_text="Addresses (5)").wait_for()
+    assert page.locator("#detail .addr-field").count() == 5
+    assert page.locator("#btn-detail-add").count() == 0, "no Add for a struct whose members are nodes"
     ui.wait_ready()
     ui.shot("browse-struct")
 
@@ -203,13 +223,15 @@ def browse(ui, operate, configure):
         page.locator("#w-state.error", has_text="out of range").wait_for()
         ui.shot("browse-write-error")
 
-    # Data Layer (configure): a struct -> one node per member
-    assert page.locator("#btn-add-node").is_visible() == configure, "Add to Data Layer vs role " + ui.role
+    # Data Layer (configure): not a node yet -> only "Add" (no Data Layer section); a struct -> one node per member
+    assert page.locator("#detail .dl-actions").count() == 0, "no Data Layer section before the variable is a node"
+    assert (page.locator("#btn-detail-add").count() == 1) == configure, "Add to Data Layer vs role " + ui.role
+    assert page.locator("#btn-add-node, #btn-copy").count() == 0, "removed buttons (user's notes 2026-11-25)"
     if configure:
         page.fill("#goto", "MAIN.fbCounter")
         page.press("#goto", "Enter")
         page.locator("#detail .detail-name", has_text="fbCounter").wait_for()
-        page.click("#btn-add-node")
+        page.click("#btn-detail-add")
         page.locator("#node-dialog[open]").wait_for()
         page.locator("#n-plan li", has_text="MAIN/fbCounter/tCycle").wait_for()
         page.fill("#n-address", "counter")
@@ -220,8 +242,10 @@ def browse(ui, operate, configure):
         page.locator("#node-dialog[open]").wait_for(state="detached")
         page.fill("#goto", "MAIN.fbCounter.nCount")
         page.press("#goto", "Enter")
-        page.locator("#detail .dl-list li", has_text="plc/" + FAKE + "/counter/nCount").wait_for()
+        page.locator('#detail .addr-field[value$="connections/{}/counter/nCount"]'.format(FAKE)).wait_for()
+        page.locator("#detail .btn-copy-addr").wait_for()
         page.locator("#btn-detail-remove").wait_for()
+        assert page.locator("#btn-detail-add").count() == 0, "no Add for a variable that is a node"
         ui.wait_ready()
         ui.shot("browse-node")
 

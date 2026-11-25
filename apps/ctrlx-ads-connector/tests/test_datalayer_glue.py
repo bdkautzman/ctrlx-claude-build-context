@@ -1,7 +1,7 @@
 """Provider glue test against the FAKE ctrlxdatalayer in tests/fakes (see tests/fakes/README.md).
 
 Verifies: nodes get registered under DATALAYER_ROOT, reads return the registry value, the PLC variables
-(plc/..., one wildcard node) browse / describe / read / write with exactly their types and the PLC's errors mapped
+(connections/..., one wildcard node) browse / describe / read / write with exactly their types and the PLC's errors mapped
 to Data Layer result codes, every callback answers once.
 """
 
@@ -72,14 +72,14 @@ class GlueTest(unittest.TestCase):
         self.assertTrue(self.svc.status()["connected"], self.svc.status())
         self.provider = fake_provider.ALL_PROVIDERS[-1]
         self.root = config.DATALAYER_ROOT
-        self.plc = self.root + "/plc"
+        self.plc = self.root + "/connections"
 
     def tearDown(self):
         self.svc.stop()
         self.config.datalayer_connection_string = self._orig
 
     def call(self, name, address, *args):
-        """A callback of the wildcard node, like the broker calls it for any address below plc/."""
+        """A callback of the wildcard node, like the broker calls it for any address below connections/."""
         node = self.provider.nodes[self.plc + "/**"]
         out = []
         getattr(node.cbs, name)(None, address, *args,

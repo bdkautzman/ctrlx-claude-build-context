@@ -1,7 +1,7 @@
-"""The Data Layer nodes of PLC variables: <root>/plc/<controller>/<address> - pure Python, no ctrlxdatalayer.
+"""The Data Layer nodes of PLC variables: <root>/connections/<controller>/<address> - pure Python, no ctrlxdatalayer.
 
 settings["nodes"] lists them (added in the web UI's browser, configure role): controller, symbol (TwinCAT path),
-address (below plc/<controller>/, segments with '/'), type (the Data Layer type of the PLC variable when it was
+address (below connections/<controller>/, segments with '/'), type (the Data Layer type of the PLC variable when it was
 added: REAL = float32, ...; arrays array-of-<type>), writable, description, unit.
 
 One wildcard provider node serves all of them (datalayer_service.py, gotchas #88): its callbacks ask this class.
@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.datalayer_nodes import NodeWriteError, coerce, element_type
 
-BASE = "plc"
+BASE = "connections"   # was "plc" up to 0.1.1 (user's choice 2026-11-25)
 
 
 class NodeUnavailable(Exception):
@@ -33,7 +33,7 @@ class NodeUnavailable(Exception):
 @dataclass
 class NodeEntry:
     controller: str
-    address: str              # below plc/<controller>/
+    address: str              # below connections/<controller>/
     symbol: str
     vtype: str
     writable: bool = False

@@ -199,6 +199,17 @@ class ControllerTest(unittest.TestCase):
         self.assertFalse(self.nodes.get("cx", "int").ok)
         self.assertFalse(self.links[-1].is_open)
 
+    def test_details_list_the_nodes_below(self):
+        # the browser's Data Layer section: a struct / namespace lists the nodes of its members (no "Add" then)
+        self.start([node("pos", "GVL_Demo.stAxis.fPos", "float64"), node("ax", "GVL_Demo.aAxis[2].sName", "string"),
+                    node("real", "GVL_Demo.fReal", "float32")])
+        self.assertEqual(self.c.details("GVL_Demo.stAxis")["mapped"], ["pos"])
+        self.assertEqual(self.c.details("GVL_Demo.aAxis")["mapped"], ["ax"])
+        self.assertEqual(sorted(self.c.details("GVL_Demo")["mapped"]), ["ax", "pos", "real"])
+        self.assertEqual(self.c.details("GVL_Demo.fReal")["mapped"], ["real"])
+        self.assertEqual(self.c.details("MAIN")["mapped"], [])
+        self.assertEqual(self.c.details("GVL_Demo.stAxis.fVel")["mapped"], [])
+
     def test_browser_functions(self):
         self.start()
         rows = self.c.browse("MAIN")["children"]

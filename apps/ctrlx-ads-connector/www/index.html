@@ -72,15 +72,15 @@
       <div class="card-head">
         <h2 id="nodes-h">Data Layer nodes <span id="nodes-count" class="muted"></span>
           <span class="info" tabindex="0" role="img" aria-label="About Data Layer nodes"
-                data-tip="PLC variables in the ctrlX Data Layer of this device, below ctrlx-ads-connector/plc/<controller>/. Each node has the type of its PLC variable. Add them in the PLC browser of a controller."></span></h2>
+                data-tip="PLC variables in the ctrlX Data Layer of this device, below ctrlx-ads-connector/connections/<controller>/. Each node has the type of its PLC variable. Add them in the PLC browser of a controller."></span></h2>
       </div>
       <div class="nodes-tools">
         <input id="nodes-filter" type="search" placeholder="Filter by address or PLC variable" aria-label="Filter nodes" autocomplete="off">
         <select id="nodes-controller" aria-label="Controller"><option value="">All controllers</option></select>
       </div>
       <div class="table-wrap">
-        <table class="nodes">
-          <thead><tr><th>Data Layer address</th><th>PLC variable</th><th>Type</th><th>Value</th><th>Access</th><th></th></tr></thead>
+        <table class="nodes" id="nodes-table">
+          <thead><tr><th data-sort="address" data-text>Data Layer address</th><th data-sort="symbol" data-text>PLC variable</th><th data-sort="type" data-text>Type</th><th data-sort="value">Value</th><th data-sort="access" data-text>Access</th><th></th></tr></thead>
           <tbody id="nodes-body"><tr class="empty"><td colspan="6">Loading…</td></tr></tbody>
         </table>
       </div>
@@ -115,7 +115,7 @@
       <div class="fields fields-dialog">
         <div class="field"><label for="c-name">Name
             <span class="info" tabindex="0" role="img" aria-label="Name format"
-                  data-tip="Letters, digits, '_' and '-', max. 24 characters. Also the Data Layer folder of its nodes: plc/<name>/. Can't be changed later."></span></label>
+                  data-tip="Letters, digits, '_' and '-', max. 24 characters. Also the Data Layer folder of its nodes: connections/<name>/. Can't be changed later."></span></label>
           <input id="c-name" name="name" type="text" maxlength="24" required placeholder="Line-1-CX" autocomplete="off"></div>
         <div class="field"><label for="c-host">IP address / host name</label>
           <input id="c-host" name="host" type="text" required placeholder="192.168.1.10" autocomplete="off" spellcheck="false"></div>

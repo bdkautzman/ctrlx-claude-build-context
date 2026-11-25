@@ -311,7 +311,6 @@
     markSelected(null);
     $("goto").value = "";
     $("detail").replaceChildren(el("p", { class: "muted", text: "Select a variable in the tree." }));
-    syncAddButton();
     if ($("tree").contains(document.activeElement)) $("tree").focus();
   }
 
@@ -329,7 +328,6 @@
       detail = null;
       $("detail").replaceChildren(el("h2", { class: "detail-name", text: path ? nameOf(path) : "(root)" }),
         el("p", { class: "error", text: "Cannot read this variable: " + errText(e) }));
-      syncAddButton();
       return;
     }
     if (selected !== path) return;   // another row was clicked meanwhile
@@ -351,19 +349,10 @@
   function hex(n) { return "0x" + Number(n).toString(16).toUpperCase(); }
 
   function canAdd(d) { return !!d && (!!d.dlType || (d.leafCount > 0 && d.leafCount <= 500)); }
-  function syncAddButton() {
-    const btn = $("btn-add-node");
-    const d = detail && detail.data;
-    btn.disabled = !canAdd(d);
-    btn.title = !d ? "Select a variable, a struct or a namespace first"
-      : canAdd(d) ? "Add " + (d.dlType ? d.path : "the " + d.leafCount + " values of " + (d.path || "the root")) + " to the Data Layer"
-        : d.leafCount > 500 ? "More than 500 values - select a part of it" : "This variable can't be a Data Layer node";
-  }
-
   function renderDetail(d) {
     const box = $("detail");
     const kind = d.kind || "variable";
-    const isMapped = (d.mapped || []).length > 0 || mapped.has((d.path || "").toLowerCase());
+    const isMapped = mapped.has((d.path || "").toLowerCase());   // the DL mark: the variable itself is a node
     const head = el("div", { class: "detail-head" }, icon(ICONS[kind] || "variable", "node-ic"),
       el("h2", { class: "detail-name", text: d.path ? d.name || nameOf(d.path) : "(root)" }),
       el("span", { class: "pill pill-unknown", text: kind === "folder" ? "namespace" : kind }),
@@ -406,40 +395,46 @@
     }
     parts.push(el("h3", { text: kind === "folder" ? "Namespace" : "Variable" }), dl);
 
-    // Data Layer nodes of this variable
+    // Data Layer: the section only once the variable (or a value below it) is a node - its address(es) with a copy
+    // button and "Remove"; before that only "Add to Data Layer" (configure) - user's notes 2026-11-25
     const addrs = d.mapped || [];
-    const dlBox = el("div", { class: "dl-actions" }, el("h3", { text: "Data Layer" }));
     if (addrs.length) {
-      dlBox.append(el("p", { class: "small", text: "In the Data Layer of this device as:" }),
-        el("ul", { class: "dl-list" }, ...addrs.map((a) => el("li", { text: Kit.PREFIX.slice(1) + "/plc/" + ctrlName + "/" + a }))));
-    } else {
-      const may = can("configure") ? "" : " (adding them needs the permission “Configure ADS Connector”)";
-      dlBox.append(el("p", { class: "muted small", text: canAdd(d) ? (d.dlType ? "Not in the Data Layer." + may
-        : "Not in the Data Layer. Its " + d.leafCount + " values can be added, one node each" + may + ".")
-        : "Can't be a Data Layer node (" + (d.leafCount > 500 ? "more than 500 values - select a part"
-          : "no values a node can hold") + ")." }));
-    }
-    if (can("configure")) {
-      const row = el("div", { class: "actions" });
-      if (canAdd(d)) {
-        const add = el("button", { type: "button", class: "btn btn-primary btn-with-icon", id: "btn-detail-add" }, icon("plus"),
-          el("span", { text: d.dlType ? "Add to Data Layer" : "Add its " + d.leafCount + " values" }));
-        add.onclick = openAddNode;
-        row.append(add);
-      }
-      if (addrs.length) {
+      const full = (a) => Kit.PREFIX.slice(1) + "/" + ADS.DL_BASE + "/" + ctrlName + "/" + a;
+      const fields = el("div", { class: "dl-addrs" + (addrs.length > 3 ? " dl-addrs-many" : "") }, ...addrs.map((a) => addrField(full(a))));
+      const dlBox = el("section", { class: "dl-actions" }, el("h3", { text: "Data Layer" }),
+        el("dl", { class: "kv meta" }, el("dt", { text: addrs.length > 1 ? "Addresses (" + addrs.length + ")" : "Address" }),
+          el("dd", {}, fields)));
+      if (can("configure")) {
         const del = el("button", { type: "button", class: "btn btn-danger btn-with-icon", id: "btn-detail-remove" }, icon("trash"),
-          el("span", { text: "Remove from Data Layer" }));
+          el("span", { text: addrs.length > 1 ? "Remove these " + addrs.length + " nodes from the Data Layer" : "Remove from Data Layer" }));
         del.onclick = () => removeNodes(d.path, addrs);
-        row.append(del);
+        dlBox.append(el("div", { class: "actions" }, del));
       }
-      if (row.children.length) dlBox.append(row);
+      parts.push(dlBox);
+    } else if (can("configure") && canAdd(d)) {
+      const add = el("button", { type: "button", class: "btn btn-primary btn-with-icon", id: "btn-detail-add",
+        title: d.dlType ? "Make " + d.path + " a node in the ctrlX Data Layer"
+          : "One Data Layer node for each of the " + d.leafCount + " values of " + (d.path || "the root") },
+        icon("plus"), el("span", { text: d.dlType ? "Add to Data Layer" : "Add its " + d.leafCount + " values to the Data Layer" }));
+      add.onclick = openAddNode;
+      parts.push(el("div", { class: "actions dl-add" }, add));
     }
-    if (kind !== "folder" || canAdd(d)) parts.push(dlBox);
 
     box.replaceChildren(...parts);
     detail = { path: d.path, data: d, valueEl, timeEl, live: !!valueEl };
-    syncAddButton();
+  }
+
+  // a Data Layer address: read-only field + copy button
+  function addrField(text) {
+    const input = el("input", { type: "text", class: "addr-field", readonly: true, value: text, spellcheck: "false",
+      "aria-label": "Data Layer address" });
+    const copy = el("button", { type: "button", class: "tool tool-bare btn-copy-addr", title: "Copy the address",
+      "aria-label": "Copy the address " + text }, icon("copy"));
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(text); copy.title = "Copied"; }
+      catch (e) { input.focus(); input.select(); }   // no clipboard (http, older browser): selected for Ctrl+C
+    };
+    return el("div", { class: "addr-row" }, input, copy);
   }
 
   function writeForm(d) {
@@ -465,7 +460,7 @@
       : d.dlType;
     const form = el("form", { class: "write-form", novalidate: true },
       el("h3", { text: "Write" }), el("div", { class: "write-row" }, input, btn), state,
-      el("div", { class: "muted small", text: hint + " · goes into the PLC at once" }));
+      el("div", { class: "muted small", text: hint }));
     form.onsubmit = async (ev) => {
       ev.preventDefault();
       btn.disabled = true;
@@ -535,7 +530,7 @@
     const d = detail && detail.data;
     if (!d) return;
     const many = !d.dlType;
-    $("n-preview").textContent = Kit.PREFIX.slice(1) + "/plc/" + ctrlName + "/" + ($("n-address").value.trim() || "…") + (many ? "/…" : "");
+    $("n-preview").textContent = Kit.PREFIX.slice(1) + "/" + ADS.DL_BASE + "/" + ctrlName + "/" + ($("n-address").value.trim() || "…") + (many ? "/…" : "");
     try {
       const plan = await api("POST", "/nodes/plan", nodeBody());
       const list = $("n-plan");
@@ -584,7 +579,7 @@
     } finally { $("btn-node-ok").disabled = false; $("node-state").textContent = ""; }
   }
   async function removeNodes(path, addrs) {
-    if (!confirm("Remove the Data Layer node(s) of " + path + "?\n\n" + addrs.map((a) => "plc/" + ctrlName + "/" + a).join("\n") +
+    if (!confirm("Remove the Data Layer node(s) of " + path + "?\n\n" + addrs.map((a) => ADS.DL_BASE + "/" + ctrlName + "/" + a).join("\n") +
       "\n\nThe PLC variable is not changed.")) return;
     try {
       await track(api("POST", "/nodes/delete", { controller: ctrlName, addresses: addrs }));
@@ -601,11 +596,6 @@
   $("btn-collapse").onclick = collapseAll;
   $("btn-reload").onclick = reloadAll;
   $("goto-form").onsubmit = (ev) => { ev.preventDefault(); gotoPath($("goto").value); };
-  $("btn-copy").onclick = async () => {
-    try { await navigator.clipboard.writeText($("goto").value); $("btn-copy").title = "Copied"; }
-    catch (e) { $("goto").select(); }
-  };
-  $("btn-add-node").onclick = openAddNode;
   $("node-form").onsubmit = submitAddNode;
   $("n-address").oninput = () => { clearTimeout(planTimer); planTimer = setTimeout(updatePlan, 300); };
   $("btn-node-cancel").onclick = () => dialog.close();
@@ -623,14 +613,14 @@
     { title: "Tree", target: () => $("tree"),
       text: () => "Namespaces (MAIN, the GVLs, ...), their variables, the members of structs and function blocks and " +
         "the elements of arrays. The arrow in front opens one (also a double-click, or the → key). Values are shown " +
-        "and read every " + readText() + " while they are visible (Settings → PLC browser). Marks: the PLC type, " +
+        "and read every " + readText() + " while they are visible (Settings → Browser). Marks: the PLC type, " +
         "DL = in the Data Layer, RO = a constant." },
     { title: "Filter and reload", target: () => [$("filter"), $("btn-collapse"), $("btn-reload")],
       text: "Filter the loaded variables by name, close everything, or load the symbols again (after a download to " +
         "the PLC the app loads them again by itself)." },
     { title: "Variable", target: () => $("goto-form"),
-      text: "Type a TwinCAT path, e.g. MAIN.fbAxis.fPosition or GVL.aValues[3], and press Enter or “Go”: the tree " +
-        "opens on the way and the variable is selected. The button next to it copies the path." },
+      text: "Type a TwinCAT path, e.g. MAIN.fbAxis.fPosition or GVL.aValues[3], and press Enter: the tree " +
+        "opens on the way and the variable is selected." },
     { title: "Details", target: () => $("detail"), canAct: () => !!firstLeaf(), act: () => select(firstLeaf()[0]),
       text: () => "The selected variable: its value (read every " + readText() + "), PLC type, Data Layer type, size and " +
         "place in the PLC (index group / offset), comment and attributes. “Show me” selects a variable." },
@@ -638,13 +628,13 @@
       text: "A variable with a value of its own (not a struct) gets a “Write” field: numbers, TRUE/FALSE, enum " +
         "values, text, arrays as JSON with all their elements. “Write” sends it to the PLC at once - like a " +
         "write in TwinCAT's online view." },
-    { title: "Add to Data Layer", when: () => can("configure"), target: () => $("btn-add-node"),
-      text: "Makes the selected variable a node in the ctrlX Data Layer of this device (plc/<controller>/<address>), " +
+    { title: "Add to Data Layer", when: () => can("configure"), target: () => $("btn-detail-add") || $("detail"),
+      text: "“Add to Data Layer” below the details makes the selected variable a node in the ctrlX Data Layer of this device (connections/<controller>/<address>), " +
         "with the type of the PLC variable. For a struct, a function block, an array of structs or a whole " +
         "namespace it adds one node for each value below it. Writable nodes write into the PLC." },
     { title: "Data Layer nodes", target: () => shownRow(".tag-dl") || $("detail"),
-      text: "Variables with the DL mark are in the Data Layer. Their details list the addresses" +
-        (can("configure") ? " and have “Remove from Data Layer”." : ".") + " All nodes are on the start page, tab " +
+      text: "Variables with the DL mark are in the Data Layer. Their details show the Data Layer address (the " +
+        "button next to it copies it)" + (can("configure") ? " and “Remove from Data Layer”." : ".") + " All nodes are on the start page, tab " +
         "“Data Layer nodes”." },
     { title: "This controller", target: () => [$("ctrl-state"), $("system-state"), $("plc-state")],
       text: "The connection to the controller, the state of TwinCAT (RUN, CONFIG) and of the PLC runtime (RUN, STOP)." },

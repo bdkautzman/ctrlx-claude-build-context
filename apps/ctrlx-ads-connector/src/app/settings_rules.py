@@ -94,13 +94,14 @@ RULES = {
                 "upload). A Data Layer write waits up to three of them (symbol handle, write, release).",
     },
     # Read by the browser page (browse.js via GET /status) - not used by the server.
-    "browser": {"label": "PLC browser"},
+    "browser": {"label": "Browser"},
     "browser.refreshMs": {
         "label": "Read interval [ms]",
         "min": 250,
         "max": 60000,
-        "help": "How often the PLC browser reads the values it shows: the visible values in the tree and the "
-                "value of the selected variable.",
+        "help": "How often the browser page reads the values it shows you while it is open (the visible values "
+                "in the tree and the selected variable). Not the Data Layer nodes: their values are read at the "
+                "poll interval of each controller (Edit on the controller's tile).",
     },
     # The TwinCAT controllers: added / edited in the web UI (+ Add controller), hidden in the settings form.
     "controllers": {
@@ -110,7 +111,7 @@ RULES = {
         "items": {
             "template": CONTROLLER_TEMPLATE,
             "rules": {
-                # also the Data Layer folder plc/<name>/ of its nodes
+                # also the Data Layer folder connections/<name>/ of its nodes
                 "name": {"label": "Name", "pattern": CONTROLLER_NAME,
                          "help": "Letters, digits, '_' and '-', max. 24 characters."},
                 "host": {"label": "IP address / host name", "pattern": r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}"},
@@ -121,7 +122,7 @@ RULES = {
             },
         },
     },
-    # The Data Layer nodes of PLC variables (plc/<controller>/<address>): added in the browser, hidden here.
+    # The Data Layer nodes of PLC variables (connections/<controller>/<address>): added in the browser, hidden here.
     "nodes": {
         "hidden": True,
         "maxItems": MAX_NODES,

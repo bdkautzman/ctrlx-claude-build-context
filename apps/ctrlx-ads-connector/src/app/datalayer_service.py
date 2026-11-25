@@ -11,7 +11,7 @@ The thread reconnects automatically when the provider loses its connection
 (e.g. Data Layer broker restart, app started before automationcore).
 Reading/writing OTHER nodes: pass on_client - the thread opens a client on the same connection and hands a
 datalayer_client.DataLayerClient to on_client(client), on_client(None) when it is gone (datalayer_client.py).
-PLC variables (plc_nodes.NodeMap): <root>/plc and <root>/plc/** - two registrations of one wildcard-capable
+PLC variables (plc_nodes.NodeMap): <root>/connections and <root>/connections/** - two registrations of one wildcard-capable
 provider node (gotchas #88) whose callbacks ask the NodeMap; registered for as long as the provider runs.
 
 ctrlxdatalayer is imported lazily so the rest of the app (web UI, settings) can run on a
@@ -75,7 +75,7 @@ class DataLayerService:
     def __init__(self, settings, version, commands=None, on_client=None, plc_nodes=None):
         """commands: the app's actions behind command nodes (datalayer_nodes.Commands), passed to build_node_specs.
         on_client: called with a DataLayerClient while connected and with None when not (no client without it).
-        plc_nodes: the NodeMap of the PLC variables (plc/...)."""
+        plc_nodes: the NodeMap of the PLC variables (connections/...)."""
         self.registry = NodeRegistry(config.DATALAYER_ROOT, build_node_specs(settings, version, commands))
         self._on_client = on_client
         self._plc_nodes = plc_nodes

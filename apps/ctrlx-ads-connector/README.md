@@ -13,13 +13,16 @@ ctrlX OS 4.6 app (snap, `core24`, Python) for **Beckhoff TwinCAT controllers** (
   PLC type, Data Layer type, size, index group / offset, array bounds, enum values, comment, attributes.
   **Write** values (numbers, TRUE/FALSE, enums, texts, arrays as JSON). A path field (`MAIN.fbAxis.fPos`,
   `GVL.aValues[3]`, `GVL.aGrid[1,2]`) opens the tree on the way.
-* **Data Layer nodes of PLC variables**: "Add to Data Layer" in the browser makes a variable a node
-  `ctrlx-ads-connector/plc/<controller>/<address>` in this device's Data Layer, **with the type of the PLC variable**
+* **Data Layer nodes of PLC variables**: "Add to Data Layer" in the details of the selected variable makes it a node
+  `ctrlx-ads-connector/connections/<controller>/<address>` in this device's Data Layer, **with the type of the PLC variable**
   (REAL = float32, INT = int16, STRING = string, ARRAY OF REAL = array-of-float32, ...); a struct, function block,
   array of structs or a whole namespace adds one node per value below it. Read-only or **writable** (a Data Layer
-  write goes straight into the PLC). A list of all nodes with live values on the start page (tab "Data Layer nodes").
+  write goes straight into the PLC). Once added, the details show the node's address (copy button) and "Remove from
+  Data Layer". A list of all nodes with live values on the start page (tab "Data Layer nodes"), sortable by a click
+  on a column title.
 * **Add route**: asks a controller to add the route for this device (TwinCAT's own UDP add-route request, with the
-  user and password of an administrator of the controller; not stored). **Not tested yet** - see KNOWN-ISSUES 3.
+  user and password of an administrator of the controller; not stored). Tested by the user from the X7 and the X3
+  (KNOWN-ISSUES 3).
 * **Home screen widget** "TwinCAT controllers": every controller with the TwinCAT and PLC state, an **Open** button.
 * Settings in a drawer (log level, ADS timeout, local AMS Net ID, the browser's read interval, page colors), help
   menu with a tutorial over both pages and About, light/dark mode per browser.
@@ -97,7 +100,7 @@ the Data Layer node `controllers/summary`.
 
 Writes into the PLC run with the app's ADS route - not with rights of the person in the browser: give "Operate" and
 "Configure" only to people who may change the PLC's values. Writable Data Layer nodes can be written by every
-Data Layer client with write permission on `ctrlx-ads-connector/plc/...` (ctrlX Settings → Users & Permissions).
+Data Layer client with write permission on `ctrlx-ads-connector/connections/...` (ctrlX Settings → Users & Permissions).
 
 ## Configuration (app data)
 
@@ -122,7 +125,7 @@ configurations:
 ```
 
 * Controllers: **+ Add controller** / Edit / Remove (Configure). `name`: letters, digits, `_`, `-` (max. 24) - also the
-  Data Layer folder `plc/<name>/`. One entry per AMS Net ID (one PLC runtime per entry; a second runtime of the same
+  Data Layer folder `connections/<name>/`. One entry per AMS Net ID (one PLC runtime per entry; a second runtime of the same
   controller: KNOWN-ISSUES 5). `amsPort`: 851 (first TwinCAT 3 PLC), 852, ...; 801 TwinCAT 2.
 * Nodes: added and removed in the browser / the node list. Up to 2000 nodes, 32 controllers. Hand edits of the file
   are picked up automatically; invalid content is rejected and logged (the previous settings stay active).
@@ -132,7 +135,7 @@ configurations:
 
 | Node | Type | Content |
 |---|---|---|
-| `plc/<controller>/<address>` | the PLC variable's | the PLC variables added in the browser (read-only or writable) |
+| `connections/<controller>/<address>` | the PLC variable's | the PLC variables added in the browser (read-only or writable) |
 | `status/version`, `status/state`, `status/heartbeat` | string / string / uint64 | app status |
 | `settings/active` | string (JSON) | active settings |
 | `controllers/configured`, `controllers/connected` | uint32 | controllers / of those connected with a PLC |
@@ -181,7 +184,7 @@ the session can take over traffic of TwinCAT XAE on the host (gotchas #115). Tes
 | `src/app/ads_link.py` | pyads transport: route + AMS port per controller, reads/writes/sum reads, discovery, add route |
 | `src/app/controllers.py` | one thread per controller: connect, states, symbol upload, polling, browser functions, writes |
 | `src/app/plc_nodes.py` | the Data Layer nodes of PLC variables (browse / metadata / read / write for the wildcard node) |
-| `src/app/datalayer_service.py` | provider glue + the `plc/**` wildcard node (gotchas #88) |
+| `src/app/datalayer_service.py` | provider glue + the `connections/**` wildcard node (gotchas #88) |
 | `src/app/dev_fake_plc.py` | dev only, primed out of the snap: fake TwinCAT PLC (tests, UI check, run-local) |
 | `src/app/web_server.py` | routes |
 | `www/` | `index.html`/`app.js` tiles, node list, dialogs; `browse.html`/`browse.js` PLC browser; `widgets.js`; `common.js` |

@@ -240,3 +240,10 @@ input:disabled, select:disabled { background: var(--hover); color: var(--muted);
 @media (max-width: 600px) {
   #app-version { display: none; }
 }
+
+/* sortable tables (Kit.setupSortable): a click on a column title sorts by it */
+th[data-sort] { cursor: pointer; user-select: none; }
+th[data-sort]:hover, th[data-sort]:focus-visible { color: var(--text); }
+th[data-sort].sorted { color: var(--text); font-weight: 700; }
+th[data-sort][data-dir="down"]::after { content: " ↓"; }      /* high to low, Z -> A */
+th[data-sort][data-dir="up"]::after { content: " ↑"; }        /* low to high, A -> Z */
