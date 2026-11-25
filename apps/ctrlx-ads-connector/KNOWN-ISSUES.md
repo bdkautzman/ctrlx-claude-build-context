@@ -38,6 +38,7 @@ measurements, error texts), what was tried and what is still open, so a later an
 | 11 | DATE / DT / TOD / TIME shown as raw numbers (s / ms) in the browser | caveat | - |
 | 12 | AdsLib wrote "Info: connection closed by remote" to the Logbook at every reconnect (every 10 s while a route was missing, X7) | fixed in the 2nd 0.1.0 build: AdsLib's log level follows the app's (INFO -> AdsLib warnings + errors), retries every 30 s after 6 failures | - |
 | 13 | Data Layer writes into the real CX from a CORE | **works** (X7, 2026-11-24, with the user's OK: bTest, sTest; restored) | - |
+| 14 | Read speed: the fastest poll interval is 20 ms (settings limit); every node of a controller is read in one ADS sum read per cycle | **measured** (0.1.1, X7 + X3, 2026-11-25): 20 ms holds on both, also with 98 nodes; see "Read speed" | slower interval / fewer nodes on an X3 with many nodes; every PLC value (10 ms task) only with ADS notifications or a buffer in the PLC (not in v0.1) |
 
 ## Details
 
@@ -106,9 +107,7 @@ empty Net ID for the same controller are not caught: they would share AdsLib's r
   on the controller for AMS Net ID 192.168.1.7.1.1 at 192.168.1.7". System Analyzer: 35.4 MB RSS / 16.4 MB anon / 24.2 MB
   PSS, 7 threads, 0.0 % CPU (while retrying every 30 s).
 
-## Not tested yet
-
-* **X3 against the CX** (after the user's Add route on the X3, 2026-11-24; Logbook: `Add route on CX-39A650 ... for
+* **X3 (arm64) against the CX, 0.1.0 2nd build** (after the user's Add route on the X3, 2026-11-24; Logbook: `Add route on CX-39A650 ... for
   192.168.1.7.1.1 / 192.168.1.7 by boschrexroth: added`): connected (TwinCAT RUN, PLC RUN "Plc30 App"); nodes
   `iCounter` / `bTest` / `sTest` read through REST with the PLC types; `_TaskInfo[1]` decoded; Data Layer writes of
   `bTest` / `sTest` reached the PLC, int16 into `bTest` -> `DL_TYPE_MISMATCH`; restored to FALSE / `''`. System
@@ -118,13 +117,56 @@ empty Net ID for the same controller are not caught: they would share AdsLib's r
 Roles on the devices (2026-11-24): `ui_check.py --device x7|x3 --role reader|operator|writer` as kit-view /
 kit-operate / kit-configure (password = user name since 2026-11-24): all OK through the reverse proxy (X7 connected to
 the CX, X3 without route - the scenario allows the browser's 503 for a controller that isn't connected).
+
+* **Read speed, 0.1.1, 2026-11-25** (X7 amd64 and X3 arm64 against the CX, TwinCAT 3.1.4024, PLC task 10 ms
+  (`_TaskInfo[1].CycleTime` = 100000 x 100 ns); the other CORE kept reading 3 nodes every 100 ms meanwhile). Per point:
+  poll interval set through `PUT /controllers/CX-39A650`, 12 s settling, 60 s measured. App CPU from
+  `/proc/<pid>/stat` over SSH (same method on both devices; the X7 has no System Analyzer), the rest from the new
+  `stats` of `/api/v1/controllers` (period and read time over the last 10 s, totals as differences). "3 nodes" =
+  `POU_Counter` iCounter / bTest / sTest; "98 nodes" = those plus all of `TwinCAT_SystemInfoVarList` and
+  `Global_Version` (53 + 42 values: task info counters, library versions; ~38 / ~193 value changes per s). Settings
+  restored afterwards (3 nodes, 100 ms; checked).
+
+  | Device | Nodes | Interval | Reads/s | Real period avg / max | Read time avg / max | Overruns | App CPU (one core) |
+  |---|---|---|---|---|---|---|---|
+  | X7 | 3 | 1000 ms | 1.0 | 1000.1 / 1000.1 ms | 1.0 / 1.2 ms | 0 | 0.06 % |
+  | X7 | 3 | 100 ms | 10.0 | 100.1 / 100.1 ms | 0.45 / 1.0 ms | 0 | 0.18 % |
+  | X7 | 3 | 50 ms | 20.0 | 50.1 / 50.2 ms | 0.43 / 1.1 ms | 0 | 0.28 % |
+  | X7 | 3 | 20 ms | 50.0 | 20.1 / 20.1 ms | 0.38 / 1.0 ms | 0 | 0.56 % |
+  | X7 | 98 | 100 ms | 10.0 | 100.1 / 100.2 ms | 0.75 / 1.3 ms | 0 | 0.32 % |
+  | X7 | 98 | 20 ms | 49.5 | 20.1 / 20.9 ms | 0.65 / 1.2 ms | 0 | 1.25 % |
+  | X3 | 3 | 1000 ms | 1.0 | 1000.3 / 1001.1 ms | 2.9 / 8.1 ms | 0 | 0.26 % |
+  | X3 | 3 | 100 ms | 9.9 | 100.4 / 113.8 ms | 1.8 / 11.7 ms | 0 | 1.18 % |
+  | X3 | 3 | 50 ms | 19.9 | 50.3 / 56.1 ms | 1.9 / 20.8 ms | 0 | 2.18 % |
+  | X3 | 3 | 20 ms | 49.2 | 20.3 / 26.0 ms | 1.5 / 15.4 ms | 0 | 4.74 % |
+  | X3 | 98 | 100 ms | 10.0 | 100.4 / 103.5 ms | 3.9 / 19.1 ms | 0 | 2.75 % |
+  | X3 | 98 | 20 ms | 49.6 | 20.4 / 26.8 ms | 3.6 / 19.4 ms | 8 of ~3000 (0.3 %) | 12.2 % |
+
+  - **20 ms works on both.** The X7 stays at 20.1 ms with a read time of 0.4-0.7 ms (sum read over the network +
+    decoding); the X3 needs 1.5-4 ms per read and shows scheduling jitter (single reads up to ~20 ms, period up to
+    27 ms). Only the X3 with 98 nodes at 20 ms had overruns (8 reads in 60 s took longer than 20 ms), the average rate
+    still 49.6/s.
+  - CPU grows about linearly with reads per second and with the number of values that change: X3 12 % of one core
+    at 50 reads/s with ~190 changes/s (decoding + Data Layer node updates in Python); the X7 needs ~1/10 of that.
+    RAM does not change (X7 37.1-37.7 MB, X3 35.2-35.9 MB RSS; +0.6 MB for 95 more nodes).
+  - At 20 ms with the 10 ms PLC task every read sees a new iCounter value (50 changes/s) - and every second PLC
+    value is not seen: polling samples, it can't deliver every PLC cycle. (iCounter counts 0 ... ~1000 and starts
+    again, ~100 per s - so it can't be used to count lost values.)
+  - What happens when the interval is too short: the loop does not queue reads; a cycle that takes longer than the
+    interval is followed by the next one at once (counted as an overrun), so the real rate drops to 1 / read time and
+    the app's CPU rises (one thread; worst case one core). Values stay correct. The settings minimum (20 ms) is well
+    above the read times measured; below 10 ms (the PLC task) no new values would come.
+  - Not measured: write latency of Data Layer writes while polling at 20 ms (see 8); several controllers at 20 ms;
+    the CX's own load (no access to its CPU figures; ADS reads only).
+
+## Not tested yet
+
 * The widget in the ctrlX home screen, sidebar entry (the user clicks through).
 * Writes on the real CX through the app (only `bTest` / `sTest` allowed); the struct / array / enum / WSTRING / 64-bit
   paths were tested against the fake PLC only (`src/app/dev_fake_plc.py`, unit tests + UI check).
 * The parser against large projects (10k+ symbols), 64-bit TwinCAT (8-byte pointers), libraries with namespaces,
   `ARRAY [..] OF ARRAY`, unions, properties; TwinCAT 3.1.4026 (UTF-8 comments).
 * Online change / download on a real PLC (symbol version change: unit tests with the fake only).
-* Add route (3).
 
 ## Diagnostics
 
@@ -142,4 +184,8 @@ PYTHONPATH=src:.dev/pylib python3 -c "from app import ads_link; l = ads_link.Ads
 ../../tools/ctrlx.py --device x7 api GET /ctrlx-ads-connector/api/v1/controllers
 ../../tools/ctrlx.py --device x7 dl-read ctrlx-ads-connector/controllers/summary
 ../../tools/ctrlx.py --device x7 logs --snap ctrlx-ads-connector
+# read speed: real period / read time (last 10 s) and totals (cycles, overruns, valueChanges) per controller
+../../tools/ctrlx.py --device x3 api GET /ctrlx-ads-connector/api/v1/controllers | python3 -c 'import json,sys; [print(c["name"], c["pollIntervalMs"], c["stats"]) for c in json.load(sys.stdin)]'
+# app CPU: two samples of utime + stime (ticks, CLK_TCK per s) over SSH
+../../tools/ctrlx.py --device x3 ssh 'pid=$(systemctl show -p MainPID --value snap.ctrlx-ads-connector.service.service); cut -d" " -f14,15 /proc/$pid/stat; getconf CLK_TCK'
 ```

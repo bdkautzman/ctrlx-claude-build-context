@@ -101,7 +101,8 @@ class ControllerTest(unittest.TestCase):
         self.start([node("counter", "MAIN.nCounter", "uint32"), node("real", "GVL_Demo.fReal", "float32", True),
                     node("arr", "GVL_Demo.aInt", "array-of-int16"), node("name", "GVL_Demo.aAxis[2].sName", "string"),
                     node("gone", "MAIN.nope", "int16")])
-        wait_for(lambda: self.value("arr"), msg="values")
+        # one cycle updates the nodes one after the other: wait for all of them (not only the first one)
+        wait_for(lambda: all(self.value(a) is not None for a in ("counter", "real", "arr", "name")), msg="values")
         self.assertEqual(self.value("arr"), tuple(range(10, 110, 10)))
         self.assertEqual(self.value("real"), 0.10000000149011612)
         self.assertEqual(self.value("name"), "Axis 2")
@@ -114,6 +115,13 @@ class ControllerTest(unittest.TestCase):
         time.sleep(0.25)
         per_cycle = (self.links[-1].requests - before) / max(1, 0.25 / 0.02)
         self.assertLess(per_cycle, 2.0)
+        # poll statistics: real period near the interval (20 ms), value changes counted, nothing lost
+        st = wait_for(lambda: (lambda s: s["cycles"] > 10 and s)(self.c.status()["stats"]), msg="stats")
+        self.assertGreater(st["valueChanges"], 4)                       # first values + the counter
+        self.assertLess(st["valueChanges"], st["cycles"] * 5 + 1)
+        self.assertGreaterEqual(st["periodMsAvg"], 15.0)
+        self.assertLess(st["periodMsAvg"], 200.0)
+        self.assertGreater(st["cycleMsAvg"], 0.0)
 
     def test_write_through_a_node(self):
         self.start([node("real", "GVL_Demo.fReal", "float32", True), node("text", "GVL_Demo.sText", "string", True)])
@@ -236,6 +244,30 @@ class AdsLibLogLevelTest(unittest.TestCase):
             self.assertFalse(ads_link.set_adslib_log_level("INFO"))
 
 
+class PollStatsTest(unittest.TestCase):
+    def test_figures(self):
+        st = controllers.PollStats()
+        self.assertEqual(st.snapshot(0.0)["periodMsAvg"], None)
+        t = 100.0
+        for i in range(5):                                  # every 20 ms, 2 ms per cycle, one change each
+            st.cycle(t, t + 0.002, 0.02, 1)
+            t += 0.02
+        st.cycle(t, t + 0.05, 0.02, 3)                      # 50 ms: an overrun, the next one starts late
+        t += 0.05
+        st.cycle(t, t + 0.002, 0.02, 0)
+        snap = st.snapshot(t + 0.002)
+        self.assertEqual((snap["cycles"], snap["overruns"], snap["valueChanges"]), (7, 1, 8))
+        self.assertAlmostEqual(snap["periodMsAvg"], (5 * 20 + 50) / 6, places=1)
+        self.assertAlmostEqual(snap["periodMsMax"], 50.0, places=1)
+        self.assertAlmostEqual(snap["cycleMsMax"], 50.0, places=1)
+        self.assertAlmostEqual(snap["cycleMsTotal"], 5 * 2 + 50 + 2, places=1)
+        st.gap()                                            # connection lost: the next period isn't one
+        st.cycle(t + 5.0, t + 5.002, 0.02, 0)
+        self.assertAlmostEqual(st.snapshot(t + 5.002)["periodMsMax"], 50.0, places=1)
+        later = st.snapshot(t + 5.0 + controllers.STATS_WINDOW_S + 1)   # the window moves on, totals stay
+        self.assertEqual((later["periodMsAvg"], later["cycles"]), (None, 8))
+
+
 class ManagerTest(unittest.TestCase):
     def test_apply_add_change_remove(self):
         plc = FakePlc()
@@ -264,7 +296,8 @@ class ManagerTest(unittest.TestCase):
             wait_for(lambda: "h2" in made, msg="reconnect")
             summary = wait_for(lambda: (lambda s: s[0]["state"] == "connected" and s)(m.summary()), msg="summary")
             self.assertEqual(set(summary[0]), {"name", "host", "netId", "state", "systemStateName", "plcStateName",
-                                               "nodes", "nodesOk", "error"})
+                                               "nodes", "nodesOk", "error", "pollIntervalMs", "periodMsAvg",
+                                               "cycleMsAvg"})
             settings["controllers"], settings["nodes"] = [], []
             m.apply(settings)
             self.assertEqual((m.snapshot(), nodes.counts()), ([], (0, 0)))

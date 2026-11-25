@@ -71,6 +71,22 @@ document - keep it current).
   Not as nodes (shown in the browser): pointers, references, interfaces, bit-addressed symbols; bit members of structs
   are read-only. STRING is Windows-1252 (UTF-8 with `{attribute 'TcEncoding' := 'UTF-8'}`).
 
+## Read speed (measured, 0.1.1)
+
+All nodes of a controller are read in one ADS sum read per poll interval (`pollIntervalMs`, 20 ms ... 60 s). Against
+a CX (TwinCAT 3.1.4024, PLC task 10 ms), 2026-11-25 - details in `KNOWN-ISSUES.md`:
+
+| | 3 nodes, 100 ms | 3 nodes, 20 ms | 98 nodes, 20 ms |
+|---|---|---|---|
+| X7 (amd64): read time / app CPU | 0.45 ms / 0.2 % | 0.4 ms / 0.6 % | 0.65 ms / 1.3 % |
+| X3 (arm64): read time / app CPU | 1.8 ms / 1.2 % | 1.5 ms / 4.7 % | 3.6 ms / 12 % (0.3 % of the reads late) |
+
+20 ms holds on both COREs. If a read takes longer than the interval, the next one starts at once (no queue, an
+"overrun" in the controller's `stats`); the rate then drops and the app's CPU rises - values stay correct. Polling
+samples: a value that changes every PLC cycle (10 ms) is seen every second time at 20 ms.
+The controller's real period and read time: `stats` in `GET /api/v1/controllers`, `periodMsAvg` / `cycleMsAvg` in
+the Data Layer node `controllers/summary`.
+
 ## Permissions
 
 | Scope | Allows |
@@ -120,7 +136,7 @@ configurations:
 | `status/version`, `status/state`, `status/heartbeat` | string / string / uint64 | app status |
 | `settings/active` | string (JSON) | active settings |
 | `controllers/configured`, `controllers/connected` | uint32 | controllers / of those connected with a PLC |
-| `controllers/summary` | string (JSON) | name, host, netId, state, systemStateName, plcStateName, nodes, nodesOk, error |
+| `controllers/summary` | string (JSON) | name, host, netId, state, systemStateName, plcStateName, nodes, nodesOk, error, pollIntervalMs, periodMsAvg (real poll period, last 10 s), cycleMsAvg (time one read takes) |
 | `nodes/configured`, `nodes/bad` | uint32 | Data Layer nodes of PLC variables / of those without a value |
 
 ## Web API (`/ctrlx-ads-connector/api/v1`, token required)

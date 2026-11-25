@@ -4,7 +4,15 @@ Versions follow semantic versioning and must match `version:` in `snap/snapcraft
 
 ## Unreleased
 
+## 0.1.1 - 2026-11-25 (built for amd64 + arm64 for the read-speed tests on X7 and X3)
+
+- Poll statistics per controller in the status (`/api/v1/controllers`, `stats`): cycles, overruns (a cycle longer
+  than the poll interval), value changes, read time; real period and cycle time (avg / max) over the last 10 s. The
+  Data Layer node `controllers/summary` also has pollIntervalMs, periodMsAvg, cycleMsAvg.
 - PLC browser title: the device name only when it differs from the controller name.
+- Read speed measured on X7 and X3 (README "Read speed", KNOWN-ISSUES 14): 20 ms holds on both, also with 98 nodes;
+  X3 with 98 nodes at 20 ms: 12 % of one core, 0.3 % of the reads late.
+- Unit test `test_nodes_are_polled` waits for all its nodes (failed now and then under load: 1 of 10 parallel runs).
 
 ## 0.1.0 - 2026-11-24 (built for amd64 + arm64; tested on the X7)
 

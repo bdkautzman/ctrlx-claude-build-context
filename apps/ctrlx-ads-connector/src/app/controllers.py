@@ -14,6 +14,7 @@ Writes (browser: operate role; Data Layer nodes: the writer's Data Layer permiss
 (get handle, write, release) and wait for the PLC's answer (timeout: settings ads.timeoutMs per request).
 """
 
+import collections
 import logging
 import threading
 import time
@@ -32,6 +33,7 @@ TREE_VALUE_BYTES = 4096            # values shown in the tree (bigger ones: in t
 TREE_ARRAY_ITEMS = 20              # array elements shown in a tree row
 MAX_ADD = 500                      # Data Layer nodes one "add" may create (a struct with all its members)
 MAX_PATHS = 500                    # values one browser request may read
+STATS_WINDOW_S = 10.0              # poll statistics in the status: averages / maxima over this time
 
 
 class ControllerUnavailable(Exception):
@@ -40,6 +42,53 @@ class ControllerUnavailable(Exception):
 
 def _restart_keys(cfg):
     return cfg["host"], cfg["amsNetId"], cfg["amsPort"]
+
+
+class PollStats:
+    """Figures of a controller's poll loop for its status (UI, API, Data Layer summary).
+
+    Totals since the app started (cycles, overruns, value changes, read time; differences of two snapshots give
+    rates) and averages / maxima over the last STATS_WINDOW_S: the period between two cycle starts (= the real poll
+    interval) and the time one cycle takes (sum read over the network + decoding + Data Layer node updates). An
+    overrun: a cycle took longer than the poll interval, so the next one starts late. A lost connection or a
+    disabled controller starts a new period (gap())."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.cycles = self.overruns = self.changes = 0
+        self.cycle_ms_total = 0.0
+        self._recent = collections.deque()      # (end time, period ms or None, cycle ms)
+        self._last_start = None
+
+    def gap(self):
+        self._last_start = None
+
+    def cycle(self, started, ended, interval_s, changes):
+        cycle_ms = (ended - started) * 1000.0
+        period_ms = None if self._last_start is None else (started - self._last_start) * 1000.0
+        self._last_start = started
+        with self._lock:
+            self.cycles += 1
+            self.changes += changes
+            self.cycle_ms_total += cycle_ms
+            if ended - started > interval_s:
+                self.overruns += 1
+            self._recent.append((ended, period_ms, cycle_ms))
+            while self._recent and self._recent[0][0] < ended - STATS_WINDOW_S:
+                self._recent.popleft()
+
+    def snapshot(self, now):
+        with self._lock:
+            recent = [r for r in self._recent if r[0] >= now - STATS_WINDOW_S]
+            out = {"cycles": self.cycles, "overruns": self.overruns, "valueChanges": self.changes,
+                   "cycleMsTotal": round(self.cycle_ms_total, 1), "windowS": STATS_WINDOW_S}
+        periods = [p for _, p, _ in recent if p is not None]
+        cycles = [c for _, _, c in recent]
+        out["periodMsAvg"] = round(sum(periods) / len(periods), 2) if periods else None
+        out["periodMsMax"] = round(max(periods), 2) if periods else None
+        out["cycleMsAvg"] = round(sum(cycles) / len(cycles), 2) if cycles else None
+        out["cycleMsMax"] = round(max(cycles), 2) if cycles else None
+        return out
 
 
 class _Read:
@@ -74,6 +123,7 @@ class Controller:
                         "cycleMs": None, "since": None}
         self._plc_info_read = False
         self._answered = False
+        self.stats = PollStats()
 
     # -- life cycle ---------------------------------------------------------------------------------------------
     def start(self):
@@ -129,6 +179,7 @@ class Controller:
                   "amsPort": self.cfg["amsPort"], "enabled": self.cfg["enabled"],
                   "pollIntervalMs": self.cfg["pollIntervalMs"], "nodes": len(entries),
                   "nodesOk": sum(1 for e in entries if e.ok)})
+        s["stats"] = self.stats.snapshot(self._clock())
         s["systemStateName"] = at.state_name(s["systemState"])
         s["plcStateName"] = at.state_name(s["plcState"])
         return s
@@ -143,6 +194,7 @@ class Controller:
         while not self._stop.is_set():
             if not self.cfg["enabled"]:
                 self._close()
+                self.stats.gap()
                 self._set(state="disabled", error=None)
                 self.nodes.set_all(self.name, "controller disabled", offline=True)
                 self._wait(5.0)
@@ -151,11 +203,15 @@ class Controller:
             try:
                 if self._link is None or not self._link.is_open:
                     self._connect()
-                self._cycle()
+                changes = self._cycle()
                 failures = 0
-                self._set(cycleMs=round((self._clock() - started) * 1000, 1))
-                self._wait(self.cfg["pollIntervalMs"] / 1000.0 - (self._clock() - started))
+                ended = self._clock()
+                interval_s = self.cfg["pollIntervalMs"] / 1000.0
+                self.stats.cycle(started, ended, interval_s, changes)
+                self._set(cycleMs=round((ended - started) * 1000, 1))
+                self._wait(interval_s - (self._clock() - started))
             except AdsError as exc:
+                self.stats.gap()
                 if exc.transport:
                     failures += 1
                     self._lost(exc)
@@ -165,6 +221,7 @@ class Controller:
                     self.nodes.set_all(self.name, str(exc), offline=False)
                     self._wait(max(1.0, self.cfg["pollIntervalMs"] / 1000.0))
             except Exception as exc:
+                self.stats.gap()
                 log.exception("Controller %s: unexpected error", self.name)
                 self._set(state="error", error="internal error: {}".format(exc))
                 self._close()
@@ -243,17 +300,18 @@ class Controller:
         return plc_error
 
     def _cycle(self):
+        """One poll cycle; returns the number of node values that changed."""
         link = self._link
         if self._clock() - self._last_state >= STATE_INTERVAL_S:
             self._last_state = self._clock()
             if self._read_states(link):
                 self.nodes.set_all(self.name, self._status["plcError"], offline=False)
-                return
+                return 0
         elif self._status["plcError"]:
-            return
+            return 0
         entries = self.nodes.entries(self.name)
         if not entries:
-            return
+            return 0
         with self._table_lock:
             table = self._table or self._load_table()
             if self._reads is None:
@@ -271,15 +329,18 @@ class Controller:
             with self._table_lock:
                 self._table, self._reads = None, None
             self._wake.set()
-            return
+            return 0
+        changes = 0
         for r, (err, raw) in zip(reads, results[1:]):
             if err:
                 r.raw = None
                 self.nodes.update(self.name, r.address, error=at.error_text(err))
             elif raw != r.raw:
+                changes += 1
                 r.raw = raw
                 value = at.decode(r.res.type, raw, 0, r.res.bit)
                 self.nodes.update(self.name, r.address, tuple(value) if isinstance(value, list) else value)
+        return changes
 
     def _load_table(self):
         """Upload the symbol + data type tables (called with _table_lock held)."""
@@ -603,8 +664,10 @@ class ControllerManager:
 
     def summary(self):
         """For the Data Layer node controllers/summary."""
-        keys = ("name", "host", "netId", "state", "systemStateName", "plcStateName", "nodes", "nodesOk", "error")
-        return [{k: s.get(k) for k in keys} for s in self.snapshot()]
+        keys = ("name", "host", "netId", "state", "systemStateName", "plcStateName", "nodes", "nodesOk", "error",
+                "pollIntervalMs")
+        return [dict({k: s.get(k) for k in keys}, periodMsAvg=s["stats"]["periodMsAvg"],
+                     cycleMsAvg=s["stats"]["cycleMsAvg"]) for s in self.snapshot()]
 
     def write_node(self, controller, symbol, vtype, value):
         c = self.get(controller)
