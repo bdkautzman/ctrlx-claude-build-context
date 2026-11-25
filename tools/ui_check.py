@@ -154,15 +154,12 @@ class DeviceApp:
         dev = ctrlx.Device(target["api_host"], target["api_user"], target["api_password"], target["verify_tls"])
         if role != "admin":   # the device's test user of this role, with the app's scope of the role
             user, _ = ctrlx.test_user(role)
-            if not target["test_users_password"]:
-                sys.exit("No test user password for device '{}' (devices.toml [<device>.test_users]): "
-                         "tools/ctrlx.py --device {} test-users".format(target["name"], target["name"] or "NAME"))
             try:
                 for name in ctrlx.grant_test_users(dev, snap, roles=[role], quiet=True):
                     print("   (gave {} its {} scope)".format(name, snap))
             finally:
                 dev.logout()
-            dev = ctrlx.Device(target["api_host"], user, target["test_users_password"], target["verify_tls"])
+            dev = ctrlx.Device(target["api_host"], user, ctrlx.test_user_password(target, user), target["verify_tls"])
         self.dev = dev
         self.token = dev.token()
         self.verify_tls = target["verify_tls"]

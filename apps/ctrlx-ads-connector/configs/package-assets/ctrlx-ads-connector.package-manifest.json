@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.boschrexroth.com/ctrlx-automation/ctrlx-os/apps/package-manifest/package-manifest.v1.7.schema.json",
+  "version": "1.0.0",
+  "id": "ctrlx-ads-connector",
+  "scopes-declaration": [
+    {
+      "identifier": "ctrlx-ads-connector.web",
+      "name": "ADS Connector",
+      "description": "Permissions for the ADS Connector",
+      "scopes": [
+        {
+          "identifier": "ctrlx-ads-connector.web.all.r",
+          "name": "View ADS Connector",
+          "description": "View: the TwinCAT controllers, their PLC variables and the Data Layer nodes of the ADS Connector"
+        },
+        {
+          "identifier": "ctrlx-ads-connector.web.operate.x",
+          "name": "Operate ADS Connector",
+          "description": "View and operate: also write PLC variables of the controllers in the browser (no controllers, Data Layer nodes or settings)"
+        },
+        {
+          "identifier": "ctrlx-ads-connector.web.all.rw",
+          "name": "Configure ADS Connector",
+          "description": "View, operate and configure: also add and remove controllers, add routes on them, add and remove Data Layer nodes of PLC variables, change the settings"
+        }
+      ]
+    }
+  ],
+  "services": {
+    "proxyMapping": [
+      {
+        "name": "ctrlx-ads-connector.web",
+        "url": "/ctrlx-ads-connector",
+        "binding": "unix://{$SNAP_DATA}/package-run/ctrlx-ads-connector/web.sock",
+        "restricted": [
+          "/ctrlx-ads-connector/api"
+        ]
+      }
+    ]
+  },
+  "menus": {
+    "sidebar": [
+      {
+        "id": "ctrlx-ads-connector",
+        "title": "ADS Connector",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-ads-connector/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-ads-connector.web.all.r",
+          "ctrlx-ads-connector.web.operate.x",
+          "ctrlx-ads-connector.web.all.rw"
+        ],
+        "items": []
+      }
+    ],
+    "overview": [
+      {
+        "id": "ctrlx-ads-connector-overview",
+        "title": "ADS Connector",
+        "description": "Beckhoff TwinCAT controllers over ADS: PLC variable browser, PLC variables in the Data Layer",
+        "icon": "bosch-ic-components",
+        "link": "/ctrlx-ads-connector/?token=${bearertoken}",
+        "target": "_blank",
+        "permissions": [
+          "ctrlx-ads-connector.web.all.r",
+          "ctrlx-ads-connector.web.operate.x",
+          "ctrlx-ads-connector.web.all.rw"
+        ],
+        "items": []
+      }
+    ]
+  },
+  "commands": {
+    "activeConfiguration": {
+      "save": [
+        {
+          "id": "ctrlx-ads-connector",
+          "subject": "ADS Connector settings",
+          "url": "/ctrlx-ads-connector/api/v1/appdata/save"
+        }
+      ],
+      "load": [
+        {
+          "id": "ctrlx-ads-connector",
+          "subject": "ADS Connector settings",
+          "url": "/ctrlx-ads-connector/api/v1/appdata/load"
+        }
+      ]
+    }
+  },
+  "configuration": {
+    "appDirectories": [
+      {
+        "name": "ctrlx-ads-connector",
+        "description": "ADS Connector controllers, Data Layer nodes and settings",
+        "icon": "bosch-ic-components",
+        "copyOnLoad": true,
+        "writeProtected": false
+      }
+    ],
+    "appPrivateFiles": [
+      "^ctrlx-ads-connector/.*\\.tmp$"
+    ]
+  },
+  "uiExtensions": {
+    "dashboard": [
+      {
+        "order": 100,
+        "src": "/ctrlx-ads-connector/widgets.js",
+        "tag": "ctrlx-ads-connector-widget",
+        "title": "TwinCAT controllers",
+        "description": "The TwinCAT controllers of the ADS Connector with their TwinCAT and PLC state",
+        "image": "/ctrlx-ads-connector/widget.svg",
+        "initialSize": {
+          "cols": 3,
+          "rows": 3
+        },
+        "minSize": {
+          "cols": 3,
+          "rows": 2
+        },
+        "maxSize": {
+          "cols": 6,
+          "rows": 6
+        },
+        "noInitialCreation": true,
+        "permissions": [
+          "ctrlx-ads-connector.web.all.r",
+          "ctrlx-ads-connector.web.operate.x",
+          "ctrlx-ads-connector.web.all.rw"
+        ],
+        "categories": [
+          "Apps"
+        ]
+      }
+    ]
+  }
+}

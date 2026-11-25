@@ -228,6 +228,11 @@ class TestUsersTest(unittest.TestCase):
         self.assertEqual(ctrlx.grant_test_users(idm, "ctrlx-a", quiet=True), [])        # nothing twice
         self.assertEqual(ctrlx.test_user("operator"), ("kit-operate", ".web.operate.x"))
 
+    def test_test_user_password(self):
+        """Default: the user name (user's choice 2026-11-24); devices.toml / CTRLX_TEST_USERS_PASSWORD win."""
+        self.assertEqual(ctrlx.test_user_password({"test_users_password": ""}, "kit-view"), "kit-view")
+        self.assertEqual(ctrlx.test_user_password({"test_users_password": "s3cret"}, "kit-view"), "s3cret")
+
     def test_grant_needs_the_app_and_the_users(self):
         with self.assertRaises(SystemExit) as ctx:
             ctrlx.grant_test_users(FakeIdm(["kit-view"], {}), "ctrlx-a")
@@ -236,7 +241,8 @@ class TestUsersTest(unittest.TestCase):
             ctrlx.grant_test_users(FakeIdm([], {"ctrlx-a": self.ROLES}), "ctrlx-a", roles=["reader"])
         self.assertIn("ask the user", str(ctx.exception))
 
-    def test_create_stores_one_password_and_checks_the_logins(self):
+    def test_create_uses_the_user_names_and_checks_the_logins(self):
+        """Default password = the user name (user's choice 2026-11-24); devices.toml is not written."""
         idm = FakeIdm(["kit-view"])
         logins = []
 
@@ -262,13 +268,11 @@ class TestUsersTest(unittest.TestCase):
                     ctrlx.cmd_test_users(idm, args)
             finally:
                 ctrlx.Device = orig
-            stored = ctrlx.load_devices(path)["core"]["test_users"]["password"]
+            self.assertNotIn("test_users", ctrlx.load_devices(path)["core"])
         self.assertEqual(sorted(idm.users), ["kit-configure", "kit-operate", "kit-view"])
-        self.assertEqual(idm.passwords, {"kit-operate": stored, "kit-configure": stored})   # kit-view existed
+        self.assertEqual(idm.passwords, {"kit-operate": "kit-operate", "kit-configure": "kit-configure"})   # kit-view existed
         self.assertFalse(idm.users["kit-operate"]["forced"])                # no password change at the first login
-        self.assertEqual(logins, [("kit-operate", stored), "logout", ("kit-configure", stored), "logout"])
-        self.assertRegex(stored, r"[A-Z]")
-        self.assertRegex(stored, r"[0-9]")
+        self.assertEqual(logins, [("kit-operate", "kit-operate"), "logout", ("kit-configure", "kit-configure"), "logout"])
 
 
 if __name__ == "__main__":

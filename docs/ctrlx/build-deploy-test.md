@@ -174,8 +174,11 @@ The COREvirtual's license is the 4-hour engineering license; it shuts down after
    `.web.operate.x` (operate) edits values but has no Settings; without scopes the API returns 403. Locally:
    `ui_check.py . --role reader|operator|writer`. On the device: `ui_check.py . --device NAME --role reader`
    (and `operator`, `writer`) logs in as the device's **test user** of that role and gives it the app's scope first.
-   Test users (user's request 2026-11-08): `kit-view`, `kit-operate`, `kit-configure`, one password for the three in
-   devices.toml `[<device>.test_users]`. `tools/ctrlx.py --device NAME test-users [--snap <name>]` shows them;
+   Test users (user's request 2026-11-08): `kit-view`, `kit-operate`, `kit-configure`. **Password = the user name**
+   (user's choice 2026-11-24, set so on the X3 and X7 by the user): `test-users create` sets it, `ui_check.py` and
+   `ctrlx.py` log in with it. Another password (one for the three users of a device): devices.toml
+   `[<device>.test_users] password` or `CTRLX_TEST_USERS_PASSWORD`. (Until 2026-11-24 `create` made up a random one
+   and kept it only in devices.toml - lost with a new devices.toml.) `tools/ctrlx.py --device NAME test-users [--snap <name>]` shows them;
    missing ones: **ask the user**, then `test-users create` (they stay on the device for later apps; `test-users
    delete` removes them). `test-users grant <name>` gives each its role's scope of an installed app. On the X3 they
    exist since 2026-11-08, on the X7 since 2026-11-12.

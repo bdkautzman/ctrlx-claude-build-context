@@ -1,0 +1,179 @@
+/* Styles of the ADS Connector pages (start page with controllers + Data Layer nodes, PLC browser). The shared ones
+   (colors, top bar, tabs, cards, buttons, forms, info tooltips, settings drawer, help menu, tutorial, dialogs,
+   light/dark) are in kit.css, which the pages load first. Colors: only kit.css variables, so dark mode works.
+   Tiles, tree and details follow Core Connector's pages. */
+:root {
+  --selected: color-mix(in srgb, var(--accent) 12%, var(--card));
+  --config: #8250df;
+}
+main h3 { font-size: 13px; margin: 16px 0 6px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.crumb-sep { color: var(--muted); font-weight: 400; margin: 0 8px; }
+.banner-warn { background: color-mix(in srgb, var(--warn) 8%, var(--card)); border-color: color-mix(in srgb, var(--warn) 35%, var(--card)); color: var(--warn); }
+.btn-danger { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, var(--card)); }
+.btn-danger:hover { background: color-mix(in srgb, var(--err) 6%, var(--card)); }
+textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 4px; font-family: var(--mono);
+  font-size: 12px; resize: vertical; background: var(--field); color: var(--text); }
+input[type=search] { width: 100%; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 4px; font: inherit;
+  background: var(--field); color: var(--text); }
+.tile:focus-visible, .row:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 50%, var(--card)); outline-offset: 1px; }
+
+/* TwinCAT / PLC states: RUN green, STOP / CONFIG / others orange or violet */
+.st-run { color: var(--ok); }
+.st-stop { color: var(--warn); }
+.st-config { color: var(--config); }
+.st-other { color: var(--err); }
+.state-pill.st-run { border-color: color-mix(in srgb, var(--ok) 40%, var(--card)); }
+.state-pill.st-stop { border-color: color-mix(in srgb, var(--warn) 40%, var(--card)); }
+.state-pill.st-config { border-color: color-mix(in srgb, var(--config) 40%, var(--card)); }
+.state-pill.st-other { border-color: color-mix(in srgb, var(--err) 40%, var(--card)); }
+
+/* ---- start page --------------------------------------------------------- */
+.page { padding: 16px 20px 32px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin: 4px 0 8px; }
+.tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: var(--card);
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; cursor: pointer; transition: box-shadow .12s, border-color .12s; }
+.tile:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
+.tile-connected { border-left: 4px solid var(--ok); }
+.tile-error, .tile-offline { border-left: 4px solid var(--warn); }
+.tile-connecting, .tile-disabled { border-left: 4px solid var(--line-strong); }
+.tile-disabled { opacity: .75; }
+.tile-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.tile-title { min-width: 0; }
+.tile-head .pill { flex: none; }
+.tile-name { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.tile .sub { overflow-wrap: anywhere; }
+.tile .kv { font-size: 13px; }
+.tile .kv .state { font-weight: 600; }
+.route-hint { font-size: 12px; padding: 6px 8px; border-radius: 4px; background: var(--hover); overflow-wrap: anywhere; }
+.route-hint code { font-size: 12px; }
+.tile-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; min-height: 26px; flex-wrap: wrap; }
+.tile-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.browse-link { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); text-decoration: none; font-size: 13px; }
+.browse-link .ic { width: 16px; height: 16px; }
+.browse-link:hover { text-decoration: underline; }
+
+/* Data Layer nodes table */
+.nodes-tools { display: flex; gap: 8px; align-items: center; margin: 4px 0 10px; flex-wrap: wrap; }
+.nodes-tools input[type=search] { flex: 1; min-width: 160px; width: auto; }
+.nodes-tools select { width: auto; }
+.table-wrap { overflow-x: auto; }
+table.nodes { width: 100%; border-collapse: collapse; font-size: 13px; }
+.nodes th, .nodes td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.nodes th { font-weight: 500; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.nodes td.addr, .nodes td.sym { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; min-width: 140px; }
+.nodes td.sym a { color: var(--text); text-decoration: none; }
+.nodes td.sym a:hover { color: var(--accent); text-decoration: underline; }
+.nodes td.val { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; max-width: 320px; }
+.nodes td.val.bad { color: var(--warn); font-family: inherit; }
+.nodes td.type { white-space: nowrap; font-family: var(--mono); font-size: 12px; }
+.nodes td.act { width: 1%; white-space: nowrap; }
+.nodes tr.empty td { color: var(--muted); }
+.access { font-size: 11px; padding: 0 6px; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.access-rw { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--card)); }
+
+/* ---- dialogs ------------------------------------------------------------- */
+dialog { border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; width: min(580px, calc(100vw - 32px));
+  background: var(--card); color: var(--text); }
+dialog::backdrop { background: rgb(0 0 0 / .35); }
+.fields-dialog { grid-template-columns: 1fr 1fr; }
+.field-row { display: flex; gap: 6px; }
+.field-row input { flex: 1; min-width: 0; }
+.found { margin-top: 4px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.found.ok { color: var(--ok); }
+.found.bad { color: var(--warn); }
+.address-preview { margin: 14px 0 0; overflow-wrap: anywhere; }
+.note { margin: 0 0 14px; padding: 6px 10px; border-radius: 4px; background: color-mix(in srgb, var(--warn) 8%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--card)); color: var(--text); }
+.plan-list { margin: 8px 0 0; padding-left: 18px; max-height: 150px; overflow: auto; font-family: var(--mono); font-size: 12px; }
+@media (max-width: 520px) { .fields-dialog { grid-template-columns: 1fr; } }
+#controller-dialog, #route-dialog { overflow: visible; }   /* tooltips may reach out of the small dialogs */
+
+/* ---- PLC browser -------------------------------------------------------------- */
+.browse-page { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+.browse-page .topbar { flex: none; padding-left: 8px; }
+.browse-page h1 { display: flex; align-items: baseline; min-width: 0; }
+#ctrl-title { overflow: hidden; text-overflow: ellipsis; }
+.browse-page .banner { flex: none; }
+.browser { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(340px, 46%) 1fr; }
+.tree-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--card); border-right: 1px solid var(--line); }
+.tree-tools { display: flex; align-items: center; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); }
+.tree-tools input { flex: 1; min-width: 80px; }
+.tree-tools .btn { margin-left: 4px; white-space: nowrap; }
+.tree { flex: 1; min-height: 0; overflow: auto; padding: 4px 0 12px; font-size: 13px; outline: none; }
+.tree-status:not(:empty) { padding: 4px 10px; border-top: 1px solid var(--line); }
+.row { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px calc(var(--depth, 0) * 16px + 6px);
+  cursor: pointer; white-space: nowrap; min-width: 0; user-select: none; }
+.row:hover { background: var(--hover); }
+.row.selected { background: var(--selected); }
+.row-msg { cursor: default; padding-left: calc(var(--depth, 0) * 16px + 30px); font-style: italic; white-space: normal; }
+.row-msg:hover { background: none; }
+.caret { width: 16px; height: 16px; display: inline-grid; place-items: center; color: var(--muted); flex: none; border-radius: 3px; }
+.caret .ic { width: 14px; height: 14px; transition: transform .12s; }
+.caret:hover { background: var(--line); color: var(--text); }
+.row.open > .caret .ic { transform: rotate(90deg); }
+.caret-leaf { visibility: hidden; }
+.node-ic { width: 15px; height: 15px; color: var(--muted); }
+.row .name { flex: 0 1 auto; min-width: 40px; overflow: hidden; text-overflow: ellipsis; }
+.row .val { flex: 1 1 auto; min-width: 0; text-align: right; overflow: hidden; text-overflow: ellipsis;
+  font-family: var(--mono); font-size: 12px; color: var(--text); padding-left: 12px; }
+.row .val-muted { color: var(--muted); }
+.row .val-error { color: var(--warn); font-size: 11px; }
+.tags { display: inline-flex; gap: 3px; flex: none; }
+.tag { font-size: 11px; line-height: 16px; padding: 0 5px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted);
+  font-family: var(--mono); white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.tag-dl { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--card)); font-family: inherit; font-weight: 600; }
+.tag-ro { font-family: inherit; }
+
+.detail-pane { min-height: 0; min-width: 0; overflow: auto; padding: 12px 20px 32px; }
+.goto { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+.goto input { flex: 1; font-family: var(--mono); font-size: 12px; }
+.detail-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.detail-head .node-ic { width: 20px; height: 20px; }
+.detail-name { margin: 0; font-size: 17px; overflow-wrap: anywhere; }
+.detail-desc { margin: 8px 0 0; }
+.value-box { margin-top: 14px; }
+.value-head { display: flex; align-items: baseline; gap: 8px; }
+.value-head h3 { margin: 0 0 6px; }
+.value-head .small { margin-left: auto; }
+pre.value { margin: 0; padding: 10px 12px; background: var(--hover); border: 1px solid var(--line); border-radius: var(--radius);
+  font-family: var(--mono); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 50vh; overflow: auto; }
+pre.value.error { color: var(--warn); }
+.write-form h3 { margin-top: 16px; }
+.write-row { display: flex; gap: 8px; align-items: flex-start; }
+.write-row input, .write-row select, .write-row textarea { flex: 1; }
+.write-form > .small { display: block; margin-top: 4px; }
+.meta { font-size: 13px; }
+.dl-actions { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 20px; }
+.dl-list { margin: 6px 0 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; }
+
+@media (prefers-reduced-motion: reduce) { .tour-ring.blink { animation: none; } }
+
+@media (max-width: 760px) {
+  .topbar { padding: 8px 12px; }
+  .page { padding: 12px; }
+  .browse-page { height: auto; overflow: visible; }
+  .browser { grid-template-columns: 1fr; }
+  .tree-pane { border-right: 0; border-bottom: 1px solid var(--line); }
+  .tree { max-height: 55vh; }
+  .detail-pane { overflow: visible; }
+  .btn-label { display: none; }
+  .crumb-sep, .brand-name { display: none; }
+  .tour { bottom: 8px; width: calc(100% - 16px); }
+  .tour.at-top { top: 8px; }
+}
+/* phone width: one row of top bar (no version, buttons side by side) */
+@media (max-width: 600px) {
+  #app-version { display: none; }
+  .topbar { gap: 8px; }
+  .topbar-right { flex-wrap: nowrap; gap: 6px; }
+  .nodes th:nth-child(3), .nodes td:nth-child(3) { display: none; }
+  /* PLC browser: controller name and its pills in the first row, the state pills and buttons in the second */
+  .browse-page .topbar { flex-wrap: wrap; row-gap: 6px; }
+  .browse-page .brand { flex: 1 1 100%; }
+  .browse-page .topbar-right { flex: 1 1 100%; justify-content: flex-start; }
+}

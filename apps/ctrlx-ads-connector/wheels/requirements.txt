@@ -1,0 +1,9 @@
+# pyads (MIT) for the snap, installed for the TARGET architecture by part `wheels` (snap/snapcraft.yaml): the python
+# plugin's pip would take the build VM's x86_64 wheel for an arm64 snap too (gotchas #99). The wheels carry
+# Beckhoff's ADS library (AdsLib.so, MIT, C++) built for that architecture; pyads has no other runtime dependency.
+# Exact version + sha256 of the Linux x86_64 and aarch64 wheels on PyPI (pip --require-hashes).
+# Changing the version: update the hashes (https://pypi.org/pypi/pyads/<version>/json), the fossinfo, the README
+# and .dev/pylib (README.md "Develop").
+pyads==3.6.0 \
+    --hash=sha256:5f92ea4821fce21a6a880e3bb0bdac4002c208bb7a00da578f1a0ba4128f635d \
+    --hash=sha256:92ee9a0f19f0d363a2c0f358331849e9598587b96549ac53ce730ea528ab204f

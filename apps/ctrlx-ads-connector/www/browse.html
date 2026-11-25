@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLC - ADS Connector</title>
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="kit.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<!-- browse.html?controller=<name>[#<TwinCAT path>]. data-ui-ready: "false" while the tree or a variable loads -->
+<body data-ui-ready="false" class="browse-page">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-variable" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M5 5h14v14H5z"/></symbol>
+    <symbol id="i-struct" viewBox="0 0 24 24"><path d="M8 4c-2 0-3 1-3 3v2c0 1.5-1 3-2 3 1 0 2 1.5 2 3v2c0 2 1 3 3 3M16 4c2 0 3 1 3 3v2c0 1.5 1 3 2 3-1 0-2 1.5-2 3v2c0 2-1 3-3 3"/></symbol>
+    <symbol id="i-array" viewBox="0 0 24 24"><path d="M8 4H5v16h3M16 4h3v16h-3M9.5 12h.01M12 12h.01M14.5 12h.01"/></symbol>
+    <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M5 12h12M13 7l5 5-5 5"/><circle cx="5" cy="12" r="1.5"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6h14M12 6v13M9 19h6"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M7 4l5 5 5-5M7 20l5-5 5 5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand">
+      <a href="./" id="btn-back" class="tool tool-bare" title="Back to all controllers" aria-label="Back to all controllers"><svg class="ic"><use href="#i-back"/></svg></a>
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1><span class="brand-name">ADS Connector</span><span class="crumb-sep" aria-hidden="true">›</span><span id="ctrl-title">…</span></h1>
+      <!-- only shown to users who may not do everything ("View only", "Operator") -->
+      <span id="role" class="pill pill-role" hidden></span>
+      <span id="ctrl-state" class="pill pill-unknown">…</span>
+    </div>
+    <div class="topbar-right">
+      <span id="system-state" class="pill state-pill" hidden title="State of TwinCAT on the controller"></span>
+      <span id="plc-state" class="pill state-pill" hidden title="State of the PLC runtime"></span>
+      <button type="button" id="btn-theme" class="btn btn-small btn-theme" title="Switch to dark mode"
+              aria-label="Dark mode" aria-pressed="false"><svg class="ic"><use href="#i-moon"/></svg></button>
+      <div class="menu-wrap">
+        <button type="button" id="btn-help" class="btn btn-small btn-help" title="Help" aria-label="Help"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu"><svg class="ic"><use href="#i-help"/></svg></button>
+        <div id="help-menu" class="menu" role="menu" aria-label="Help" hidden>
+          <a role="menuitem" id="help-page" href="https://github.com/bdkautzman/ctrlx-claude-build-context/tree/main/apps/ctrlx-ads-connector"
+             target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-external"/></svg>App page on GitHub</a>
+          <button type="button" role="menuitem" id="btn-tutorial"><svg class="ic"><use href="#i-play"/></svg>Tutorial</button>
+          <button type="button" role="menuitem" id="btn-about"><svg class="ic"><use href="#i-info"/></svg>About</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="browser">
+    <section class="tree-pane" aria-label="PLC variables">
+      <div class="tree-tools">
+        <input id="filter" type="search" placeholder="Filter loaded variables" aria-label="Filter loaded variables" autocomplete="off">
+        <button type="button" id="btn-collapse" class="tool tool-bare" title="Collapse all" aria-label="Collapse all"><svg class="ic"><use href="#i-collapse"/></svg></button>
+        <button type="button" id="btn-reload" class="tool tool-bare" title="Load the symbols again" aria-label="Reload the tree"><svg class="ic"><use href="#i-refresh"/></svg></button>
+        <button type="button" id="btn-add-node" class="btn btn-small btn-primary btn-with-icon" data-role="configure" hidden disabled
+                title="Select a variable, a struct or a namespace first"><svg class="ic"><use href="#i-plus"/></svg><span>Add to Data Layer</span></button>
+      </div>
+      <div id="tree" class="tree" role="tree" aria-label="PLC variables" tabindex="0"></div>
+      <div id="tree-status" class="tree-status muted small" aria-live="polite"></div>
+    </section>
+
+    <section class="detail-pane" aria-label="Selected variable">
+      <form id="goto-form" class="goto" novalidate>
+        <label for="goto" class="muted small">Variable</label>
+        <input id="goto" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. MAIN.fbAxis.fPosition or GVL.aValues[3]">
+        <button type="submit" class="btn btn-small">Go</button>
+        <button type="button" id="btn-copy" class="tool tool-bare" title="Copy the path" aria-label="Copy the path"><svg class="ic"><use href="#i-copy"/></svg></button>
+      </form>
+      <div id="detail" class="detail"><p class="muted">Select a variable in the tree.</p></div>
+    </section>
+  </main>
+
+  <!-- add PLC variables to the Data Layer (configure) -->
+  <dialog id="node-dialog" aria-labelledby="node-h">
+    <form id="node-form" method="dialog" novalidate>
+      <h2 id="node-h">Add to Data Layer</h2>
+      <p class="small">PLC variable <code id="n-symbol"></code> of <b id="n-ctrl"></b>: <span id="n-what"></span></p>
+      <div class="fields fields-dialog">
+        <div class="field field-wide"><label for="n-address">Data Layer address
+            <span class="info" tabindex="0" role="img" aria-label="Address format"
+                  data-tip="Below ctrlx-ads-connector/plc/<controller>/. Levels separated by '/', each of letters, digits, '_' and '-' (max. 64)."></span></label>
+          <input id="n-address" name="address" type="text" spellcheck="false" autocomplete="off" maxlength="300"></div>
+        <div class="field field-wide"><div class="field-label"><label for="n-writable">Writable</label>
+            <span class="info" tabindex="0" role="img" aria-label="Writable"
+                  data-tip="On: Data Layer clients (a ctrlX PLC, REST, other apps) may write the node - the value goes straight into the TwinCAT PLC. Their ctrlX Data Layer permissions apply. Constants of the PLC stay read-only."></span></div>
+          <span id="n-writable-slot"></span></div>
+        <div class="field field-wide one-only"><label for="n-description">Description</label>
+          <input id="n-description" name="description" type="text" maxlength="1000" autocomplete="off"></div>
+      </div>
+      <p class="small address-preview">Address: <code id="n-preview"></code></p>
+      <ul id="n-plan" class="plan-list" hidden></ul>
+      <ul id="node-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-node-ok" class="btn btn-primary">Add</button>
+        <button type="button" id="btn-node-cancel" class="btn">Cancel</button>
+        <span id="node-state" class="muted" aria-live="polite"></span>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="kit.js"></script>
+  <script src="common.js"></script>
+  <script src="browse.js"></script>
+</body>
+</html>

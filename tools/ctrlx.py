@@ -37,8 +37,9 @@ Commands:
                                               recent Logbook entries (newest first)
     ctrlx.py test-users [--snap NAME]         the test users of the roles view / operate / configure on the
                                               device (kit-view, kit-operate, kit-configure): there? app scope granted?
-    ctrlx.py test-users create                create the missing ones (ask the user first); the password goes into
-                                              devices.toml [<device>.test_users] (or CTRLX_TEST_USERS_PASSWORD)
+    ctrlx.py test-users create                create the missing ones (ask the user first); password = the user name
+                                              (kit-view / ...), or devices.toml [<device>.test_users] password /
+                                              CTRLX_TEST_USERS_PASSWORD when set (user's choice 2026-11-24)
     ctrlx.py test-users grant <snap>          give each one its role's scope of an installed app
                                               (tools/ui_check.py --device --role does this itself)
     ctrlx.py test-users delete                remove them from the device
@@ -54,7 +55,6 @@ import http.client
 import json
 import os
 import re
-import secrets
 import shlex
 import shutil
 import ssl
@@ -434,6 +434,12 @@ TEST_USERS = (("view", "reader", "kit-view", ".web.all.r"),
               ("configure", "writer", "kit-configure", ".web.all.rw"))
 
 
+def test_user_password(target, name):
+    """The password of a test user: devices.toml [<device>.test_users] password / CTRLX_TEST_USERS_PASSWORD when set,
+    else the user name itself (the kit's default, user's choice 2026-11-24: test users of a test device only)."""
+    return target.get("test_users_password") or name
+
+
 def test_user(ui_role):
     """(user name, scope suffix) of a ui_check.py role (reader / operator / writer)."""
     for _, role, name, suffix in TEST_USERS:
@@ -490,19 +496,6 @@ def grant_test_users(dev, snap, roles=None, quiet=False):
     return changed
 
 
-def _store_password(args, password):
-    """Append [<device>.test_users] password = ... to the devices file (git-ignored)."""
-    name = args.target["name"]
-    if not name or name not in args.devices:
-        print("No device entry in {} to keep the password in - set CTRLX_TEST_USERS_PASSWORD={} for later "
-              "tests".format(args.devices_file, password))
-        return
-    with open(args.devices_file, "a", encoding="utf-8") as f:
-        f.write('\n[{}.test_users]   # tools/ctrlx.py test-users create, {} ({})\npassword = "{}"\n'.format(
-            name, datetime.date.today().isoformat(), ", ".join(u[2] for u in TEST_USERS), password))
-    print("Password stored in {} [{}.test_users]".format(args.devices_file, name))
-
-
 def cmd_test_users(dev, args):
     action = args.action or "status"
     if action == "grant":
@@ -514,7 +507,7 @@ def cmd_test_users(dev, args):
     ids = _users(dev)
     if action == "status":
         where = "devices.toml [{}.test_users]".format(args.target["name"]) if args.target["test_users_password"] \
-            else "no password in devices.toml / CTRLX_TEST_USERS_PASSWORD"
+            else "the user name (default; devices.toml [{}.test_users] password sets another)".format(args.target["name"])
         print("Test users on {} (password: {}):".format(args.target["name"] or args.target["api_host"], where))
         scopes = _app_scopes(dev, args.snap) if args.snap else {}
         for role, ui_role, name, suffix in TEST_USERS:
@@ -541,11 +534,8 @@ def cmd_test_users(dev, args):
     if not missing:
         print("All test users exist")
         return
-    password = args.target["test_users_password"]
-    new_password = not password
-    if new_password:
-        password = "Kt-9" + secrets.token_urlsafe(18)   # upper, lower, digit, special: fits strict password policies
     for name in missing:
+        password = test_user_password(args.target, name)
         _, _, user = dev.request("POST", IDM + "/users", {"name": name})
         user_id = user.get("id") if isinstance(user, dict) else None
         user_id = user_id or _users(dev).get(name)
@@ -554,10 +544,8 @@ def cmd_test_users(dev, args):
         dev.request("PUT", "{}/users/{}/credentials".format(IDM, user_id), {"newPassword": password})
         dev.request("PUT", "{}/users/{}/pwdchgatnextlogin".format(IDM, user_id), {"forced": False})
         print("Created {} (id {})".format(name, user_id))
-    if new_password:
-        _store_password(args, password)
     for name in missing:   # proves the password and ends the session right away (gotchas #110)
-        user_dev = Device(args.target["api_host"], name, password, args.target["verify_tls"])
+        user_dev = Device(args.target["api_host"], name, test_user_password(args.target, name), args.target["verify_tls"])
         user_dev.token()
         user_dev.logout()
     print("Login as {} works".format(", ".join(missing)))

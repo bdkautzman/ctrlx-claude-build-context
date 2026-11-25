@@ -45,6 +45,7 @@ An entry can be under more than one topic. Kit parts still unverified on a devic
   names differ per API · #79 client: JSON, metadata, bulk · #80 KVD restarts on `nodes.json` changes · #81 WebDAV
   ignores `If-Match` · #83 `array-of-<type>` · #86 ctrlX OS 3.6 without `system/info` · #87 empty KVD value · #88
   wildcard provider node · #90 write cost · #111 PLC types: exact node type needed
+- **ADS / TwinCAT (pyads)**: #115 ADS from the build VM (NAT, XAE's route) · #116 pyads routes and Net ID per process · #117 TwinCAT CONFIG: port 851 missing
 - **Sandbox, interfaces, network, USB**: #61 what the `network` plug allows · #62 neighbor table · #64 scan from the
   COREvirtual · #67 installer connects `system-observe`, `removable-media` · #74 cgroup v2 vs v1, no PSI · #76 USB
   stick · #104 network limits in the sandbox
@@ -811,3 +812,31 @@ Setting up a new App Build Environment VM (Ubuntu 24.04.5, amd64), 2026-11-23:
     Earlier set-ups (#52) never hit it because the folder was already there. Fix: `|| true` on that line; then the
     script downloaded Chrome Headless Shell 156.0.8078.4, printed the apt line (the same ten packages as #52 = 25
     packages), and after that install ended with `READY`; `ui_check.py templates/python-webapp` → `UI CHECK: OK`.
+115. **ADS from the App Build Environment VM reaches a TwinCAT controller without a route - and takes over traffic
+    of the Windows host** (CX with TwinCAT 3.1.4024 / Windows CE 7, build VM behind VirtualBox NAT, 2026-11-23,
+    ctrlx-ads-connector). The VM's TCP connection to port 48898 arrives with the Windows host's IP. With a route for
+    that IP on the controller (the host runs TwinCAT XAE), requests from the VM's own AMS Net ID `10.0.2.15.1.1` were
+    answered although no route names it - and pyads/AdsLib logged `Warning: No dispatcher found for notification`:
+    the controller sent notifications meant for the host's XAE session over the VM's connection (TwinCAT routes
+    per remote IP). A test from the VM can disturb an XAE online session on the host, and "works from the VM" says
+    nothing about the route a CORE needs. Test ADS from a CORE (own IP); from the VM only short read-only checks.
+    The UDP server info (port 48899: Net ID, host name, TwinCAT and OS version) answers anyone and changes nothing.
+    Source: scratch probes + `pyads 3.6.0` from the VM, ctrlx-ads-connector KNOWN-ISSUES.
+116. **pyads on Linux: routes and the local AMS Net ID belong to the process, and `Connection.close()` deletes the
+    route of its Net ID** (pyads 3.6.0 with Beckhoff's AdsLib, read in `pyads_ex.py` / `connection.py`,
+    2026-11-23). AdsLib routes in-process: `AdsAddRoute(net id, ip)` opens one TCP connection per controller;
+    `Connection.open()` adds that route, `close()` deletes it - also for every other `Connection` with that Net ID
+    (two runtimes 851 + 852 of one controller). Without `pyads.set_local_address()` the local Net ID is the IP of
+    the first connection + `.1.1` for the whole process (a CORE with several networks: the route on each controller
+    must name that one Net ID and the CORE's IP toward it). AdsLib connects blocking (Linux: up to ~2 min for a host
+    that is gone) and does not reopen a connection the controller closed (requests time out, ADS 0x745). Fix in
+    ctrlx-ads-connector (`ads_link.py`): one AMS port + route per controller entry through `pyads_ex`, a plain TCP
+    connect with a 2 s timeout first, close + reopen after transport errors. pyads' wheels carry `AdsLib.so` for
+    x86_64 and aarch64 (`py3-none-manylinux_2_28`), so an arm64 snap needs the `wheels` part of #99, not the python
+    plugin's pip.
+117. **TwinCAT in CONFIG mode: ADS answers, the PLC doesn't** (CX, TwinCAT 3.1.4024, 2026-11-23). System service
+    port 10000: `ReadState` = ADS state 15 (CONFIG), `ReadDeviceInfo` = "TwinCAT CE" 3.1.4024; the PLC runtime ports
+    851-854, 801, 811: ADS error `0x6` "target port not found" (I/O server port 300 also answered, state CONFIG).
+    So a connected controller can have no PLC to browse: ctrlx-ads-connector shows "PLC not running" with the
+    TwinCAT state instead of a connection error. After the user started a PLC project: system and port 851 RUN
+    (5), device info "Plc30 App" 3.1.1967.

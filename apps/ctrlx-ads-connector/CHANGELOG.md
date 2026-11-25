@@ -1,0 +1,23 @@
+# Changelog
+
+Versions follow semantic versioning and must match `version:` in `snap/snapcraft.yaml`.
+
+## Unreleased
+
+- PLC browser title: the device name only when it differs from the controller name.
+
+## 0.1.0 - 2026-11-24 (built for amd64 + arm64; tested on the X7)
+
+- First version: TwinCAT controllers over ADS (pyads 3.6.0 + Beckhoff AdsLib): controller tiles with TwinCAT / PLC
+  state and the route the controller needs, PLC browser (namespaces, variables, struct members, array elements, values,
+  details, write), PLC variables as Data Layer nodes `plc/<controller>/<address>` with the PLC variable's type (one
+  wildcard provider node, sum-read polling, writes through symbol handles), node list, "Add route" (untested), home
+  screen widget "TwinCAT controllers", settings drawer, tutorial, About; roles view / operate / configure.
+- Symbol / data type parser checked against the tables of a TwinCAT 3.1.4024 CX (`tests/fixtures/`); fake PLC for tests
+  and local runs (`src/app/dev_fake_plc.py`, not in the snap).
+- After the first X7 test: the error of a controller that resets the connection names the missing route; AdsLib's own
+  log lines follow the app's log level (no "connection closed by remote" every 10 s); retries every 30 s after 6 failures.
+- X7 (amd64): installed, Add route (by the user) -> connected to the CX, nodes read through the Data Layer with the PLC
+  types, 36.5 MB RSS, `ui_check --device x7` OK; Data Layer writes of bTest / sTest into the PLC, wrong type / read-only
+  / too long refused. X3 (arm64): installed, Add route (by the user) -> the same reads, writes and UI checks as on the X7, 36.3 MB RSS /
+  1.2 % CPU. Roles as the test users on both.

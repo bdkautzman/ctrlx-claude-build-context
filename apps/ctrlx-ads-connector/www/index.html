@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADS Connector</title>
+  <!-- Relative URLs only: the page is served below /<snap-name>/ by the ctrlX reverse proxy -->
+  <link rel="stylesheet" href="kit.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<!-- data-ui-ready: app.js sets "true" when the controllers are shown; tools/ui_check.py waits for it -->
+<body data-ui-ready="false">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-tree" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="10" width="7" height="5" rx="1"/><rect x="14" y="17" width="7" height="5" rx="1"/><path d="M6.5 8v11.5H14M6.5 12.5H14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1 id="app-title">ADS Connector</h1>
+      <span id="app-version" class="muted"></span>
+    </div>
+    <div class="topbar-right">
+      <!-- only shown to users who may not do everything ("View only", "Operator") -->
+      <span id="role" class="pill pill-role" hidden></span>
+      <span id="conn" class="pill pill-unknown" title="Data Layer connection of this app">Data Layer: …</span>
+      <!-- data-role="configure": only users who may change settings see it (kit.js) -->
+      <button type="button" id="btn-settings" class="btn btn-small btn-with-icon" data-role="configure" hidden
+              title="Settings" aria-label="Settings" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-sliders"/></svg><span class="btn-label">Settings</span></button>
+      <button type="button" id="btn-theme" class="btn btn-small btn-theme" title="Switch to dark mode"
+              aria-label="Dark mode" aria-pressed="false"><svg class="ic"><use href="#i-moon"/></svg></button>
+      <div class="menu-wrap">
+        <button type="button" id="btn-help" class="btn btn-small btn-help" title="Help" aria-label="Help"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu"><svg class="ic"><use href="#i-help"/></svg></button>
+        <div id="help-menu" class="menu" role="menu" aria-label="Help" hidden>
+          <a role="menuitem" id="help-page" href="https://github.com/bdkautzman/ctrlx-claude-build-context/tree/main/apps/ctrlx-ads-connector"
+             target="_blank" rel="noopener noreferrer"><svg class="ic"><use href="#i-external"/></svg>App page on GitHub</a>
+          <button type="button" role="menuitem" id="btn-tutorial"><svg class="ic"><use href="#i-play"/></svg>Tutorial</button>
+          <button type="button" role="menuitem" id="btn-about"><svg class="ic"><use href="#i-info"/></svg>About</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- pages: tabs under the top bar (kit.js Kit.setupTabs); the hash names the page (#controllers, #nodes) -->
+  <nav class="tabs" id="tabs" aria-label="Pages">
+    <a href="#controllers">Controllers</a>
+    <a href="#nodes">Data Layer nodes</a>
+  </nav>
+
+  <div id="banner" class="banner" hidden></div>
+  <div id="app-error" class="banner banner-warn" hidden></div>
+
+  <main>
+  <div class="page" data-page="controllers">
+    <section class="card" id="controllers-card" aria-labelledby="controllers-h">
+      <div class="card-head">
+        <h2 id="controllers-h">TwinCAT controllers <span id="ctrl-count" class="muted"></span>
+          <span class="info" tabindex="0" role="img" aria-label="About controllers"
+                data-tip="Beckhoff TwinCAT 2/3 controllers, reached over ADS (TCP port 48898). Each controller needs a route for this device - the tile shows its AMS Net ID and address. Stored in the app data of this device."></span></h2>
+        <button type="button" id="btn-add" class="btn btn-primary" data-role="configure" hidden title="Add a TwinCAT controller">+ Add controller</button>
+      </div>
+      <div id="controllers" class="tiles"><p class="muted">Loading…</p></div>
+    </section>
+  </div>
+
+  <div class="page" data-page="nodes" hidden>
+    <section class="card" id="nodes-card" aria-labelledby="nodes-h">
+      <div class="card-head">
+        <h2 id="nodes-h">Data Layer nodes <span id="nodes-count" class="muted"></span>
+          <span class="info" tabindex="0" role="img" aria-label="About Data Layer nodes"
+                data-tip="PLC variables in the ctrlX Data Layer of this device, below ctrlx-ads-connector/plc/<controller>/. Each node has the type of its PLC variable. Add them in the PLC browser of a controller."></span></h2>
+      </div>
+      <div class="nodes-tools">
+        <input id="nodes-filter" type="search" placeholder="Filter by address or PLC variable" aria-label="Filter nodes" autocomplete="off">
+        <select id="nodes-controller" aria-label="Controller"><option value="">All controllers</option></select>
+      </div>
+      <div class="table-wrap">
+        <table class="nodes">
+          <thead><tr><th>Data Layer address</th><th>PLC variable</th><th>Type</th><th>Value</th><th>Access</th><th></th></tr></thead>
+          <tbody id="nodes-body"><tr class="empty"><td colspan="6">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  </main>
+
+  <!-- settings: slide in from the right; only for the configure role (kit.js Kit.setupSettings) -->
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+  <aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="settings-h" aria-hidden="true" inert>
+    <div class="card-head drawer-head">
+      <h2 id="settings-h">Settings</h2>
+      <button type="button" id="btn-close-settings" class="tool tool-bare" title="Close" aria-label="Close settings"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="muted drawer-note">Stored in ctrlX app data · saved and loaded with configurations</p>
+    <form id="settings-form" novalidate>
+      <div id="settings-fields" class="fields"><p class="muted">Loading…</p></div>
+      <ul id="settings-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-save" class="btn btn-primary">Save</button>
+        <button type="button" id="btn-revert" class="btn">Revert</button>
+        <button type="button" id="btn-defaults" class="btn btn-ghost">Reset to defaults</button>
+        <span id="save-state" class="muted" aria-live="polite"></span>
+      </div>
+    </form>
+  </aside>
+
+  <!-- add / edit a controller (configure) -->
+  <dialog id="controller-dialog" aria-labelledby="controller-h">
+    <form id="controller-form" method="dialog" novalidate>
+      <h2 id="controller-h">Add controller</h2>
+      <div class="fields fields-dialog">
+        <div class="field"><label for="c-name">Name
+            <span class="info" tabindex="0" role="img" aria-label="Name format"
+                  data-tip="Letters, digits, '_' and '-', max. 24 characters. Also the Data Layer folder of its nodes: plc/<name>/. Can't be changed later."></span></label>
+          <input id="c-name" name="name" type="text" maxlength="24" required placeholder="Line-1-CX" autocomplete="off"></div>
+        <div class="field"><label for="c-host">IP address / host name</label>
+          <input id="c-host" name="host" type="text" required placeholder="192.168.1.10" autocomplete="off" spellcheck="false"></div>
+        <div class="field field-wide"><label for="c-amsNetId">AMS Net ID
+            <span class="info" tabindex="0" role="img" aria-label="AMS Net ID"
+                  data-tip="Empty: read from the controller (TwinCAT's UDP server info, port 48899) at every connect. “Find” asks the controller now: its Net ID, name and TwinCAT version."></span></label>
+          <div class="field-row">
+            <input id="c-amsNetId" name="amsNetId" type="text" placeholder="automatic, e.g. 5.57.166.80.1.1" autocomplete="off" spellcheck="false">
+            <button type="button" id="btn-find" class="btn btn-small btn-with-icon" title="Ask the controller for its AMS Net ID"><svg class="ic"><use href="#i-search"/></svg><span>Find</span></button>
+          </div>
+          <div id="c-found" class="found" aria-live="polite"></div></div>
+        <div class="field"><label for="c-amsPort">AMS port
+            <span class="info" tabindex="0" role="img" aria-label="AMS port"
+                  data-tip="The PLC runtime: 851 for the first TwinCAT 3 PLC (852, ... for more), 801 for TwinCAT 2."></span></label>
+          <input id="c-amsPort" name="amsPort" type="number" min="1" max="65535" value="851"></div>
+        <div class="field"><label for="c-pollIntervalMs">Poll interval [ms]
+            <span class="info info-end" tabindex="0" role="img" aria-label="Poll interval"
+                  data-tip="How often the controller's Data Layer nodes are read (all of them in one ADS sum read per 500 variables). 20 - 60000 ms."></span></label>
+          <input id="c-pollIntervalMs" name="pollIntervalMs" type="number" min="20" max="60000" value="100"></div>
+        <div class="field field-wide"><div class="field-label"><label for="c-enabled">Enabled</label>
+            <span class="info" tabindex="0" role="img" aria-label="Enabled"
+                  data-tip="Off: the app doesn't connect to this controller; its Data Layer nodes stay, without values."></span></div>
+          <span id="c-enabled-slot"></span></div>
+      </div>
+      <ul id="controller-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-controller-ok" class="btn btn-primary">Add</button>
+        <button type="button" id="btn-controller-cancel" class="btn">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- add a route ON the controller (configure) -->
+  <dialog id="route-dialog" aria-labelledby="route-h">
+    <form id="route-form" method="dialog" novalidate>
+      <h2 id="route-h">Add route on <span id="r-ctrl"></span></h2>
+      <p class="small">The controller gets a route to this device: AMS Net ID <code id="r-netid"></code> at <code id="r-ip"></code>
+        (TwinCAT's own “Add route” request, UDP port 48899).</p>
+      <p class="note small">This changes the route table of the controller. It needs a user of the controller's operating
+        system with administrator rights (Windows: e.g. Administrator). The password is used once and not stored.</p>
+      <div class="fields fields-dialog">
+        <div class="field"><label for="r-user">User</label>
+          <input id="r-user" name="user" type="text" required value="Administrator" autocomplete="off"></div>
+        <div class="field"><label for="r-password">Password</label>
+          <input id="r-password" name="password" type="password" autocomplete="new-password"></div>
+        <div class="field field-wide"><label for="r-routeName">Route name on the controller</label>
+          <input id="r-routeName" name="routeName" type="text" maxlength="64" autocomplete="off"></div>
+      </div>
+      <ul id="route-errors" class="error-list" hidden></ul>
+      <div class="actions">
+        <button type="submit" id="btn-route-ok" class="btn btn-primary">Add route</button>
+        <button type="button" id="btn-route-cancel" class="btn">Cancel</button>
+        <span id="route-state" class="muted" aria-live="polite"></span>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="kit.js"></script>
+  <script src="common.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

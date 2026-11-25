@@ -1,0 +1,23 @@
+{
+  "settingsVersion": 1,
+  "general": {
+    "logLevel": "INFO",
+    "heartbeatIntervalMs": 1000
+  },
+  "ads": {
+    "localNetId": "",
+    "timeoutMs": 1000
+  },
+  "browser": {
+    "refreshMs": 1000
+  },
+  "controllers": [],
+  "nodes": [],
+  "style": {
+    "accent": "#007bc0",
+    "panel": "#ffffff",
+    "text": "#1f2328",
+    "panelDark": "#1c2128",
+    "textDark": "#e6e8eb"
+  }
+}

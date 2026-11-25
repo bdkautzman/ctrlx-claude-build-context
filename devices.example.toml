@@ -35,6 +35,13 @@ api_password = "boschrexroth"
 ssh_user = "rexroot"
 ssh_password = "rexroot"
 
+# Test users kit-view / kit-operate / kit-configure (role checks: ui_check.py --device x3 --role reader|operator|writer).
+# Their password is the user name (kit-view / kit-operate / kit-configure): `tools/ctrlx.py --device x3 test-users
+# create` sets it so, the tools log in with it (user's choice 2026-11-24 - users of a test device only). Another one,
+# the same for the three users of a device: a section like this one (or CTRLX_TEST_USERS_PASSWORD).
+# [x3.test_users]
+# password = "..."
+
 # A real amd64 CORE, if you have one (X5, X7; the X2 and X3 are arm64):
 # [x7]
 # description = "ctrlX CORE X7 hardware"
